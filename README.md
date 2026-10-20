@@ -83,7 +83,7 @@ The knowledge base follows the layout of the "LLM Wiki beginner's handout (deskt
 
 ### Installation
 
-The step-by-step guides ([Mac安裝說明.md](Mac安裝說明.md), [Windows安裝說明.md](Windows安裝說明.md)) are written in Traditional Chinese. In short:
+Full step-by-step guides: **[Mac-Install-Guide.md](Mac-Install-Guide.md)** and **[Windows-Install-Guide.md](Windows-Install-Guide.md)**. The installer itself speaks Traditional Chinese; the guides quote every Chinese prompt you will see and translate it. In short:
 
 **Mac** (about 30–40 minutes, mostly downloads)
 
