@@ -1,0 +1,29 @@
+[project]
+name = "wiki-feeder"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "Vincent Liang", email = "12250476+VincentLiang1@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "markdown-it-py>=4.2.0",
+    "numpy>=2.5.3",
+    "openpyxl>=3.1.5",
+    "pillow>=12.3.0",
+    "python-docx>=1.2.0",
+    "python-pptx>=1.0.2",
+    "keyring>=25; sys_platform == 'win32'",   # Windows 的寄信密碼放認證管理員(osplat.secret)
+]
+
+[project.scripts]
+wiki-feeder = "wiki_feeder:main"
+
+[build-system]
+requires = ["uv_build>=0.12.18,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

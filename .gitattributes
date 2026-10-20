@@ -1,0 +1,2 @@
+# 朋友那台的 .bat 是 cp950、CRLF(cmd 讀中文要這樣):git 一律不改行尾,Windows 的 core.autocrlf 也不碰
+*.bat -text
