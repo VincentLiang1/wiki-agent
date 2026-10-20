@@ -329,32 +329,41 @@ def test_same_alert_is_reported_once_a_day(cfg):
     assert len(collect(cfg).new_alerts) == 1             # 隔天還沒修好,再報一次
 
 
-def test_network_down_alerts_are_one_a_day_whatever_the_wording(cfg):
-    """2026-10-14 帶 Mac 出門斷網:3 封信只差在毫秒數,FUTURES(ssh)與 FWIKI(https)的說法也不同——一天一封就好。"""
-    from wiki_feeder.collect import _alert, _forget_alerts
-
-    fwiki = ("這輪不攝入,待攝入的都不算失敗:git pull --ff-only -q origin master(FWIKI)失敗:fatal: unable to "
-             "access 'https://github.com/me/FWIKI.git/': Failed to connect to github.com port 443 "
-             "after {} ms: Couldn't connect to server")
-    futures = ("FUTURES 取件準備失敗:git ls-remote origin refs/heads/main 失敗:ssh: {}\n"
-               "fatal: Could not read from remote repository.")
-    assert _alert(cfg, fwiki.format(75002))
-    assert not _alert(cfg, fwiki.format(75003))
-    assert not _alert(cfg, fwiki.format(75059))
-    assert not _alert(cfg, futures.format("Could not resolve hostname github.com: nodename nor servname provided"))
-    assert not _alert(cfg, futures.format("connect to host github.com port 22: Operation timed out"))
-    assert _alert(cfg, "有 1 個檔攝入已停止重試:壞檔.pdf")        # 別的問題照常另報
-
-    _forget_alerts(cfg, [fwiki.format(75002)])                   # 信沒寄到:同類的下一則要能再報
-    assert _alert(cfg, futures.format("connect to host github.com port 22: Operation timed out"))
-
-
-def test_non_network_git_errors_are_not_folded_into_network_alert(cfg):
-    """金鑰被撤、權限不夠是要人處理的事,不可被當成斷網吞掉。"""
+def test_network_down_is_not_an_alert(cfg):
+    """使用者 2026-10-20:「從家裡帶筆電到公司,連不上網路正常」——連一天一則都不要。
+    實際出現過的說法(FUTURES 走 ssh、FWIKI 走 https、寄信、網路切換中、公司擋 22 埠)都不進摘要。"""
     from wiki_feeder.collect import _alert
 
-    assert _alert(cfg, "FUTURES 取件準備失敗:ssh: connect to host github.com port 22: Operation timed out")
+    futures = ("FUTURES 取件準備失敗:git ls-remote origin refs/heads/main 失敗:ssh: {}\n"
+               "fatal: Could not read from remote repository.")
+    for msg in [
+        "這輪不攝入,待攝入的都不算失敗:git pull --ff-only -q origin master(FWIKI)失敗:fatal: unable to "
+        "access 'https://github.com/me/FWIKI.git/': Failed to connect to github.com port 443 "
+        "after 75002 ms: Couldn't connect to server",
+        "FWIKI rebase 失敗,commit 留在本機待人處理:fatal: unable to access 'https://github.com/me/FWIKI.git/': "
+        "Could not resolve host: github.com",
+        futures.format("Could not resolve hostname github.com: nodename nor servname provided, or not known"),
+        futures.format("connect to host github.com port 22: Operation timed out"),
+        futures.format("connect to host github.com port 22: Undefined error: 0"),
+        futures.format("connect to host github.com port 22: Can't assign requested address"),
+        "FUTURES 取件準備失敗:Connection to 20.27.177.113 port 22 timed out",
+        "FUTURES 取件準備失敗:Connection reset by 20.27.177.113 port 22",
+        "FUTURES 取件準備失敗:Timeout, server github.com not responding.",
+        "寄信失敗:[Errno 8] nodename nor servname provided, or not known",
+        "寄信失敗:Connection unexpectedly closed: The read operation timed out",
+    ]:
+        assert not _alert(cfg, msg), msg
+    assert not cfg.alerts_path.exists() or cfg.alerts_path.read_text(encoding="utf-8") == ""
+
+
+def test_real_problems_are_still_alerts(cfg):
+    """金鑰被撤、權限不夠、轉寫逾時、STOP 是要人處理的事,不可被當成斷網吞掉。"""
+    from wiki_feeder.collect import _alert
+
     assert _alert(cfg, "FUTURES 取件準備失敗:git@github.com: Permission denied (publickey).")
+    assert _alert(cfg, "會議.m4a 轉寫失敗:doc2md 超過 3600 秒沒跑完")
+    assert _alert(cfg, "x.pdf 攝入停止(這筆與之後的攝入、補推都停住,等人檢查):STOP:攝入後 FWIKI 留有沒 commit 的修改;"
+                       "推送時 Could not resolve host: github.com")
 
 
 def test_one_off_unreadable_inbox_is_not_alerted_until_it_persists(cfg):

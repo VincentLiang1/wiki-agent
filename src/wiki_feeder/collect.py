@@ -148,6 +148,7 @@ def _collect_one(cfg: Config, inbox, ledger: Ledger, report: Report) -> None:
             _unavailable(cfg, inbox, e, report)
             return
         _streak(cfg, inbox.name, reset=True)
+        _mark_offline(cfg, inbox.name, False)
         groups = inbox.candidates()
         if inbox.needs_stability:
             groups = _stable_groups(groups, cfg.stable_wait, report)
@@ -176,6 +177,24 @@ def _streak(cfg: Config, name: str, reset: bool = False) -> int:
     return n
 
 
+def _mark_offline(cfg: Config, name: str, down: bool) -> None:
+    """記下這個收件匣最近一次讀不到是不是因為連不上網路(`inbox_offline.json`,看門狗看這個不叫修理、不寄信)。
+
+    2026-10-20 帶筆電到公司:FUTURES 走 ssh 連不上 GitHub,網路閃一下通的那一刻看門狗就寄了 🛑。
+    連不上網路不是壞掉,警示照樣進當日摘要(一天一則),只是不交給修理。"""
+    path = cfg.state_dir / "inbox_offline.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = []
+    names = [n for n in data if n != name] if isinstance(data, list) else []
+    if down:
+        names.append(name)
+    if names != data:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(sorted(names), ensure_ascii=False), encoding="utf-8")
+
+
 def _unavailable(cfg: Config, inbox, e: InboxUnavailable, report: Report) -> None:
     """收件匣讀不到:連續 N 輪才發警示。
 
@@ -183,6 +202,7 @@ def _unavailable(cfg: Config, inbox, e: InboxUnavailable, report: Report) -> Non
     ——雲端同步的瞬間狀態。直接發警示會叫人去查一個沒壞的權限。真的壞掉會一直讀不到,幾分鐘內照樣報。
     """
     n = _streak(cfg, inbox.name)
+    _mark_offline(cfg, inbox.name, network_down(str(e)))
     if n >= cfg.unavailable_alert_after:
         _inbox_alert(inbox, e, report)
     else:
@@ -285,27 +305,33 @@ def _write_sidecar(final: Path, inbox, c: Candidate, sha: str, size: int) -> Non
 ALERT_REPEAT_SECONDS = 24 * 3600
 
 # 連不上網路的錯誤字樣(DNS、逾時、連線被拒;ssh 與 https 兩種說法都有)
+# 「connect to host … port 22:」「Connection reset by」「server … not responding」是公司網路擋 ssh 時的說法,
+# 「Can't assign requested address」「Network is down」是網路正在切換的那一輪(2026-10-16、10-20 實例)。
+# 逾時只認連線的說法:「doc2md 超過 N 秒沒跑完」這類要人看的不可被當成斷網吞掉
 _NETWORK_DOWN = re.compile(r"Could not resolve|nodename nor servname|Temporary failure in name resolution|"
-                           r"Operation timed out|Connection timed out|Failed to connect to|"
-                           r"Couldn't connect to server|Network is unreachable|No route to host|"
-                           r"Connection refused", re.I)
-NETWORK_ALERT_KEY = "連不上網路"
+                           r"connect to host \S+ port \d+:|port \d+ timed out|Operation timed out|"
+                           r"Connection timed out|read operation timed out|Failed to connect to|Connection reset|"
+                           r"server \S+ not responding|Couldn't connect to server|Network is unreachable|"
+                           r"Network is down|No route to host|Can't assign requested address|Connection refused", re.I)
 
 
-def _alert_key(msg: str) -> str:
-    """去重用的鍵:連不上網路的警示全歸成同一則,其他照全文。
+def network_down(msg: str) -> bool:
+    """這則警示只是連不上網路:不列進當日摘要、不寄信,只寫 log。STOP 一律要報。
 
-    2026-10-14 帶 Mac 出門斷網一下午,寄了 3 封只差在 git 錯誤裡毫秒數(75002／75003／75059 ms)的信;
-    FUTURES 走 ssh、FWIKI 走 https,DNS 失敗與逾時的說法又各不相同。使用者:「只要給我一封就可以」。"""
-    return NETWORK_ALERT_KEY if _NETWORK_DOWN.search(msg) else msg
+    使用者 2026-10-20:「從家裡帶筆電到公司,連不上網路正常」——連 10-14 定的「一天一則」也拿掉。
+    斷網時信本來就寄不出去,網路恢復後才收到一則「剛才斷過網」沒有用處;收件、攝入、推送下一輪都會自己再試。"""
+    return bool(_NETWORK_DOWN.search(msg)) and "STOP" not in msg
 
 
 def _alert(cfg: Config, msg: str) -> bool:
     """記一則警示;同一則 24 小時內只記一次。回傳這次是不是新的(新的才發到當日摘要)。
 
     launchd 每分鐘一輪:收件匣讀不到這類持續性的問題,不去重就是每分鐘一則、手機推播洗版。
-    連不上網路的不管哪個庫、哪種說法,一天只算一則(`_alert_key`)。
+    連不上網路的不算警示(`network_down`):只寫 log,回傳 False。
     """
+    if network_down(msg):
+        log.info("連不上網路,不列進摘要:%s", msg.splitlines()[0] if msg else msg)
+        return False
     cfg.alerts_path.parent.mkdir(parents=True, exist_ok=True)
     seen_path = cfg.state_dir / "alerts_seen.json"
     try:
@@ -313,7 +339,7 @@ def _alert(cfg: Config, msg: str) -> bool:
     except (OSError, ValueError):
         seen = {}
     now = time.time()
-    key = _alert_key(msg)
+    key = msg
     if now - seen.get(key, 0) < ALERT_REPEAT_SECONDS:
         return False
     seen = {m: t for m, t in seen.items() if now - t < ALERT_REPEAT_SECONDS}
@@ -332,6 +358,6 @@ def _forget_alerts(cfg: Config, msgs: list[str]) -> None:
         seen = json.loads(seen_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return
-    keys = {_alert_key(m) for m in msgs}
+    keys = set(msgs)
     seen = {m: t for m, t in seen.items() if m not in keys}
     seen_path.write_text(json.dumps(seen, ensure_ascii=False), encoding="utf-8")

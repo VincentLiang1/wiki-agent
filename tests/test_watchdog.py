@@ -401,6 +401,56 @@ def test_inbox_streak_from_offline_waits_for_another_collect_round(env, dev, mon
     assert calls.agent == [[f"inbox:{inbox}"]]
 
 
+
+def test_inbox_unreadable_because_offline_is_never_repaired(cfg, monkeypatch):
+    """2026-10-20 帶筆電到公司:FUTURES 走 ssh 連不上 GitHub,網路閃一下通的那一刻看門狗寄了 🛑「FUTURES 連續 5 輪讀不到」。
+    最近一次是連不上網路的就不算收件匣壞了(警示照樣進當日摘要);換成別的錯(金鑰、權限、資料夾不見)照常交給修理。"""
+    from wiki_feeder import collect as collect_mod
+    from wiki_feeder.inboxes import FolderInbox, InboxUnavailable
+
+    c = replace(cfg, unavailable_alert_after=3)
+    why = {"msg": "FUTURES 取件準備失敗:ssh: connect to host github.com port 22: Can't assign requested address"}
+
+    def down(self):
+        raise InboxUnavailable(f"{self.name} {why['msg']}")
+    monkeypatch.setattr(FolderInbox, "prepare", down)
+    for _ in range(5):
+        collect_mod.collect(c)
+    assert not [p for p in _detect(c) if p.kind == "inbox"]
+
+    why["msg"] = "FUTURES 取件準備失敗:git@github.com: Permission denied (publickey)."
+    collect_mod.collect(c)
+    assert {p.key for p in _detect(c) if p.kind == "inbox"} == {f"inbox:{i.name}" for i in build_inboxes(c)}
+
+    why["msg"] = "ssh: Could not resolve hostname github.com: nodename nor servname provided, or not known"
+    collect_mod.collect(c)                       # 又斷網了:不算
+    assert not [p for p in _detect(c) if p.kind == "inbox"]
+
+    monkeypatch.undo()
+    collect_mod.collect(c)                       # 讀到一次:標記清掉,之後真的讀不到照常算
+    assert json.loads((c.state_dir / "inbox_offline.json").read_text(encoding="utf-8")) == []
+
+
+def test_old_inbox_wait_does_not_skip_the_next_wait(env, dev, monkeypatch):
+    """2026-10-20:前一天斷網恢復後 inbox_wait.json 一直留著(之後每輪「沒有問題」就提早結束、沒清),
+    隔天再讀不到時次數檔一定比它新,網路一通的第一輪就當成「收件又跑過一輪」交給修理。"""
+    c = replace(env["cfg"], repair_repo=dev)
+    streak = c.state_dir / "inbox_streak.json"
+    streak.parent.mkdir(parents=True, exist_ok=True)
+    inbox = build_inboxes(c)[0].name
+    calls = Calls()
+    monkeypatch.setattr(repair, "run_agent", _agent(calls))
+
+    streak.write_text(json.dumps({inbox: 6}))
+    old = time.time() - 3600
+    os.utime(streak, (old, old))
+    repair.tick(c, _deps(c, calls))                  # 昨天:恢復後記下等待
+    streak.write_text(json.dumps({inbox: 0}))
+    repair.tick(c, _deps(c, calls))                  # 收件讀到了:沒有問題
+    streak.write_text(json.dumps({inbox: 5}))        # 今天又斷網累積的
+    repair.tick(c, _deps(c, calls))                  # 網路剛通:要等收件再跑一輪
+    assert not calls.agent and not calls.mail
+
 def test_dirty_dev_dir_is_not_touched(env, dev, monkeypatch):
     """開發目錄有人正在改:不修,寄信說明(修了會跟人打架)。"""
     c = replace(env["cfg"], repair_repo=dev)

@@ -455,6 +455,8 @@ def _tick(cfg: Config, deps: Deps) -> str:
         now = deps.now()
         problems = detect(cfg, now, deps.agents_check, deps.sample, icloud_check=deps.icloud_synced)
         if not problems:
+            # 上一次等過的要清掉:留著的話下次讀不到時次數檔一定比它新,第一輪就算「收件又跑過一輪」(2026-10-20 實例)
+            _inbox_wait_path(cfg).unlink(missing_ok=True)
             return "沒有問題"
         if not deps.online():
             # 斷網:修理的 claude 跑不起來、信也寄不出去;不算次數,網路恢復後下一輪再來
