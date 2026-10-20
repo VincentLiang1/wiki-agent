@@ -14,7 +14,9 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="Mac 朋友版(launchd、flock、zsh)")
+# 整檔跳過要在 import 之前:pytestmark 擋不住下面模組層級的 _mod("macsched")(它 import fcntl)
+if sys.platform == "win32":
+    pytest.skip("Mac 朋友版(launchd、flock、zsh)", allow_module_level=True)
 
 ROOT = Path(__file__).parents[1]
 
