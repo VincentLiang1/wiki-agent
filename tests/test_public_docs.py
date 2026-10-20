@@ -16,6 +16,8 @@ def test_readme_links_to_both_guides_and_states_the_license():
         assert (PUBLIC / name).is_file(), name
     assert "Mac安裝說明.md" in text and "Windows安裝說明.md" in text
     assert "All rights reserved" in text and "## English" in text
+    # 頁首就看得到英文說明的連結(GitHub 把「## English」的錨點產生成 #english)
+    assert "](#english)" in text.split("\n## ", 1)[0]
 
 
 def test_the_one_line_install_matches_install_sh():
