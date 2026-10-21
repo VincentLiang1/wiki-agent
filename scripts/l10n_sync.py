@@ -6,9 +6,11 @@
 3. 簡中:沒有的用 OpenCC(台灣繁體 → 大陸簡體,含用語 tw2sp)自動轉,再套 ZH_HANS_FIX;
    自動轉得不對的(例如寫著「繁體中文」的提示詞)手寫在 scripts/l10n/zh-Hans-overrides.json,一律以它為準
 4. 英文:從 --en <json>({繁中原文: 英文},可以給好幾個)補;沒有英文的列出來、回非零(提交前要補齊)
+5. 三個 .bat 的 `call :msg／:pick` 簡中那一欄照繁中重轉(英文直接寫在 .bat 裡)
 
 用 meeting-scribe-native 的 venv 跑(要 opencc 套件;wiki-feeder 本身不裝它):
   ~/SOURCE5/Python/meeting-scribe-native/.venv/bin/python scripts/l10n_sync.py [--en 英文.json …] [--check]
+  (Windows:C:/SOURCE5/Python/meeting-scribe-native/.venv/Scripts/python.exe -X utf8 scripts/l10n_sync.py)
 --check:只檢查不寫檔(缺英文、缺簡中、或譯文檔跟程式不同步就失敗)。測試(tests/test_i18n.py)也查同樣的事。
 """
 from __future__ import annotations
@@ -16,6 +18,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -46,6 +49,7 @@ ZH_HANS_FIX = {
     "调度": "定时任务",
     "收件匣": "收件箱",
     "纪录": "记录",       # 處理紀錄、版本紀錄:大陸寫「记录」(「纪录」是比賽紀錄)
+    "帐号": "账号",       # 「用户帐户控制」是 Windows 簡中介面的正式名稱,只換「帐号」
     # 單獨的「檔」大陸說「文件」(設定檔、丟檔、這個檔);放最後,前面的「档案」「个档」「档名」先換掉
     "档": "文件",
 }
@@ -87,6 +91,31 @@ def hans_doc(text: str, cc) -> str:
     menu = "語言 / 语言 / Language:1 繁體中文  2 简体中文  3 English"     # 安裝問答第一題:三種寫法並列,不翻
     out = to_hans("\n".join(lines).replace(menu + "(Enter = 繁體中文)", "@@MENU@@"), cc)
     return out.replace("@@HEAD@@", head).replace("@@MENU@@", menu + "(Enter = 简体中文)")
+
+
+# 三個 .bat(UTF-8、CRLF):`call :msg "繁中" "簡中" "English"`、`call :pick 變數 "繁中" "簡中" "English"`
+# 的簡中那一欄照繁中重轉(.bat 在 Python 之前跑,用不了譯文檔;docs/dev/Windows安裝.md)
+BATS = ("安裝.bat", "更新.bat", "移除排程.bat")
+BAT_MSG = re.compile(r'(call :(?:msg|pick \w+) )"([^"]*)" "([^"]*)" "([^"]*)"')
+
+
+def hans_bat(text: str, hans) -> str:
+    """每一行 :msg／:pick 的第二欄換成 hans(第一欄);rem 註解與其他字一個不動。"""
+    return "".join(ln if ln.lstrip().lower().startswith("rem ")
+                   else BAT_MSG.sub(lambda m: f'{m[1]}"{m[2]}" "{hans(m[2])}" "{m[4]}"', ln)
+                   for ln in text.splitlines(keepends=True))
+
+
+def sync_bats(cc, over: dict[str, str], root: Path = REPO) -> int:
+    changed = 0
+    for name in BATS:
+        p = root / name
+        old = p.read_bytes().decode("utf-8")
+        new = hans_bat(old, lambda s: over.get(s) or to_hans(s, cc))
+        if new != old:
+            p.write_bytes(new.encode("utf-8"))
+            changed += 1
+    return changed
 
 
 def load(path: Path) -> dict[str, str]:
@@ -150,7 +179,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if missing_en or missing_hans or stale else 0
     dump(en_path, en)
     dump(hans_path, hans)
-    print(f"{len(keys)} 個鍵;英文缺 {len(missing_en)};簡中自動轉 {len(missing_hans)};刪掉舊鍵 {len(stale)}")
+    import opencc
+    bats = sync_bats(opencc.OpenCC("tw2sp"), over)
+    print(f"{len(keys)} 個鍵;英文缺 {len(missing_en)};簡中自動轉 {len(missing_hans)};刪掉舊鍵 {len(stale)};"
+          f".bat 改了 {bats} 個")
     return 1 if missing_en else 0
 
 

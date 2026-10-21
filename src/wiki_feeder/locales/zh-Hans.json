@@ -247,7 +247,7 @@
  "✓ launchd 底下讀得到收件匣": "✓ launchd 底下读得到收件箱",
  "✓ {path}(已登入)": "✓ {path}(已登录)",
  "✓ 更新好了,下一輪就用新程式": "✓ 更新好了,下一轮就用新程序",
- "✗ Claude Code 還沒登入。請在終端機打 claude、登入你自己的帳號,再跑一次安裝": "✗ Claude Code 还没登录。请在终端打 claude、登录你自己的帐号,再跑一次安装",
+ "✗ Claude Code 還沒登入。請在終端機打 claude、登入你自己的帳號,再跑一次安裝": "✗ Claude Code 还没登录。请在终端打 claude、登录你自己的账号,再跑一次安装",
  "✗ Claude Code 還沒登入。請開一個新的命令視窗打 claude 登入你自己的帳號,再跑一次 安裝.bat": "✗ Claude Code 还没登录。请打开一个新的命令窗口输入 claude 登录你自己的账号,再运行一次 安裝.bat",
  "✗ {e}\n  請重填": "✗ {e}\n  请重填",
  "✗ 找不到 claude。請先裝 Claude Code(https://claude.com/claude-code 的 Mac 安裝指令),裝好後再跑一次安裝": "✗ 找不到 claude。请先装 Claude Code(https://claude.com/claude-code 的 Mac 安装指令),装好后再跑一次安装",

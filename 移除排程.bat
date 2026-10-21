@@ -1,21 +1,52 @@
 @echo off
-chcp 950 >nul
+chcp 65001 >nul
 setlocal EnableExtensions
-title wiki-feeder ²¾°£±Æµ{
-rem ¥u²¾°£¤u§@±Æµ{¾¹ªº¨â­Ó¥ô°È¡F³]©wÀÉ¡B³B²z¬ö¿ý¡Bª¾ÃÑ®w³£¤£°Ê
+rem Removes only the two Task Scheduler tasks; config, records and the knowledge base stay
+rem Chinese only inside call :msg / call :pick arguments - see the top of the install .bat
+call :lang
+call :pick T "wiki-feeder ç§»é™¤æŽ’ç¨‹" "wiki-feeder ç§»é™¤å®šæ—¶ä»»åŠ¡" "wiki-feeder Remove schedule"
+title %T%
 cd /d "%~dp0"
 if not exist pyproject.toml goto notrepo
 set "PYTHONUTF8=1"
-echo ³o·|²¾°£¨C¤ÀÄÁ¦Û°Ê°õ¦æªº±Æµ{¡Aµ{¦¡´N¤£¦A¦Û¤v¦¬ÀÉ¡BÄá¤J¡C
-echo ³]©wÀÉ»P³B²z¬ö¿ý³£·|¯dµÛ¡A¤§«á¶] ¦w¸Ë.bat ¥i¥H¸Ë¦^¨Ó¡C
+call :msg "é€™æœƒç§»é™¤æ¯åˆ†é˜è‡ªå‹•åŸ·è¡Œçš„æŽ’ç¨‹ï¼Œç¨‹å¼å°±ä¸å†è‡ªå·±æ”¶æª”ã€æ”å…¥ã€‚" "è¿™ä¼šç§»é™¤æ¯åˆ†é’Ÿè‡ªåŠ¨è¿è¡Œçš„å®šæ—¶ä»»åŠ¡ï¼Œç¨‹åºå°±ä¸å†è‡ªå·±æ”¶æ–‡ä»¶ã€æ‘„å…¥ã€‚" "This removes the schedule that runs every minute; the program will stop collecting and ingesting files on its own."
+call :msg "è¨­å®šæª”èˆ‡è™•ç†ç´€éŒ„éƒ½æœƒç•™è‘—ï¼Œä¹‹å¾Œè·‘ å®‰è£.bat å¯ä»¥è£å›žä¾†ã€‚" "è®¾ç½®æ–‡ä»¶ä¸Žå¤„ç†è®°å½•éƒ½ä¼šç•™ç€ï¼Œä¹‹åŽè·‘ å®‰è£.bat å¯ä»¥è£…å›žæ¥ã€‚" "Your settings and processing records are kept; run å®‰è£.bat later to set it up again."
 echo.
-pause
+call :pause
 ".venv\Scripts\python.exe" -X utf8 scripts\winsched.py uninstall
 echo.
-pause
+call :pause
 exit /b 0
 
 :notrepo
-echo ³o­ÓÀÉ­n©ñ¦b wiki-feeder ¸ê®Æ§¨¸Ì°õ¦æ¡C
-pause
+call :msg "é€™å€‹æª”è¦æ”¾åœ¨ wiki-feeder è³‡æ–™å¤¾è£¡åŸ·è¡Œã€‚" "è¿™ä¸ªæ–‡ä»¶è¦æ”¾åœ¨ wiki-feeder æ–‡ä»¶å¤¹é‡Œè¿è¡Œã€‚" "Run this file from inside the wiki-feeder folder."
+call :pause
 exit /b 1
+
+rem ==== same in all three .bat files from here to the end - tests\test_winsetup.py ====
+:lang
+rem Language: [general] language in the config (chosen at setup); otherwise the Windows display language,
+rem mapped the same way as i18n.detect. GetUserDefaultUILanguage, not Get-UICulture: that one follows
+rem the console code page and reads en-US under 65001 even on Chinese Windows.
+set "WL="
+for /f "usebackq delims=" %%L in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$f=Join-Path $env:LOCALAPPDATA 'wiki-feeder\config.toml'; $l=''; if (Test-Path -LiteralPath $f) { $m=[regex]::Match([IO.File]::ReadAllText($f), '(?m)^\s*language\s*=\s*.(zh-Hant|zh-Hans|en)\W'); if ($m.Success) { $l=$m.Groups[1].Value } }; if (-not $l) { $q=[char]34; $k=Add-Type -Name K -Namespace WikiFeeder -PassThru -MemberDefinition ('[DllImport('+$q+'kernel32.dll'+$q+')] public static extern ushort GetUserDefaultUILanguage();'); $i=[int]$k::GetUserDefaultUILanguage(); $l='en'; if (($i -band 0x3FF) -eq 4) { $l='zh-Hant'; if ($i -eq 0x804 -or $i -eq 0x1004) { $l='zh-Hans' } } }; $l"`) do set "WL=%%L"
+if not defined WL set "WL=zh-Hant"
+exit /b
+:msg
+rem call :msg "zh-Hant" "zh-Hans" "English" - prints one line in language WL
+set "M=%~1"
+if "%WL%"=="zh-Hans" set "M=%~2"
+if "%WL%"=="en" set "M=%~3"
+echo(%M%
+exit /b
+:pick
+rem call :pick VAR "zh-Hant" "zh-Hans" "English" - sets VAR in language WL
+set "%~1=%~2"
+if "%WL%"=="zh-Hans" set "%~1=%~3"
+if "%WL%"=="en" set "%~1=%~4"
+exit /b
+:pause
+rem cmd's own pause prompt is always English under 65001, so print our own
+call :msg "è«‹æŒ‰ä»»æ„éµç¹¼çºŒ . . ." "è¯·æŒ‰ä»»æ„é”®ç»§ç»­ . . ." "Press any key to continue . . ."
+pause >nul
+exit /b

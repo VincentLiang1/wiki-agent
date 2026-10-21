@@ -7,7 +7,7 @@
 ## 1. 装 iCloud for Windows
 
 1. 开始功能表打开 **Microsoft Store**,搜索 **iCloud**,安装
-2. 打开 iCloud,登录和 iPhone 同一个 Apple 帐号,勾选 **iCloud 云盘**,按**套用**
+2. 打开 iCloud,登录和 iPhone 同一个 Apple 账号,勾选 **iCloud 云盘**,按**套用**
 3. 打开文件总管,左边栏看得到 **iCloud 云盘**(`C:\Users\<你的名字>\iCloudDrive`)就对了
 
 ## 2. 装 Claude Code 并登录
@@ -17,7 +17,7 @@
    ```powershell
    irm https://claude.ai/install.ps1 | iex
    ```
-3. 跑完后**关掉这个窗口、重开一个新的 PowerShell**,打 `claude` 按 Enter。选登录方式时选 **Claude 帐号(订阅)**,浏览器会打开 Claude 的登录页,登录你自己的帐号、按**授权**
+3. 跑完后**关掉这个窗口、重开一个新的 PowerShell**,打 `claude` 按 Enter。选登录方式时选 **Claude 账号(订阅)**,浏览器会打开 Claude 的登录页,登录你自己的账号、按**授权**
 4. 回到 PowerShell,看到可以打字的提示就是登录好了。打 `/exit` 按 Enter 离开
 
 ## 3. 装 scribe2md(把录音、文文件转成文字)
@@ -40,7 +40,7 @@
 2. 双击下载的 **安裝.bat**。跳出蓝色的安全性警告(「Windows 已保护您的电脑」之类)的话,按**其他信息** → **仍要运行**
 3. 黑色窗口先列出「开始之前请先做好这三件事」(就是上面第 1～3 步),按任意键继续
 4. 没有 Git、uv 的话它会自己装(可能跳出「是否允许变更」,按**是**)
-5. 问「程序要放在哪个文件夹?」,直接按 Enter(`C:\wiki-feeder`)。它会从 GitHub 下载程序、装好需要的套件,**不需要 GitHub 帐号**
+5. 问「程序要放在哪个文件夹?」,直接按 Enter(`C:\wiki-feeder`)。它会从 GitHub 下载程序、装好需要的套件,**不需要 GitHub 账号**
 6. 「打开 Windows 长路径支持」时会跳出**用户帐户控制**,按**是**(只有这一步需要系统管理员;已经开过就不会问)
 
 ### 5-1. 回答问题

@@ -59,27 +59,146 @@ def test_unreadable_config_is_not_written(tmp_path):
     assert not (tmp_path / (CONFIG_FILE + ".new")).exists()
 
 
+def _bat(name: str) -> str:
+    return (ROOT / name).read_bytes().decode("utf-8")
+
+
+def _l10n():
+    spec = importlib.util.spec_from_file_location("l10n_sync_bat", ROOT / "scripts" / "l10n_sync.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
 @pytest.mark.parametrize("name", BATS)
-def test_bat_is_cp950_crlf_and_switches_code_page_first(name):
-    """cmd 照主控台碼頁讀 .bat:cp950 無 BOM、CRLF,而且任何中文之前先 chcp 950(全域規則)。"""
+def test_bat_is_utf8_crlf_and_switches_code_page_first(name):
+    """三種語言要 UTF-8(cp950 寫不出簡體字):無 BOM、CRLF,任何非 ASCII 之前先 chcp 65001(docs/dev/Windows安裝.md)。"""
     data = (ROOT / name).read_bytes()
-    assert not data.startswith(b"\xef\xbb\xbf")
-    text = data.decode("cp950")
+    assert not data.startswith(b"\xef\xbb\xbf")                        # BOM 會讓第一行變成「'﻿@echo' 不是指令」
+    text = data.decode("utf-8")
     assert "\n" not in text.replace("\r\n", "")                     # 沒有單獨的 LF
     first_non_ascii = next(i for i, ch in enumerate(text) if ord(ch) > 127)
-    assert "chcp 950 >nul" in text[:first_non_ascii]
+    assert "chcp 65001 >nul" in text[:first_non_ascii] and "chcp 950" not in text
+
+
+@pytest.mark.parametrize("name", BATS)
+def test_bat_chinese_appears_only_in_message_arguments(name):
+    """65001 底下 cmd 會把中文附近的行讀錯、切掉半截當指令執行(2026-10-21 實測:直接 echo 中文的下一行、
+    標籤前後的中文 rem 都出過事):中文只准出現在 `call :msg／:pick` 的三個參數裡(由副程式 echo 變數),rem 也不行。"""
+    pat = _l10n().BAT_MSG
+    for ln in _bat(name).splitlines():
+        s = ln.strip()
+        if s.isascii():
+            continue
+        assert pat.search(s), f"中文不在 :msg／:pick 的參數裡:{s}"
+        assert pat.sub("", s).isascii(), f"參數之外還有中文:{s}"
+
+
+@pytest.mark.parametrize("name", BATS)
+def test_bat_line_before_every_label_is_ascii(name):
+    """65001 底下標籤的前一行有中文,cmd 跳過去(call :msg、goto)會落在前一行中間,先執行半截垃圾
+    (2026-10-21 真的 安裝.bat:每印一行訊息前面都多一個「'��一行' is not recognized」)。註解寫在標籤之後。"""
+    lines = _bat(name).splitlines()
+    for i, ln in enumerate(lines):
+        if ln.startswith(":") and i:
+            assert lines[i - 1].isascii(), f"{ln} 的前一行有中文:{lines[i - 1]}"
+
+
+@pytest.mark.parametrize("name", BATS)
+def test_bat_messages_are_safe_for_cmd_and_complete(name):
+    """訊息會經過 call 與 echo:& | < > ^ ! 與 ASCII 括號會被 cmd 當成語法(在 if ( … ) 裡更會提早結束區塊);
+    三種語言都要有,英文不夾中文(檔名例外),簡中要是 l10n_sync.py 轉過的(沒跑就還是繁體字)。"""
+    l10n = _l10n()
+    rows = [m.groups()[1:] for ln in _bat(name).splitlines() if not ln.strip().lower().startswith("rem ")
+            for m in l10n.BAT_MSG.finditer(ln)]
+    assert rows
+    hant_only = set("裝資設視檔載啟網開註體們這個從後說時處紀錄執")      # 簡中裡出現就是沒轉
+    for hant, hans, en in rows:
+        for s in (hant, hans, en):
+            assert s.strip() and not set(s) & set("&|<>^!()"), s
+            assert "%" not in s.replace("%FAIL%", ""), s
+        assert not set(hans.replace("安裝.bat", "")) & hant_only, f"簡中沒轉:{hans}"
+        assert "纪录" not in hans and "帐号" not in hans
+        assert en.replace("安裝.bat", "").isascii(), en
+
+
+def test_bats_share_one_copy_of_the_language_helpers():
+    """語言判斷、:msg、:pick、:pause 三個 .bat 一字不差(改一份忘了另外兩份,更新／移除的畫面就跟安裝不一樣)。"""
+    mark = "rem ==== same in all three .bat files from here to the end"
+    tails = {name: _bat(name).split(mark, 1)[1] for name in BATS}
+    assert len(set(tails.values())) == 1
+    tail = tails["安裝.bat"]
+    assert all(f":{label}\r\n" in tail for label in ("lang", "msg", "pick", "pause"))
+    for name in BATS:
+        code = [ln.strip() for ln in _bat(name).split(mark, 1)[0].splitlines()
+                if not ln.strip().lower().startswith("rem ")]
+        first = next(i for i, s in enumerate(code) if "call :msg" in s or "call :pick" in s or "call :pause" in s)
+        assert "call :lang" in code[:first]                              # 印第一個字之前先定語言
+        assert "pause" not in code                                       # 65001 底下 cmd 的 pause 是英文
+
+
+def test_bat_language_rule_matches_i18n_detect():
+    """.bat 在 Python 之前跑,自己判斷語言:設定檔優先、再 GetUserDefaultUILanguage,對照要與 i18n.detect 相同。
+    不可用 Get-UICulture:它跟著主控台碼頁走,65001 底下台灣的 Windows 也回 en-US。"""
+    import inspect
+    import re
+
+    from wiki_feeder import i18n
+    lang = next(ln for ln in _bat("安裝.bat").splitlines() if ln.startswith("for /f") and "powershell" in ln)
+    hexes = lambda s: {int(h, 16) for h in re.findall(r"0x[0-9A-Fa-f]+", s)}   # noqa: E731
+    assert hexes(lang) == {0x3FF, 0x804, 0x1004} <= hexes(inspect.getsource(i18n.detect))
+    assert "-eq 4" in lang and "== 0x04" in inspect.getsource(i18n.detect)
+    assert "GetUserDefaultUILanguage" in lang and "Get-UICulture" not in lang
+    assert "wiki-feeder\\config.toml" in lang and 'if not defined WL set "WL=zh-Hant"' in _bat("安裝.bat")
+
+
+@pytest.mark.skipif(not __import__("sys").platform == "win32", reason="要 Windows 的 PowerShell 與 kernel32")
+def test_bat_language_detection_really_runs(tmp_path):
+    """把 .bat 那段 PowerShell 拿出來真的跑:設定檔寫什麼就是什麼(英文、簡中),沒有設定檔就跟 i18n.detect() 一樣。"""
+    import os
+    import re
+    import subprocess
+
+    from wiki_feeder import i18n
+    line = next(ln for ln in _bat("安裝.bat").splitlines() if ln.startswith("for /f") and "powershell" in ln)
+    ps = re.search(r'-Command "(.*)"`\)', line)[1]
+    cfg = tmp_path / "wiki-feeder" / "config.toml"
+    cfg.parent.mkdir()
+
+    def run() -> str:
+        r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+                           capture_output=True, text=True, env={**os.environ, "LOCALAPPDATA": str(tmp_path)})
+        return r.stdout.strip()
+
+    assert run() == i18n.detect()
+    for lang in ("en", "zh-Hans", "zh-Hant"):
+        cfg.write_text(f"# 設定\n\n[general]\nlanguage = \"{lang}\"\n\n[paths]\nwiki = 'C:\\x'\n", encoding="utf-8")
+        assert run() == lang
+    cfg.write_text("[general]\nlanguage = \"xx\"\n", encoding="utf-8")
+    assert run() == i18n.detect()
+
+
+def test_l10n_sync_rewrites_only_the_hans_column_of_bats():
+    """簡中那一欄由 l10n_sync.py 從繁中重轉;繁中、英文、rem 註解、其他指令一個字都不動。"""
+    text = ('rem call :msg "繁中" "簡中" "English"\r\n'
+            'if errorlevel 1 call :msg "裝好" "舊的" "Installed"\r\n'
+            'call :pick T "安裝" "x" "Setup"\r\ntitle %T%\r\n')
+    out = _l10n().hans_bat(text, lambda s: f"<{s}>")
+    assert out == ('rem call :msg "繁中" "簡中" "English"\r\n'
+                   'if errorlevel 1 call :msg "裝好" "<裝好>" "Installed"\r\n'
+                   'call :pick T "安裝" "<安裝>" "Setup"\r\ntitle %T%\r\n')
 
 
 def test_install_bat_elevates_only_the_long_path_step():
     """整個 bat 用管理員跑,設定檔與排程會裝到管理員帳號底下:只有寫 HKLM 那一行提升權限。"""
-    text = (ROOT / "安裝.bat").read_bytes().decode("cp950")
+    text = _bat("安裝.bat")
     assert text.count("-Verb RunAs") == 1
     assert "LongPathsEnabled','/t'" in text
 
 
 def test_update_bat_waits_for_the_running_round_and_always_reenables():
     """更新不砍正在跑的一輪(攝入做到一半被砍會 STOP),pull／sync 失敗也要重新啟用排程。"""
-    lines = (ROOT / "更新.bat").read_bytes().decode("cp950").splitlines()
+    lines = _bat("更新.bat").splitlines()
     i_disable = next(i for i, ln in enumerate(lines) if "winsched.py disable" in ln)
     i_pull = next(i for i, ln in enumerate(lines) if ln.strip() == "git pull")
     i_enable = next(i for i, ln in enumerate(lines) if "winsched.py enable" in ln)

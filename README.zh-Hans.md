@@ -39,7 +39,7 @@ wiki-agent 是一支在你电脑上常驻的小程序,替你照 Andrej Karpathy 
 
 ## 要知道的事
 
-- **你的数据会送到 Anthropic 的 API**:摄入时 Claude 会读源文件(含照片)。跟你平常用 Claude 一样,用的是你自己的帐号与额度;一笔摄入大约 US$0.3～1
+- **你的数据会送到 Anthropic 的 API**:摄入时 Claude 会读源文件(含照片)。跟你平常用 Claude 一样,用的是你自己的账号与额度;一笔摄入大约 US$0.3～1
 - **Claude 的权限给到最小**:只能读文件、改知识库里的页;不能删文件、不能搬原件、不能自己 commit 或推送。改完由程序检查——原件少了、页面被大量删减、留下奇怪的文件,就整个停下来寄信等你看
 - **版本记录由程序代管**:不要自己在知识库里运行 git(多一笔程序没验证过的 commit,自动摄入就会停住)。手动改的页直接存盘就好,下次摄入前程序会先存成一笔「手动修改快照」
 - 程序的设置与记录在 `~/Library/Application Support/wiki-feeder/`(Mac)或 `%LOCALAPPDATA%\wiki-feeder\`(Windows),看 log 就看里面的 `logs/feeder.log`

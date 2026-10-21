@@ -50,7 +50,7 @@ Full step-by-step guides: **[Mac-Install-Guide.md](Mac-Install-Guide.md)** and *
 
 1. Install iCloud for Windows, Claude Code (signed in) and the Windows version of scribe2md
 2. (Optional) Create a Gmail app password for the summary email
-3. Download `安裝.bat` (“install”) from this repository and double-click it. If Windows SmartScreen warns you, choose **More info → Run anyway**. It installs Git and uv if needed, puts the program in `C:\wiki-feeder` (no GitHub account needed) and asks the same questions (the screens before the questions are still in Chinese for now; the guide translates them)
+3. Download `安裝.bat` (“install”) from this repository and double-click it. If Windows SmartScreen warns you, choose **More info → Run anyway**. It installs Git and uv if needed, puts the program in `C:\wiki-feeder` (no GitHub account needed) and asks the same questions (the screens before the questions follow your Windows display language)
 
 Both installers finish by setting up a schedule that runs every minute. To check that it works, drop any file into `_WikiBox` from the iPhone's Files app; after a few minutes a new page appears under `WIKI/Wiki_Pages`, the original is filed into a topic folder under `Raw_Sources`, and (if configured) you receive a "wiki-feeder ingest summary" email.
 

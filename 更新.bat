@@ -1,35 +1,67 @@
 @echo off
-chcp 950 >nul
+chcp 65001 >nul
 setlocal EnableExtensions
-title wiki-feeder §ó·s
-rem git pull ¥[ uv sync¡C¥ý°±¥Î±Æµ{¡Bµ¥¥¿¦b¶]ªº¤@½ü°µ§¹¡G°µ¨ì¤@¥b³Q¥´Â_¡A¤U¤@½ü·|°±¤U¨Óµ¥¤H³B²z
+rem git pull + uv sync. Disable the schedule first and let the running round finish: a round cut off
+rem halfway through would stop the next round until someone steps in.
+rem Chinese only inside call :msg / call :pick arguments - see the top of the install .bat
+call :lang
+call :pick T "wiki-feeder æ›´æ–°" "wiki-feeder æ›´æ–°" "wiki-feeder Update"
+title %T%
 cd /d "%~dp0"
 if not exist pyproject.toml goto notrepo
 set "PATH=%PATH%;%ProgramFiles%\Git\cmd;%USERPROFILE%\.local\bin;%LOCALAPPDATA%\Microsoft\WinGet\Links"
 set "PYTHONUTF8=1"
 set "FAIL="
-echo °±¥Î±Æµ{¡Aµ¥¥¿¦b¶]ªº¤@½ü°µ§¹...
+call :msg "åœç”¨æŽ’ç¨‹ï¼Œç­‰æ­£åœ¨è·‘çš„ä¸€è¼ªåšå®Œ..." "ç¦ç”¨å®šæ—¶ä»»åŠ¡ï¼Œç­‰æ­£åœ¨è·‘çš„ä¸€è½®åšå®Œ..." "Pausing the schedule and waiting for the current round to finish..."
 ".venv\Scripts\python.exe" -X utf8 scripts\winsched.py disable
 echo.
-echo ¤U¸ü·sª©...
+call :msg "ä¸‹è¼‰æ–°ç‰ˆ..." "ä¸‹è½½æ–°ç‰ˆ..." "Downloading the new version..."
 git pull
 if errorlevel 1 set "FAIL=git pull"
 if not defined FAIL uv sync
 if not defined FAIL if errorlevel 1 set "FAIL=uv sync"
 echo.
-echo ­«·s±Ò¥Î±Æµ{...
+call :msg "é‡æ–°å•Ÿç”¨æŽ’ç¨‹..." "é‡æ–°æ¿€æ´»å®šæ—¶ä»»åŠ¡..." "Turning the schedule back on..."
 ".venv\Scripts\python.exe" -X utf8 scripts\winsched.py enable
 echo.
 if defined FAIL goto failed
-echo §ó·s§¹¦¨¡A¤U¤@¤ÀÄÁ°_´N¬O·sª©¡C
-pause
+call :msg "æ›´æ–°å®Œæˆï¼Œä¸‹ä¸€åˆ†é˜èµ·å°±æ˜¯æ–°ç‰ˆã€‚" "æ›´æ–°å®Œæˆï¼Œä¸‹ä¸€åˆ†é’Ÿèµ·å°±æ˜¯æ–°ç‰ˆã€‚" "Update finished. The new version runs from the next minute."
+call :pause
 exit /b 0
 
 :failed
-echo §ó·s¨S¦³§¹¦¨¡G%FAIL% ¥¢±Ñ¡A­ì¦]¦b¤W­±¡C±Æµ{·ÓÂÂ¦b¶]¡A½Ð§â³o­Óµøµ¡ªºµe­±©çµ¹À°§A¦w¸Ëªº¤H¡C
-pause
+call :msg "æ›´æ–°æ²’æœ‰å®Œæˆï¼š%FAIL% å¤±æ•—ï¼ŒåŽŸå› åœ¨ä¸Šé¢ã€‚æŽ’ç¨‹ç…§èˆŠåœ¨è·‘ï¼Œè«‹æŠŠé€™å€‹è¦–çª—çš„ç•«é¢æ‹çµ¦å¹«ä½ å®‰è£çš„äººã€‚" "æ›´æ–°æ²¡æœ‰å®Œæˆï¼š%FAIL% å¤±è´¥ï¼ŒåŽŸå› åœ¨ä¸Šé¢ã€‚å®šæ—¶ä»»åŠ¡ç…§æ—§åœ¨è·‘ï¼Œè¯·æŠŠè¿™ä¸ªçª—å£çš„ç”»é¢æ‹ç»™å¸®ä½ å®‰è£…çš„äººã€‚" "Update did not finish: %FAIL% failed, the reason is shown above. The schedule keeps running the old version; please send a photo of this window to whoever helped you install."
+call :pause
 exit /b 1
 :notrepo
-echo ³o­ÓÀÉ­n©ñ¦b wiki-feeder ¸ê®Æ§¨¸Ì°õ¦æ¡C
-pause
+call :msg "é€™å€‹æª”è¦æ”¾åœ¨ wiki-feeder è³‡æ–™å¤¾è£¡åŸ·è¡Œã€‚" "è¿™ä¸ªæ–‡ä»¶è¦æ”¾åœ¨ wiki-feeder æ–‡ä»¶å¤¹é‡Œè¿è¡Œã€‚" "Run this file from inside the wiki-feeder folder."
+call :pause
 exit /b 1
+
+rem ==== same in all three .bat files from here to the end - tests\test_winsetup.py ====
+:lang
+rem Language: [general] language in the config (chosen at setup); otherwise the Windows display language,
+rem mapped the same way as i18n.detect. GetUserDefaultUILanguage, not Get-UICulture: that one follows
+rem the console code page and reads en-US under 65001 even on Chinese Windows.
+set "WL="
+for /f "usebackq delims=" %%L in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$f=Join-Path $env:LOCALAPPDATA 'wiki-feeder\config.toml'; $l=''; if (Test-Path -LiteralPath $f) { $m=[regex]::Match([IO.File]::ReadAllText($f), '(?m)^\s*language\s*=\s*.(zh-Hant|zh-Hans|en)\W'); if ($m.Success) { $l=$m.Groups[1].Value } }; if (-not $l) { $q=[char]34; $k=Add-Type -Name K -Namespace WikiFeeder -PassThru -MemberDefinition ('[DllImport('+$q+'kernel32.dll'+$q+')] public static extern ushort GetUserDefaultUILanguage();'); $i=[int]$k::GetUserDefaultUILanguage(); $l='en'; if (($i -band 0x3FF) -eq 4) { $l='zh-Hant'; if ($i -eq 0x804 -or $i -eq 0x1004) { $l='zh-Hans' } } }; $l"`) do set "WL=%%L"
+if not defined WL set "WL=zh-Hant"
+exit /b
+:msg
+rem call :msg "zh-Hant" "zh-Hans" "English" - prints one line in language WL
+set "M=%~1"
+if "%WL%"=="zh-Hans" set "M=%~2"
+if "%WL%"=="en" set "M=%~3"
+echo(%M%
+exit /b
+:pick
+rem call :pick VAR "zh-Hant" "zh-Hans" "English" - sets VAR in language WL
+set "%~1=%~2"
+if "%WL%"=="zh-Hans" set "%~1=%~3"
+if "%WL%"=="en" set "%~1=%~4"
+exit /b
+:pause
+rem cmd's own pause prompt is always English under 65001, so print our own
+call :msg "è«‹æŒ‰ä»»æ„éµç¹¼çºŒ . . ." "è¯·æŒ‰ä»»æ„é”®ç»§ç»­ . . ." "Press any key to continue . . ."
+pause >nul
+exit /b

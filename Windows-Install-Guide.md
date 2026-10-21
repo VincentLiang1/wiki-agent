@@ -4,7 +4,7 @@
 
 Follow the steps in order; it takes about 30–40 minutes (mostly waiting for downloads). If your screen looks different from what is described here, stop and send a photo of the screen to the person helping you install.
 
-> **About the language**: the setup questions, the summary emails and the alerts come in English, Traditional Chinese or Simplified Chinese — the first question asks which one. Two things are still in Chinese: the first few screens of `安裝.bat` (before the questions start; this guide translates them) and scribe2md, the transcription app (English and Traditional Chinese editions are planned). For those, this guide quotes the Chinese text and gives the English meaning in parentheses.
+> **About the language**: the setup questions, the summary emails and the alerts come in English, Traditional Chinese or Simplified Chinese — the first question asks which one. The screens of `安裝.bat` before that question follow your Windows display language (English unless Windows is set to Chinese). The file names `安裝.bat` ("install"), `更新.bat` ("update") and `移除排程.bat` ("remove schedule") stay in Chinese. scribe2md, the transcription app, is still in Chinese (English and Traditional Chinese editions are planned); for its screens this guide quotes the Chinese text and gives the English meaning in parentheses.
 
 ## 1. Install iCloud for Windows
 
@@ -40,9 +40,9 @@ The daily summary is sent through Gmail. If you don't want the email you can ski
 
 1. In your browser, open <https://github.com/VincentLiang1/wiki-agent>, click **安裝.bat** ("install") in the file list, then click the **Download raw file** icon at the top right and save it to your Downloads folder. If the browser warns that this kind of file may be harmful, choose **Keep**
 2. Double-click the downloaded **安裝.bat**. If a blue security warning appears ("Windows protected your PC" or similar), click **More info** → **Run anyway**
-3. The black window first lists `開始之前請先做好這三件事` ("before you start, please do these three things" — steps 1–3 above); press any key to continue
+3. The black window first lists `Before you start, please do these three things:` (steps 1–3 above); press any key to continue
 4. If Git or uv is missing, it installs them (you may be asked "Do you want to allow this app to make changes?" — click **Yes**)
-5. When asked `程式要放在哪個資料夾?` ("which folder should the program go in?"), just press Enter (`C:\wiki-feeder`). It downloads the program from GitHub and installs what it needs; **no GitHub account is required**
+5. When asked `Which folder should the program go in?`, just press Enter (`C:\wiki-feeder`). It downloads the program from GitHub and installs what it needs; **no GitHub account is required**
 6. While enabling Windows long path support, a **User Account Control** prompt appears — click **Yes** (this is the only step that needs administrator rights; it isn't asked if already enabled)
 
 ### 5-1. Answer the questions
