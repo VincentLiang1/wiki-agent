@@ -60,7 +60,7 @@
 | 【知识库】 | 已经有照讲义建的 WIKI 文件夹:在文件总管的网址列拷贝它的路径、粘贴再按 Enter。还没有:直接 Enter,问要不要创建再 Enter |
 | 【原件文件夹】 | Enter(WIKI 旁边的 `Raw_Sources`);新的知识库会问「还没有,要创建吗?」再 Enter |
 | 要照讲义请 Claude 建好规则文件与目录索引吗? | (还没有 `CLAUDE.md` 才会问)Enter。Claude 会花 1～3 分钟写好 `CLAUDE.md` 与目录 `index.md`,好了会用两三句话说它建了什么 |
-| 要在 CLAUDE.md 最后补上「版本纪录由 wiki-feeder 代管」吗? | Enter(要)。原本的规则不会被改,只在最后加一节 |
+| 要在 CLAUDE.md 最后补上「版本记录由 wiki-feeder 代管」吗? | Enter(要)。原本的规则不会被改,只在最后加一节 |
 | 【知识库名称】 | Enter 或打一个你喜欢的 |
 | 【转写】 | 列出找到的 doc2md,Enter 选第 1 个;它会试转一个小文件,看到「可以用」就过了。说「找不到 meeting-scribe」时,粘贴第 3 步文件夹里 `.venv\Scripts\doc2md.exe` 的完整路径 |
 | 【摘要信】寄件的 Gmail | 默认是你 Claude 登录的 Gmail;不寄信就输入 `-` |
@@ -80,7 +80,7 @@
 2. 等几分钟。文件总管打开你的知识库 `WIKI\Wiki_Pages`,会多出一页;原文件被归到 `Raw_Sources` 底下的主题文件夹
 3. 有设摘要信的话,会收到一封「wiki-feeder 摄入摘要」
 
-没动静的话看纪录:文件总管网址列粘贴 `%LOCALAPPDATA%\wiki-feeder\logs`,打开 `feeder.log` 看最后几行。
+没动静的话看记录:文件总管网址列粘贴 `%LOCALAPPDATA%\wiki-feeder\logs`,打开 `feeder.log` 看最后几行。
 
 ## 7. (选做)手机与电脑共用声纹
 
@@ -101,7 +101,7 @@
 
 ## 移除
 
-- **只停掉自动处理**:双击 `C:\wiki-feeder` 里的 **移除排程.bat**。设置、纪录、知识库都不动;要再开,重跑 **安裝.bat**
+- **只停掉自动处理**:双击 `C:\wiki-feeder` 里的 **移除排程.bat**。设置、记录、知识库都不动;要再开,重跑 **安裝.bat**
 - **整个拿掉**:先做上面那步,再删掉 `C:\wiki-feeder` 与 `%LOCALAPPDATA%\wiki-feeder`。**你的知识库(`WIKI`、`Raw_Sources`)不在这两个地方,不会被删**
 
 ## 出状况时
