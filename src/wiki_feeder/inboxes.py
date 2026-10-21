@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import FuturesConfig
+from .i18n import L
 from .mover import is_dataless
 from .osplat import download_cmd
 from .proc import run_net
@@ -64,12 +65,12 @@ class FolderInbox:
 
     def prepare(self) -> None:
         if not self.root.is_dir():
-            raise InboxUnavailable(f"{self.name} 收件匣不存在:{self.root}")
+            raise InboxUnavailable(L("{inbox} 收件匣不存在:{path}", inbox=self.name, path=self.root))
         try:
             os.listdir(self.root)
         except PermissionError as e:
             raise InboxUnavailable(
-                f"{self.name} 收件匣沒有讀取權限(經 ssh/launchd 執行時查「完整磁碟取用權限」):{e}"
+                L("{inbox} 收件匣沒有讀取權限(經 ssh/launchd 執行時查「完整磁碟取用權限」):{e}", inbox=self.name, e=e)
             ) from e
 
     def candidates(self) -> list[list[Candidate]]:
@@ -95,7 +96,7 @@ class FolderInbox:
 
             if pending:
                 for c in pending:
-                    log.info("%s:%s 是雲端佔位檔、內容還沒下載,這輪先不取", self.name, c.rel)
+                    log.info(L("%s:%s 是雲端佔位檔、內容還沒下載,這輪先不取"), self.name, c.rel)
                     self._request_download(c.path)
                 continue
             groups.append(g)
@@ -107,7 +108,7 @@ class FolderInbox:
         try:
             subprocess.run(download_cmd(str(path)), capture_output=True, timeout=30)
         except (OSError, subprocess.SubprocessError) as e:
-            log.warning("%s:要求下載 %s 失敗:%s", self.name, path, e)
+            log.warning(L("%s:要求下載 %s 失敗:%s"), self.name, path, e)
 
     def release(self, c: Candidate) -> None:
         c.path.unlink()
@@ -151,7 +152,7 @@ class FuturesInbox:
         cmd = ["git", "-c", f"user.name={self.cfg.git_user}", "-c", f"user.email={self.cfg.git_email}", *args]
         r = run_net(cmd, timeout or self.cfg.net_timeout, cwd=cwd or self.repo, env=env, text=True)
         if check and r.returncode != 0:
-            raise GitError(f"git {' '.join(args)} 失敗:{r.stderr.strip() or r.stdout.strip()}")
+            raise GitError(L("git {args} 失敗:{out}", args=" ".join(args), out=r.stderr.strip() or r.stdout.strip()))
         return r
 
     def _rev(self, ref: str) -> str:
@@ -176,7 +177,7 @@ class FuturesInbox:
                 self._git("pull", "--ff-only", "origin", self.cfg.branch)
             self._head = self._rev("HEAD")
         except GitError as e:
-            raise InboxUnavailable(f"FUTURES 取件準備失敗:{e}") from e
+            raise InboxUnavailable(L("FUTURES 取件準備失敗:{e}", e=e)) from e
         if self.stamp is not None:
             self.stamp.parent.mkdir(parents=True, exist_ok=True)
             self.stamp.touch()
@@ -194,7 +195,7 @@ class FuturesInbox:
     def _remote_head(self) -> str:
         out = self._git("ls-remote", "origin", f"refs/heads/{self.cfg.branch}").stdout.split()
         if not out:
-            raise GitError(f"遠端沒有 {self.cfg.branch} 分支")
+            raise GitError(L("遠端沒有 {branch} 分支", branch=self.cfg.branch))
         return out[0]
 
     def _push_pending(self) -> None:
@@ -207,9 +208,9 @@ class FuturesInbox:
         ahead = int(self._git("rev-list", "--count", f"origin/{self.cfg.branch}..HEAD").stdout.strip())
         if ahead == 0:
             return
-        log.warning("FUTURES:有 %d 個上一輪沒推上去的 commit,先重推", ahead)
+        log.warning(L("FUTURES:有 %d 個上一輪沒推上去的 commit,先重推"), ahead)
         if not self._push_with_retry():
-            log.warning("FUTURES:重推仍失敗,本機回到遠端狀態,已取走的檔下一輪以重複處理")
+            log.warning(L("FUTURES:重推仍失敗,本機回到遠端狀態,已取走的檔下一輪以重複處理"))
             self._git("fetch", "origin", self.cfg.branch)
             self._git("reset", "--hard", f"origin/{self.cfg.branch}")
 
@@ -237,16 +238,16 @@ class FuturesInbox:
         self._git("commit", "-q", "-m", f"process: 取走 {n} 個檔")
         self._released = []
         if not self._push_with_retry():
-            raise InboxUnavailable("FUTURES 推送失敗,已取走的檔留待下一輪重推(已複製,不會重複攝入)")
+            raise InboxUnavailable(L("FUTURES 推送失敗,已取走的檔留待下一輪重推(已複製,不會重複攝入)"))
 
     def _push_with_retry(self) -> bool:
         for i in range(self.cfg.push_retries):
             if self._git("push", "origin", f"HEAD:{self.cfg.branch}", check=False).returncode == 0:
                 return True
-            log.info("FUTURES:推送被拒(第 %d 次),pull --rebase 後重試", i + 1)
+            log.info(L("FUTURES:推送被拒(第 %d 次),pull --rebase 後重試"), i + 1)
             r = self._git("pull", "--rebase", "origin", self.cfg.branch, check=False)
             if r.returncode != 0:
                 self._git("rebase", "--abort", check=False)
-                log.warning("FUTURES:rebase 失敗:%s", r.stderr.strip())
+                log.warning(L("FUTURES:rebase 失敗:%s"), r.stderr.strip())
                 return False
         return False

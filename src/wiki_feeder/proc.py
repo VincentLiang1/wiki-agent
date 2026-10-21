@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import subprocess
 
+from .i18n import L
 from .osplat import group_kwargs, kill_group
 
 TIMED_OUT = 124   # 照 timeout(1) 的慣例
@@ -35,7 +36,8 @@ def run_net(cmd: list[str], timeout: float, input: str | None = None, term_grace
                 pass
         kill_group(p.pid)
         out, err = p.communicate()
-        msg = f"{' '.join(cmd[:4])} 逾時 {timeout:g} 秒,已中止"
+        # 英文不可寫成 timed out:collect.network_down 會把它當成斷網吞掉
+        msg = L("{cmd} 逾時 {seconds} 秒,已中止", cmd=' '.join(cmd[:4]), seconds=f"{timeout:g}")
         err = (err + "\n" + msg) if isinstance(err, str) else msg
         return subprocess.CompletedProcess(cmd, TIMED_OUT, out, err)
     return subprocess.CompletedProcess(cmd, p.returncode, out, err)

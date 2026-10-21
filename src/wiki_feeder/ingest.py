@@ -45,6 +45,7 @@ from . import toolgaps
 from .collect import _alert, _forget_alerts, heartbeat, run_lock
 from .config import Config, RepoConfig
 from .doc2md import SIDECAR_EXT
+from .i18n import SOURCE, L, N_
 from .ledger import Ledger
 from .mover import pick_names, suffixed
 from .office import DUMPERS
@@ -126,6 +127,13 @@ _COMMIT_MANAGED = ("**不要 git add、不要 git commit**(會被權限擋下):�
                    "**不要打 `git show`、`git log`、`git diff`(含 `--stat`)**——會被權限擋下。")
 _BACKFILL_RULE = ("\n   **回填個人 WIKI 照本庫規則做,但只寫在副本裡**:個人 WIKI 的頁面副本在 {stage}(那個庫自己的規則是 {stage}/CLAUDE.md,照它建頁、改頁、登錄它的 index.md)。只能新增或修改 {stage}/Wiki_Pages/ 底下的 .md(知識圖譜/ 除外),不刪檔、不改名、不大幅刪減既有內容;副本不是 git 庫,不要在那裡 commit——程式驗證後替你寫回個人 WIKI、commit 並推送,commit message 照個人 WIKI 的 CLAUDE.md 格式寫進回報的 wiki_commit_message(沒回填就填空字串)。回填的頁面與 commit message 都**不得提到本庫{forbidden}**:只寫去除內部細節後可攜的通用知識;寫不出來就不回填。")
 MANAGED_DENY = ["Bash(git add:*)", "Bash(git commit:*)"]
+# 回報與 commit message 用哪種語言(朋友選的介面語言)。給 claude 看的,不經 L;繁中不加任何字(提示跟原本一字不差)
+PROMPT_LANG = {
+    "zh-Hans": ("输出语言:回报里给人看的文字(pages 每页一句、questions、unverified、skip_reason、notes、summary)"
+                "和 commit_message 一律用简体中文写;本库 CLAUDE.md 没规定 commit message 格式时用"
+                "「摄入:<原件文件名>——一句摘要」。页面本身用什么语言照本库 CLAUDE.md。\n"),
+    "en": ("Output language: write every human-readable text in the report (the one-line description of each page in pages, questions, unverified, skip_reason, notes, summary) and commit_message in English; if this repo's CLAUDE.md does not prescribe a commit message format, use \"Ingest: <original file name> — one-line summary\". The language of the pages themselves follows this repo's CLAUDE.md.\n"),
+}
 
 
 # 攝入時放行的只讀指令(pagetools.py)。一個一個放行:放行整個 wiki_feeder 的話,resume、ingest 這些會動真資料的也放行了
@@ -151,15 +159,15 @@ class IngestEnvError(IngestError):
 
 # 攝入後只是留下沒 commit 的檔:其他驗證(原件沒少、找得到原件)都過了,人或自動修理檢查過可以照存下的回報補完
 #(finish-stopped)、解除。其他種類的 STOP(原件消失、中斷、沒驗證過的 commit)驗證沒過或沒跑完,一律要人看
-STOP_LEFTOVER = "留有沒 commit 的修改"
+STOP_LEFTOVER = N_("留有沒 commit 的修改")
 # 攝入把既有的檔刪短一大截(或整個刪掉):頁面內容可能被誤刪,推上去之前要人看過。git 留得住、revert 救得回,
 # 但推上主線後 Windows 那邊就拉下去了。改由程式查:攝入的 claude 沒有 git diff 可用(--output= 能清空任意檔)
-STOP_SHRANK = "大量刪減既有內容"
+STOP_SHRANK = N_("大量刪減既有內容")
 SHRINK_MIN_LINES = 20      # 淨刪掉這麼多行以上
 SHRINK_MIN_RATIO = 0.3     # 而且佔原檔這個比例以上,才算「大量」:改寫段落是有刪有增,淨刪不多
 # 攝入動到公事庫的 tools/(make-handout 跑的就是 origin 上的那一版)或 .claude/(claude -p 在公事庫裡執行,
 # 會讀它的設定與 skill):推上去之後,之後每一次攝入都照它執行、照它放寬權限。要人看,自動修理不補完
-STOP_GUARDED = "動到腳本或權限設定"
+STOP_GUARDED = N_("動到腳本或權限設定")
 GUARDED_DIRS = ("tools/", ".claude/")
 # finish-stopped 收的種類。照 ingest.stop 的「種類」欄判斷、不在「原因」裡找字:原因含 claude 取的檔名,
 # 檔名裡夾一句「留有沒 commit 的修改」就能把別種 STOP 冒充成可以補完、自動解除的
@@ -171,7 +179,7 @@ _API_DOWN = re.compile(r"Connection refused|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECO
 # claude 沒登入或登入過期:整台機器的問題,不是這份檔案的(朋友那台登入過期時,原本只看得到「Expecting value」)
 _NOT_LOGGED_IN = re.compile(r"Not logged in|Please run /login|Invalid API key|OAuth token has expired|"
                             r"authentication_error", re.I)
-NOT_LOGGED_IN_ALERT = "Claude Code 沒登入或登入過期:在終端機打 claude 重新登入,下一輪就會接著攝入"
+NOT_LOGGED_IN_ALERT = N_("Claude Code 沒登入或登入過期:在終端機打 claude 重新登入,下一輪就會接著攝入")
 
 
 @dataclass
@@ -206,7 +214,8 @@ def git(repo: Path, *args: str, check: bool = True) -> str:
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
     r = run_net(["git", *args], NET_TIMEOUT, cwd=repo, text=True, env=env)
     if check and r.returncode != 0:
-        raise IngestError(f"git {' '.join(args)}({repo.name})失敗:{(r.stderr or r.stdout).strip()}")
+        raise IngestError(L("git {args}({repo})失敗:{err}", args=' '.join(args), repo=repo.name,
+                            err=(r.stderr or r.stdout).strip()))
     return r.stdout.strip()
 
 
@@ -215,14 +224,14 @@ def _changed_paths(rc: RepoConfig) -> list[str]:
     r = subprocess.run(["git", "-c", "core.quotePath=false", "status", "--porcelain", "-z", "-uall", "--no-renames"],
                        cwd=rc.repo_dir, capture_output=True, text=True, encoding="utf-8")
     if r.returncode != 0:
-        raise IngestError(f"git status({rc.repo_dir.name})失敗:{r.stderr.strip()}")
+        raise IngestError(L("git status({repo})失敗:{err}", repo=rc.repo_dir.name, err=r.stderr.strip()))
     return [t[3:] for t in r.stdout.split("\0") if t]
 
 
 MANAGED_ROOT = "Wiki_Pages/"
-SNAPSHOT_MESSAGE = "手動修改快照(wiki-feeder 攝入前自動存)"
-SUMMARY_FIX_BACKFILL = "要 revert 或搬到個人庫"
-SUMMARY_FIX_SINGLE = "要 revert 或改成什麼"
+SNAPSHOT_MESSAGE = N_("手動修改快照(wiki-feeder 攝入前自動存)")
+SUMMARY_FIX_BACKFILL = N_("要 revert 或搬到個人庫")
+SUMMARY_FIX_SINGLE = N_("要 revert 或改成什麼")
 
 
 def ensure_managed_repo(cfg: Config, rc: RepoConfig) -> None:
@@ -234,19 +243,20 @@ def ensure_managed_repo(cfg: Config, rc: RepoConfig) -> None:
     if (repo / ".git").exists():
         return
     if not repo.is_dir():
-        raise IngestEnvError(f"知識庫資料夾不存在:{repo}")
+        raise IngestEnvError(L("知識庫資料夾不存在:{repo}", repo=repo))
     if rc.github:
-        raise IngestEnvError(f"{repo} 不是 git 庫:設定了 GitHub 遠端就要先自己 clone")
+        raise IngestEnvError(L("{repo} 不是 git 庫:設定了 GitHub 遠端就要先自己 clone", repo=repo))
     origin = cfg.local_origin
     if origin.exists() and any(origin.iterdir()):
         # 庫的 .git 不見了、遠端還在:新建的歷史接不上舊的,推送會被拒;交給人決定要不要從遠端 clone 回來
-        raise IngestEnvError(f"{repo} 不是 git 庫,但代管的遠端 {origin} 已經有內容:"
-                             f"要接回舊歷史就 git clone {origin} 回來,要重來就先把那個資料夾改名")
+        raise IngestEnvError(L("{repo} 不是 git 庫,但代管的遠端 {origin} 已經有內容:"
+                               "要接回舊歷史就 git clone {origin} 回來,要重來就先把那個資料夾改名",
+                               repo=repo, origin=origin))
 
     def g(*a: str, cwd: Path = repo) -> None:
         r = subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, encoding="utf-8")
         if r.returncode != 0:
-            raise IngestEnvError(f"建立代管 git 失敗(git {' '.join(a)}):{r.stderr.strip()}")
+            raise IngestEnvError(L("建立代管 git 失敗(git {args}):{err}", args=' '.join(a), err=r.stderr.strip()))
 
     origin.mkdir(parents=True, exist_ok=True)
     g("init", "--bare", "-q", "-b", rc.branch, str(origin), cwd=origin)
@@ -257,10 +267,10 @@ def ensure_managed_repo(cfg: Config, rc: RepoConfig) -> None:
         g("config", k, v)
     g("remote", "add", "origin", str(origin))
     g("add", "-A")
-    g("commit", "-q", "--allow-empty", "-m", "wiki-feeder 開始代管前的內容")
+    g("commit", "-q", "--allow-empty", "-m", L("wiki-feeder 開始代管前的內容"))
     g("push", "-q", "-u", "origin", rc.branch)
     mark_verified(cfg, rc)
-    log.info("%s:建好代管 git,遠端 %s", repo.name, origin)
+    log.info(L("%s:建好代管 git,遠端 %s"), repo.name, origin)
 
 
 def _managed_commit(rc: RepoConfig, before: str, result: dict, name: str) -> None:
@@ -269,12 +279,12 @@ def _managed_commit(rc: RepoConfig, before: str, result: dict, name: str) -> Non
     別處的改動(暫存檔、檢查腳本、改 CLAUDE.md)不 commit、留在工作區,後面照「留有沒 commit 的修改」STOP:
     與 Mac 上「claude commit 了又留暫存檔」同一種,quarantine → finish-stopped → resume 照用。"""
     if git(rc.repo_dir, "rev-parse", "HEAD") != before:
-        raise IngestError(f"STOP:{rc.repo_dir.name} 是程式代管 git 的庫,攝入卻自己 commit 了"
-                          f"(它拿不到 git commit 才對),停止後續攝入待人檢查")
+        raise IngestError(L("STOP:{repo} 是程式代管 git 的庫,攝入卻自己 commit 了"
+                            "(它拿不到 git commit 才對),停止後續攝入待人檢查", repo=rc.repo_dir.name))
     if not any(c.startswith(MANAGED_ROOT) for c in _changed_paths(rc)):
         return
     git(rc.repo_dir, "add", "-A", "--", MANAGED_ROOT)
-    git(rc.repo_dir, "commit", "-q", "-m", (result.get("commit_message") or "").strip() or f"攝入:{name}")
+    git(rc.repo_dir, "commit", "-q", "-m", (result.get("commit_message") or "").strip() or L("攝入:{name}", name=name))
 
 
 def _schema(groups: list[str], backfill: bool, managed: bool) -> dict:
@@ -297,11 +307,11 @@ def ensure_clean_and_current(cfg: Config, rc: RepoConfig) -> None:
         # 朋友用桌面版手動改的:另存一筆快照,不捲進攝入的 commit,也不因「庫不乾淨」每輪略過。人自己的修改,
         # 直接記成已驗證(攝入中斷留下的沒 commit 修改走不到這裡:那種已經 STOP 了)
         git(rc.repo_dir, "add", "-A")
-        git(rc.repo_dir, "commit", "-q", "-m", SNAPSHOT_MESSAGE)
+        git(rc.repo_dir, "commit", "-q", "-m", L(SNAPSHOT_MESSAGE))
         mark_verified(cfg, rc)
-        log.info("%s:攝入前先把手動修改存成一筆快照", rc.repo_dir.name)
+        log.info(L("%s:攝入前先把手動修改存成一筆快照"), rc.repo_dir.name)
     if git(rc.repo_dir, "status", "--porcelain"):
-        raise IngestEnvError(f"{rc.repo_dir.name} 有沒 commit 的修改,為免捲進自動攝入的 commit,這輪不攝入")
+        raise IngestEnvError(L("{repo} 有沒 commit 的修改,為免捲進自動攝入的 commit,這輪不攝入", repo=rc.repo_dir.name))
     try:
         git(rc.repo_dir, "pull", "--ff-only", "-q", "origin", rc.branch)
     except IngestEnvError:
@@ -319,10 +329,11 @@ def push(cfg: Config, rc: RepoConfig) -> None:
         r = run_net(["git", "pull", "--rebase", "-q", "origin", rc.branch], NET_TIMEOUT, cwd=rc.repo_dir, text=True)
         if r.returncode != 0 and not _finish_rebase_on_recent(rc):
             subprocess.run(["git", "rebase", "--abort"], cwd=rc.repo_dir, capture_output=True)
-            raise IngestError(f"{rc.repo_dir.name} rebase 失敗,commit 留在本機待人處理:{r.stderr.strip()}")
+            raise IngestError(L("{repo} rebase 失敗,commit 留在本機待人處理:{err}", repo=rc.repo_dir.name,
+                                err=r.stderr.strip()))
         # rebase 換掉了 commit 的雜湊:不跟著記,推不成的話下一輪會把這些驗證過的 commit 當成沒驗證過而 STOP
         mark_verified(cfg, rc)
-    raise IngestError(f"{rc.repo_dir.name} 推送 {cfg.push_retries} 次都被拒,commit 留在本機下一輪再推")
+    raise IngestError(L("{repo} 推送 {n} 次都被拒,commit 留在本機下一輪再推", repo=rc.repo_dir.name, n=cfg.push_retries))
 
 
 RECENT_INDEX = "Wiki_Pages/index.md"
@@ -408,7 +419,7 @@ def _finish_rebase_on_recent(rc: RepoConfig) -> bool:
         if g("add", "--", RECENT_INDEX).returncode != 0:
             return False
         if g("rebase", "--continue").returncode == 0:
-            log.info("%s:推送被拒、pull --rebase 只撞在 index.md 的最近異動,已自動合併", repo.name)
+            log.info(L("%s:推送被拒、pull --rebase 只撞在 index.md 的最近異動,已自動合併"), repo.name)
             return True
     return False
 
@@ -462,7 +473,7 @@ def diff_lines(rc: RepoConfig, before: str) -> tuple[int, int, list[str]]:
     toks = git(rc.repo_dir, attrs, "diff", "--name-status", *span).split("\0")
     status = dict(zip(toks[1::2], toks[0::2]))   # 路徑 → A／M／D／T(-z:狀態在前、路徑在後,各以 NUL 結尾)
     added = deleted = 0
-    shrank = [f"{p}(動到 .gitattributes:之後每一次攝入都照它判斷誰是二進位)" for p in status
+    shrank = [L("{path}(動到 .gitattributes:之後每一次攝入都照它判斷誰是二進位)", path=p) for p in status
               if p.rsplit("/", 1)[-1] == ".gitattributes"]
     for rec in git(rc.repo_dir, attrs, "diff", "--numstat", *span).split("\0"):
         parts = rec.split("\t", 2)
@@ -471,21 +482,21 @@ def diff_lines(rc: RepoConfig, before: str) -> tuple[int, int, list[str]]:
         path, st = parts[2], status.get(parts[2], "")
         if not (parts[0].isdigit() and parts[1].isdigit()):   # 二進位檔(行數欄是 `-`)
             if st == "D":
-                shrank.append(f"{path}(二進位檔,整個刪掉)")
+                shrank.append(L("{path}(二進位檔,整個刪掉)", path=path))
             elif st != "A":
-                shrank.append(f"{path}(二進位檔,內容被改寫)")
+                shrank.append(L("{path}(二進位檔,內容被改寫)", path=path))
             continue
         a, d = int(parts[0]), int(parts[1])
         added += a
         deleted += d
         if st == "D":   # 刪掉的行數就是原檔行數
-            shrank.append(f"{path}(原 {d} 行,整個刪掉)")
+            shrank.append(L("{path}(原 {n} 行,整個刪掉)", path=path, n=d))
         elif a == 0 and d and _blob_lines(rc, f"HEAD:{path}") == 0:
-            shrank.append(f"{path}(原 {d} 行,清成空檔)")
+            shrank.append(L("{path}(原 {n} 行,清成空檔)", path=path, n=d))
         elif d - a >= SHRINK_MIN_LINES:
             orig = _blob_lines(rc, f"{before}:{path}")
             if d - a >= SHRINK_MIN_RATIO * orig:
-                shrank.append(f"{path}(原 {orig} 行,淨刪 {d - a} 行)")
+                shrank.append(L("{path}(原 {n} 行,淨刪 {cut} 行)", path=path, n=orig, cut=d - a))
     return added, deleted, shrank
 
 
@@ -505,7 +516,8 @@ def _blob_lines(rc: RepoConfig, spec: str) -> int:
     r = run_net(["git", "cat-file", "-p", spec], NET_TIMEOUT, cwd=rc.repo_dir)
     if r.returncode != 0:
         err = r.stderr if isinstance(r.stderr, str) else r.stderr.decode("utf-8", "replace")   # 逾時時是 str
-        raise IngestError(f"git cat-file -p {spec}({rc.repo_dir.name})失敗:{err.strip()}")
+        raise IngestError(L("git cat-file -p {spec}({repo})失敗:{err}", spec=spec, repo=rc.repo_dir.name,
+                            err=err.strip()))
     return r.stdout.count(b"\n") + (1 if r.stdout and not r.stdout.endswith(b"\n") else 0)
 
 
@@ -530,7 +542,7 @@ def ingest(cfg: Config) -> IngestReport:
                         ensure_managed_repo(cfg, rc)
                 not_ready = False
             except IngestError as e:
-                report.alerts.append(f"這輪不攝入,待攝入的都不算失敗:{e}")
+                report.alerts.append(L("這輪不攝入,待攝入的都不算失敗:{e}", e=e))
                 not_ready = True
             if not_ready or _stopped(cfg, ledger, report):
                 cands = []
@@ -552,15 +564,15 @@ def ingest(cfg: Config) -> IngestReport:
                     for rc in cfg.repos:
                         ensure_clean_and_current(cfg, rc)
                 except IngestError as e:
-                    report.alerts.append(f"這輪不攝入,待攝入的都不算失敗:{e}")
+                    report.alerts.append(L("這輪不攝入,待攝入的都不算失敗:{e}", e=e))
                     cands = []
             for sha, path, kind in cands:
                 heartbeat(cfg.ingest_lock_path)
                 try:
                     o = _one(cfg, ledger, sha, Path(path), kind, report)
                 except IngestEnvError as e:
-                    log.warning("攝入:這輪略過(環境問題,不算失敗):%s", e)
-                    report.alerts.append(f"這輪不攝入,待攝入的都不算失敗:{e}")
+                    log.warning(L("攝入:這輪略過(環境問題,不算失敗):%s"), e)
+                    report.alerts.append(L("這輪不攝入,待攝入的都不算失敗:{e}", e=e))
                     break
                 if o is not None:
                     report.outcomes.append(o)
@@ -570,20 +582,21 @@ def ingest(cfg: Config) -> IngestReport:
             # 漏看那封信,原件就一直卡在 _待處理/ 沒人知道(使用者 2026-10-05 要求)
             stuck = sorted(Path(p).name for p in ledger.stuck_ingests(cfg.ingest_max_attempts))
             if stuck:
-                report.alerts.append(f"有 {len(stuck)} 個檔攝入已停止重試:{'、'.join(stuck[:10])}。"
-                                     f"查明原因後用 `uv run wiki-feeder reingest <檔名> --note \"...\"` 救回")
+                report.alerts.append(L("有 {n} 個檔攝入已停止重試:{names}。"
+                                       "查明原因後用 `uv run wiki-feeder reingest <檔名> --note \"...\"` 救回",
+                                       n=len(stuck), names=L("、").join(stuck[:10])))
     try:
         prune_md_cache(cfg)
     except Exception as e:  # noqa: BLE001 —— 清快取失敗不影響攝入
-        log.warning("清轉寫快取失敗:%s", e)
+        log.warning(L("清轉寫快取失敗:%s"), e)
     new = [m for m in report.alerts if _alert(cfg, m)]
     if report.outcomes or new:
         try:
             # 摘要只列 24 小時內第一次出現的警示(推送一直失敗這類,不必每分鐘報一次)
             post_summary(cfg, IngestReport(report.outcomes, new))
         except Exception as e:  # noqa: BLE001 —— 摘要發不出去不影響已完成的攝入
-            log.error("當日摘要發佈失敗:%s", e)
-            _alert(cfg, f"當日摘要發佈失敗:{e}")
+            log.error(L("當日摘要發佈失敗:%s"), e)
+            _alert(cfg, L("當日摘要發佈失敗:{e}", e=e))
     return report
 
 
@@ -595,8 +608,8 @@ def _stopped(cfg: Config, ledger: Ledger, report: IngestReport) -> bool:
     一樣的道理,這裡也轉成 STOP:分不出它做到哪,就交給人看。
     """
     for sha, path in ledger.interrupted_ingests():
-        _stop(cfg, ledger, sha, Path(path).name, "STOP:上一輪攝入到一半中斷(當掉或被砍),"
-                                                  "本機可能有沒驗證過的 commit")
+        _stop(cfg, ledger, sha, Path(path).name, L("STOP:上一輪攝入到一半中斷(當掉或被砍),"
+                                                    "本機可能有沒驗證過的 commit"))
     # 先看停止檔、再算沒驗證過的 commit。反過來的話,resume(先記已驗證、再刪停止檔)剛好插在兩步中間時,
     # 會用 resume 之前的標記算出「有沒驗證過的」、又看到停止檔已經刪了,馬上再 STOP 一次——自動修理在發佈後
     # 立刻 resume,正好撞上發佈裝回 agent、馬上跑起來的那一輪
@@ -604,16 +617,17 @@ def _stopped(cfg: Config, ledger: Ledger, report: IngestReport) -> bool:
     try:
         unverified = {} if stopped else {rc.repo_dir.name: c for rc in cfg.repos if (c := unverified_commits(cfg, rc))}
     except IngestError as e:
-        report.alerts.append(f"查不出本機哪些 commit 驗證過,這輪不補推也不攝入:{e}")
+        report.alerts.append(L("查不出本機哪些 commit 驗證過,這輪不補推也不攝入:{e}", e=e))
         return True
     if unverified and not cfg.ingest_stop_path.exists():
-        _stop(cfg, ledger, None, "(補推)", "STOP:本機有沒驗證過的 commit(攝入中斷留下的,或有人在這台直接 commit):"
-              + ";".join(f"{k} {len(v)} 個" for k, v in unverified.items()))
+        _stop(cfg, ledger, None, L("(補推)"),
+              L("STOP:本機有沒驗證過的 commit(攝入中斷留下的,或有人在這台直接 commit):{detail}",
+                detail=L(";").join(L("{repo} {n} 個", repo=k, n=len(v)) for k, v in unverified.items())))
     if not cfg.ingest_stop_path.exists():
         return False
     # 訊息固定(不含時間、commit):警示 24 小時報一次,不會每分鐘寄信
-    report.alerts.append(f"攝入因 STOP 暫停中(補推也停),檢查 {cfg.ingest_stop_path} 列的 commit 後"
-                         f"執行 `wiki-feeder resume`")
+    report.alerts.append(L("攝入因 STOP 暫停中(補推也停),檢查 {path} 列的 commit 後"
+                           "執行 `wiki-feeder resume`", path=cfg.ingest_stop_path))
     return True
 
 
@@ -631,18 +645,18 @@ def reingest(cfg: Config, name: str, note: str) -> str:
             (name, f"%/{name}", f"%/{name}"),
         ).fetchall()
         if len(rows) != 1:
-            raise IngestError(f"找不到唯一一筆叫 {name} 的紀錄(找到 {len(rows)} 筆)")
+            raise IngestError(L("找不到唯一一筆叫 {name} 的紀錄(找到 {n} 筆)", name=name, n=len(rows)))
         sha, path, status = rows[0]
         conv = ledger.conversion(sha)
         if not conv or conv[1] not in ("done", "skipped"):
             # 還沒轉寫完的檔不會成為攝入候選:搬回去也不會被攝入,還會把原件挪離收件區
-            raise IngestError(f"{name} 還沒轉寫完成(轉寫失敗或還在排隊):"
-                              f"轉寫已停止重試的用 `wiki-feeder reconvert {name}` 救回")
+            raise IngestError(L("{name} 還沒轉寫完成(轉寫失敗或還在排隊):"
+                                "轉寫已停止重試的用 `wiki-feeder reconvert {name}` 救回", name=name))
         src = Path(path)
         if not src.exists():
-            raise IngestError(f"{name} 的原件不在 {src},無法重新攝入")
+            raise IngestError(L("{name} 的原件不在 {src},無法重新攝入", name=name, src=src))
         if status == "done":
-            raise IngestError(f"{name} 已經攝入過(要改內容請直接說明要怎麼改,不用重新攝入)")
+            raise IngestError(L("{name} 已經攝入過(要改內容請直接說明要怎麼改,不用重新攝入)", name=name))
         if src.parent == target.raw_root / "_待處理":
             dest = src
         else:
@@ -656,7 +670,7 @@ def reingest(cfg: Config, name: str, note: str) -> str:
         with ledger._db:
             ledger._db.execute("UPDATE ingests SET status='moved', raw_path=?, attempts=0, error=NULL WHERE sha256=?",
                                (str(dest), sha))
-    return f"{name} 已搬回 {dest.parent},附上說明;下一輪攝入時會用到"
+    return L("{name} 已搬回 {dir},附上說明;下一輪攝入時會用到", name=name, dir=dest.parent)
 
 
 def _sidecar(path: Path, cfg: Config, sha: str) -> dict:
@@ -758,10 +772,10 @@ def _one(cfg: Config, ledger: Ledger, sha: str, path: Path, kind: str, report: I
             # ⚠️ 不可再用雜湊去原件樹找:同內容的檔可能早就攝入過(2026-10-04 實測,M2 測試照片
             # 與 Windows 先前攝入的 CME 公告同一張,被當成原件又攝入一次)
             ledger.ingest_set(sha, "gone", raw_path=str(path))
-            return Outcome(name, "gone", str(path), notes=["攝入前已從收件區手動移走,略過"])
+            return Outcome(name, "gone", str(path), notes=[L("攝入前已從收件區手動移走,略過")])
         current = _locate(ledger, cfg, sha, path)   # 到這裡的都是程式搬過的檔,才用雜湊找
         if current is None:
-            raise IngestError(f"STOP:找不到原件 {name}(上次位置 {path}),原件樹裡也沒有同內容的檔")
+            raise IngestError(L("STOP:找不到原件 {name}(上次位置 {path}),原件樹裡也沒有同內容的檔", name=name, path=path))
 
         if conv.get("捨棄候選"):
             dest = _move_no_clobber(current, cfg.discard_dir)
@@ -793,19 +807,20 @@ def _one(cfg: Config, ledger: Ledger, sha: str, path: Path, kind: str, report: I
         if not str(e).startswith("STOP:") and _left_unverified(cfg):
             # 失敗卻留下 commit(例如只 commit 到個人庫):不 STOP 的話,同一輪下一筆驗證通過時
             # 會把它一起記成驗證過、推上主線
-            e = IngestError(f"STOP:攝入失敗但留下沒驗證過的 commit:{e}")
+            e = IngestError(L("STOP:攝入失敗但留下沒驗證過的 commit:{e}", e=e))
         elif not str(e).startswith("STOP:") and _left_dirty(cfg):
             # claude 逾時、被 unstick 砍掉時頁面可能寫到一半:不 STOP 的話之後每一輪都因「庫不乾淨」整輪略過,
             # 只有一天一封的警示,看門狗也看不出來
-            e = IngestError(f"STOP:攝入失敗,庫裡留下寫到一半、沒 commit 的東西:{e}")
+            e = IngestError(L("STOP:攝入失敗,庫裡留下寫到一半、沒 commit 的東西:{e}", e=e))
         if str(e).startswith("STOP:"):
             _stop(cfg, ledger, sha, name, str(e), e.kind)
-            report.alerts.append(f"{name} 攝入停止(這筆與之後的攝入、補推都停住,等人檢查):{e}")
+            report.alerts.append(L("{name} 攝入停止(這筆與之後的攝入、補推都停住,等人檢查):{e}", name=name, e=e))
             return Outcome(name, "failed", str(path), error=str(e))
         n = ledger.ingest_failed(sha, str(e))
-        log.error("%s 攝入失敗(第 %d 次):%s", name, n, e)
+        log.error(L("%s 攝入失敗(第 %d 次):%s"), name, n, e)
         if n >= cfg.ingest_max_attempts:
-            report.alerts.append(f"{name} 攝入失敗{'(已停止重試)' if n >= cfg.ingest_max_attempts else ''}:{e}")
+            report.alerts.append(L("{name} 攝入失敗{stopped}:{e}", name=name, e=e,
+                                   stopped=L("(已停止重試)") if n >= cfg.ingest_max_attempts else ""))
         return Outcome(name, "failed", str(path), error=str(e))
 
 
@@ -852,34 +867,36 @@ def _stop(cfg: Config, ledger: Ledger, sha: str | None, name: str, error: str, k
         {"時間": datetime.now().astimezone().isoformat(timespec="seconds"), "檔案": name, "原因": error, "種類": kind,
          "本機未推送的 commit(未經驗證)": unpushed, "sha256": sha}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8")
-    log.error("%s 攝入停止:%s", name, error)
+    log.error(L("%s 攝入停止:%s"), name, error)
 
 
 def resume(cfg: Config) -> str:
     """人檢查過 STOP 之後解除。回傳要給人看的說明(含解除前要先處理的事)。"""
     p = cfg.ingest_stop_path
     if not p.exists():
-        return "攝入沒有停住,不用解除"
+        return L("攝入沒有停住,不用解除")
     info = p.read_text(encoding="utf-8")
     dirty = [rc for rc in cfg.repos if rc.managed and git(rc.repo_dir, "status", "--porcelain")]
     if dirty:
         # 代管的庫攝入前會把沒 commit 的修改存成「手動修改快照」並記已驗證:這時解除,攝入留下的暫存檔、
         # 寫到一半的頁就沒人看過被收進去
-        return (f"還不能解除:{'、'.join(rc.repo_dir.name for rc in dirty)} 還有沒 commit 的東西(多半是攝入留下的)。"
-                f"看過之後用 `wiki-feeder quarantine <路徑>` 移走(不刪),再 `wiki-feeder finish-stopped <檔名>` 補完那一筆,"
-                f"庫乾淨了再 resume")
+        return L("還不能解除:{repos} 還有沒 commit 的東西(多半是攝入留下的)。"
+                 "看過之後用 `wiki-feeder quarantine <路徑>` 移走(不刪),再 `wiki-feeder finish-stopped <檔名>` 補完那一筆,"
+                 "庫乾淨了再 resume", repos=L("、").join(rc.repo_dir.name for rc in dirty))
     for rc in cfg.repos:
         mark_verified(cfg, rc)   # 人看過了:目前本機的 commit 算驗證過,下一輪補推
     p.unlink()
-    return (f"已解除。停止時的紀錄:\n{info}\n"
-            "⚠️ 上面列的本機未推送 commit,下一輪會被推上 GitHub——內容有問題的話,先到該庫 git revert 或處理掉。\n"
-            "停住的那一筆不會自動重攝入;要攝入用 `wiki-feeder reingest <檔名> --note \"...\"`。")
+    return L("已解除。停止時的紀錄:\n{info}\n"
+             "⚠️ 上面列的本機未推送 commit,下一輪會被推上 GitHub——內容有問題的話,先到該庫 git revert 或處理掉。\n"
+             "停住的那一筆不會自動重攝入;要攝入用 `wiki-feeder reingest <檔名> --note \"...\"`。", info=info)
 
 
 def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: list[str],
-            tools_cmd: tuple[str, ...], stage: Path | None, forbidden: tuple[str, ...] = ()) -> str:
+            tools_cmd: tuple[str, ...], stage: Path | None, forbidden: tuple[str, ...] = (),
+            lang: str = SOURCE) -> str:
     """stage 是個人庫副本(沒有回填的單庫設定是 None,提示不提個人庫);程式代管 git 的庫叫 claude 不要 commit;
-    庫裡沒有 tools/make_handout.py 就不提重產講義。"""
+    庫裡沒有 tools/make_handout.py 就不提重產講義。lang 是介面語言:繁中以外在最後附「回報與 commit message
+    用哪種語言」(PROMPT_LANG);提示本身維持繁中(安全規則有測試與突變釘住)。"""
     conv = side.get("轉寫", {})
     raw_rel = target.raw_root.name + "\\" + "\\".join(raw.relative_to(target.raw_root).parts)
     if conv.get("類型") == "文字":
@@ -934,7 +951,7 @@ def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: l
                           raw_root=target.raw_root.name, suffix=raw.suffix,
                           text_line=text_line, meta=meta_txt, user_sidecar=user, tools=tools,
                           commit_rule=commit_rule, backfill_rule=backfill_rule, handout_line=handout_line, page_checks=page_checks,
-                          stage_check=stage_check)
+                          stage_check=stage_check) + PROMPT_LANG.get(lang, "")
 
 
 def _wiki_deny(cfg: Config) -> list[str]:
@@ -954,10 +971,10 @@ def _log_end(name: str, out: dict, result: dict) -> str:
     """claude 怎麼結束的、花了多少,每筆都記進 log;回傳結束原因。2026-10-07 之前沒記,
     業務月會逐字稿沒交回報時查不出是花完預算、輪數用完還是結構化回報失敗。"""
     end = str(out.get("subtype") or "?")
-    log.info("攝入 %s:claude 結束(%s%s),花費 US$%s、%s 輪、%s 秒%s", name, end,
-             "、is_error" if out.get("is_error") else "", out.get("total_cost_usd", "?"), out.get("num_turns", "?"),
+    log.info(L("攝入 %s:claude 結束(%s%s),花費 US$%s、%s 輪、%s 秒%s"), name, end,
+             L("、") + "is_error" if out.get("is_error") else "", out.get("total_cost_usd", "?"), out.get("num_turns", "?"),
              round(out["duration_ms"] / 1000) if isinstance(out.get("duration_ms"), (int, float)) else "?",
-             "" if result else ",沒有結構化回報")
+             "" if result else L(",沒有結構化回報"))
     return end
 
 
@@ -972,7 +989,7 @@ def _log_denials(cfg: Config, name: str, out: dict) -> None:
         inp = d.get("tool_input") if isinstance(d.get("tool_input"), dict) else {}
         what = inp.get("command") or inp.get("file_path") or inp.get("path") or json.dumps(inp, ensure_ascii=False)
         tried.append(f"{d.get('tool_name', '?')}: {str(what)[:200]}")
-    log.info("攝入 %s:有 %d 次工具呼叫被權限擋下:%s", name, len(tried), " | ".join(tried[:20]))
+    log.info(L("攝入 %s:有 %d 次工具呼叫被權限擋下:%s"), name, len(tried), " | ".join(tried[:20]))
     toolgaps.record(cfg, name, "denied", tried)
 
 
@@ -981,7 +998,7 @@ def _unverified(cfg: Config, name: str, result: dict) -> list[str]:
     它沒去試、直接寫「未驗」的那些,權限擋下的紀錄裡看不到,只有它自己講得出來。"""
     items = [str(u) for u in result.get("unverified") or [] if str(u).strip()]
     if items:
-        log.info("攝入 %s:沒能驗證的項目 %d 項:%s", name, len(items), " | ".join(items))
+        log.info(L("攝入 %s:沒能驗證的項目 %d 項:%s"), name, len(items), " | ".join(items))
         toolgaps.record(cfg, name, "unverified", items)
     return items
 
@@ -997,12 +1014,12 @@ def _page_check_notes(target: RepoConfig, before: str) -> list[str]:
             if st == "D":
                 continue
             old = "" if st == "A" else git_text(target.repo_dir, "show", f"{before}:{rel}")
-            found += [f"頁面檢查:{rel} 第 {n} 行{kind}" for n, kind, _ in
+            found += [L("頁面檢查:{path} 第 {n} 行{kind}", path=rel, n=n, kind=kind) for n, kind, _ in
                       new_problems(old, (target.repo_dir / rel).read_bytes().decode("utf-8", "replace"), rel,
                                    raw=target.raw_root, basic=target.managed)]
     except (PageToolError, OSError) as e:
-        return [f"頁面檢查沒跑成:{e}"]
-    return found[:5] + ([f"頁面檢查:另有 {len(found) - 5} 個問題沒列出"] if len(found) > 5 else [])
+        return [L("頁面檢查沒跑成:{e}", e=e)]
+    return found[:5] + ([L("頁面檢查:另有 {n} 個問題沒列出", n=len(found) - 5)] if len(found) > 5 else [])
 
 
 def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, user_text: str,
@@ -1034,11 +1051,11 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
     heartbeat(cfg.ingest_lock_path)   # 上面 pull 兩個庫最久各 5 分鐘,claude 最久一小時:分段跳,免得被當成卡住
     try:
         r = subprocess.run(args, input=_prompt(target, raw, side, user_text, groups, cfg.ingest_tools_cmd, stage,
-                                                cfg.backfill_forbidden),
+                                                cfg.backfill_forbidden, cfg.lang),
                            cwd=target.repo_dir,
                            capture_output=True, text=True, timeout=cfg.ingest_timeout)
     except (OSError, subprocess.SubprocessError) as e:
-        raise IngestError(f"攝入呼叫 claude 失敗:{e}") from e
+        raise IngestError(L("攝入呼叫 claude 失敗:{e}", e=e)) from e
 
     def untouched() -> bool:
         return (all(git(rc.repo_dir, "rev-parse", "HEAD") == before[rc.key] for rc in cfg.repos)
@@ -1054,16 +1071,16 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
     except json.JSONDecodeError as e:
         said = ((r.stdout or "") + (r.stderr or "")).strip()
         if _NOT_LOGGED_IN.search(said) and untouched():
-            raise env_problem(NOT_LOGGED_IN_ALERT) from e
-        raise IngestError(f"攝入呼叫 claude 失敗:{said[-300:] or e}") from e
+            raise env_problem(L(NOT_LOGGED_IN_ALERT)) from e
+        raise IngestError(L("攝入呼叫 claude 失敗:{e}", e=said[-300:] or e)) from e
     result = out.get("structured_output") if isinstance(out.get("structured_output"), dict) else {}
     end = _log_end(raw.name, out, result)
     _log_denials(cfg, raw.name, out)
     if out.get("is_error") and _NOT_LOGGED_IN.search(str(out.get("result", ""))) and untouched():
-        raise env_problem(NOT_LOGGED_IN_ALERT)
+        raise env_problem(L(NOT_LOGGED_IN_ALERT))
     if out.get("is_error") and _API_DOWN.search(str(out.get("result", ""))) and untouched():
         # 連不上 API、而且什麼都還沒動
-        raise env_problem(f"claude 連不上 API:{str(out.get('result'))[:200]}")
+        raise env_problem(L("claude 連不上 API:{err}", err=str(out.get('result'))[:200]))
     # 先存下回報與攝入前的 HEAD:這筆若 STOP,人(或自動修理)檢查後用 finish-stopped 照同一份回報補完
     ledger.ingest_set(sha, "ingesting", raw_path=str(raw),
                       result=json.dumps({"claude": result, "before": before}, ensure_ascii=False))
@@ -1076,12 +1093,12 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
     shas_after = ledger.raw_shas_under(target.raw_root)
     lost = shas_before - shas_after
     if lost:
-        where = "、".join(sorted(p for p, s in paths_before.items() if s in lost)[:5])
-        raise IngestError(f"STOP:攝入後原件樹裡有 {len(lost)} 份內容消失(可能被覆蓋或刪除),"
-                          f"攝入前的位置:{where}")
+        where = L("、").join(sorted(p for p, s in paths_before.items() if s in lost)[:5])
+        raise IngestError(L("STOP:攝入後原件樹裡有 {n} 份內容消失(可能被覆蓋或刪除),"
+                            "攝入前的位置:{where}", n=len(lost), where=where))
     now = _locate(ledger, cfg, sha, raw)
     if now is None:
-        raise IngestError(f"STOP:攝入後找不到原件 {raw.name}")
+        raise IngestError(L("STOP:攝入後找不到原件 {name}", name=raw.name))
     dirty = [rc.repo_dir.name for rc in cfg.repos if git(rc.repo_dir, "status", "--porcelain")]
     commits = [c for rc in cfg.repos for c in new_commits(rc, before[rc.key])]
     # 下面三項由嚴到寬查:好幾項同時不過時,STOP 的種類要記最嚴的那一種——種類決定能不能補完、能不能自動解除。
@@ -1091,34 +1108,39 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
     # 個人庫出現 commit 代表它碰了真的個人庫——那裡的 pre-commit hook 會執行庫裡的腳本
     others = [c for c in commits if c["repo"] != target.repo_dir.name]
     if others:
-        raise IngestError(f"STOP:攝入在 {'、'.join(sorted({c['repo'] for c in others}))} 留下 commit,"
-                          f"攝入不准自己動個人 WIKI(回填只能寫副本、由程式 commit),停止後續攝入待人檢查")
+        raise IngestError(L("STOP:攝入在 {repos} 留下 commit,"
+                            "攝入不准自己動個人 WIKI(回填只能寫副本、由程式 commit),停止後續攝入待人檢查",
+                            repos=L("、").join(sorted({c['repo'] for c in others}))))
     guarded = guarded_paths(target, before[target.key])
     if guarded:
-        raise IngestError(f"STOP:攝入後 {target.repo_dir.name} {STOP_GUARDED}:{'、'.join(guarded[:5])}"
-                          f"{'⋯' if len(guarded) > 5 else ''}——推上去之後每一次攝入都照它執行,要人看過"
-                          f"(自動修理不補完這一種)", kind=STOP_GUARDED)
+        raise IngestError(L("STOP:攝入後 {repo} {what}:{paths}{more}——推上去之後每一次攝入都照它執行,要人看過"
+                            "(自動修理不補完這一種)", repo=target.repo_dir.name, what=L(STOP_GUARDED),
+                            paths=L("、").join(guarded[:5]), more="⋯" if len(guarded) > 5 else ""),
+                          kind=STOP_GUARDED)
     added, deleted, shrank = diff_lines(target, before[target.key])
     if shrank:
-        raise IngestError(f"STOP:攝入後 {target.repo_dir.name} {STOP_SHRANK} {len(shrank)} 個檔:"
-                          f"{'、'.join(shrank[:5])}{'⋯(只列前 5 個)' if len(shrank) > 5 else ''},"
-                          f"推上去之前要人看過 commit(人看過沒問題再 finish-stopped、resume;自動修理不補完這一種)"
-                          + (f";{'、'.join(dirty)} 另外還留著沒 commit 的檔,補完之前先處理掉" if dirty else ""),
+        raise IngestError(L("STOP:攝入後 {repo} {what} {n} 個檔:{paths}{more},"
+                            "推上去之前要人看過 commit(人看過沒問題再 finish-stopped、resume;自動修理不補完這一種)",
+                            repo=target.repo_dir.name, what=L(STOP_SHRANK), n=len(shrank),
+                            paths=L("、").join(shrank[:5]), more=L("⋯(只列前 5 個)") if len(shrank) > 5 else "")
+                          + (L(";{repos} 另外還留著沒 commit 的檔,補完之前先處理掉", repos=L("、").join(dirty))
+                             if dirty else ""),
                           kind=STOP_SHRANK)
     if dirty:
-        raise IngestError(f"STOP:攝入後 {'、'.join(dirty)} {STOP_LEFTOVER},停止後續攝入待人檢查",
-                          kind=STOP_LEFTOVER)
+        raise IngestError(L("STOP:攝入後 {repos} {what},停止後續攝入待人檢查", repos=L("、").join(dirty),
+                            what=L(STOP_LEFTOVER)), kind=STOP_LEFTOVER)
     if result.get("decision") == "skipped" and not commits:
         dest = _move_no_clobber(now, cfg.discard_dir)
         ledger.move_item(sha, str(dest))
         o = Outcome(raw.name, "discarded", str(dest), questions=result.get("questions", []),
-                    notes=[f"攝入判斷不該攝入:{result.get('skip_reason') or '未說明'}"],
+                    notes=[L("攝入判斷不該攝入:{reason}", reason=result.get('skip_reason') or L("未說明"))],
                     summary=result.get("summary", ""))
         ledger.ingest_set(sha, "discarded", repo=target.key, raw_path=str(dest),
                           result=json.dumps(o.__dict__, ensure_ascii=False))
         return o
     if not any(c["repo"] == target.repo_dir.name for c in commits):
-        raise IngestError(f"攝入沒有產生 {target.repo_dir.name} 的 commit:{str(out.get('result'))[:300]}")
+        raise IngestError(L("攝入沒有產生 {repo} 的 commit:{said}", repo=target.repo_dir.name,
+                            said=str(out.get('result'))[:300]))
     for rc in cfg.repos:
         mark_verified(cfg, rc)   # 驗證通過:到這裡為止的 commit 補推時才可以推
 
@@ -1127,8 +1149,8 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
     else:
         # commit 了卻沒交回報(2026-10-07 業務月會逐字稿):群組、原件位置、待確認全不知道,
         # 只在摘要留一行「群組「」不在原件樹裡」沒人會注意到,頁面來源指向的原件卻還在 _待處理/
-        msg = (f"{raw.name}:攝入有 commit 但 claude 沒交回報({end}),原件留在 _待處理/;"
-               f"照頁面「來源」把原件搬好、更新處理紀錄,待確認事項看 commit message")
+        msg = L("{name}:攝入有 commit 但 claude 沒交回報({end}),原件留在 _待處理/;"
+                "照頁面「來源」把原件搬好、更新處理紀錄,待確認事項看 commit message", name=raw.name, end=end)
         report.alerts.append(msg)
         notes = [msg]
     heartbeat(cfg.ingest_lock_path)
@@ -1144,13 +1166,15 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
             except IngestError as e:
                 # commit 已在本機:這筆算完成(重跑會重複攝入),下一輪開頭補推
                 report.alerts.append(str(e))
-                notes.append(f"尚未推上 GitHub:{e}")
+                notes.append(L("尚未推上 GitHub:{e}", e=e))
     notes += _page_check_notes(target, before[target.key])
 
     conv = side.get("轉寫", {})
-    for k in ("長段空白", "未命名講者", "警告"):
+    # 鍵是轉寫 sidecar 的欄位名(不翻),顯示的名稱才翻
+    for k, label in (("長段空白", L("長段空白")), ("未命名講者", L("未命名講者")), ("警告", L("警告"))):
         if conv.get(k):
-            notes.append(f"{k}:{conv[k] if isinstance(conv[k], str) else '、'.join(conv[k])}")
+            notes.append(L("{label}:{value}", label=label,
+                           value=conv[k] if isinstance(conv[k], str) else L("、").join(conv[k])))
     ledger.move_item(sha, str(now))
     o = Outcome(raw.name, "done", str(now), commits, result.get("pages", []), result.get("questions", []),
                 _unverified(cfg, raw.name, result), notes, summary=result.get("summary", ""),
@@ -1324,7 +1348,7 @@ def _place_raw(target: RepoConfig, now: Path, result: dict, groups: list[str]) -
     if (group in groups or new) and now.parent.name == "_待處理":
         if new:
             (target.raw_root / group).mkdir(exist_ok=True)
-            notes.append(f"開了新群組 {group}/")
+            notes.append(L("開了新群組 {group}/", group=group))
         asked = result.get("raw_subpath", "") or ""
         sub = safe_subpath(asked, now.suffix)
         dest_dir, want = target.raw_root / group, now.name
@@ -1335,14 +1359,14 @@ def _place_raw(target: RepoConfig, now: Path, result: dict, groups: list[str]) -
             else:
                 sub = None
         if asked.strip() and not sub:
-            notes.append(f"攝入回報的原件位置「{asked[:100]}」不安全或副檔名不符,原件照原名放進 {group}/,"
-                         f"頁面來源要手動對齊")
+            notes.append(L("攝入回報的原件位置「{asked}」不安全或副檔名不符,原件照原名放進 {group}/,"
+                           "頁面來源要手動對齊", asked=asked[:100], group=group))
         now = _move_no_clobber(now, dest_dir, want)
         if now.name != want:
-            notes.append(f"目的地已有同名檔,原件改名為 {now.name},頁面來源要手動對齊")
+            notes.append(L("目的地已有同名檔,原件改名為 {name},頁面來源要手動對齊", name=now.name))
     elif group not in groups:
-        notes.append(f"攝入回報的群組「{group[:60]}」不在原件樹裡{'(名稱不能當資料夾)' if target.managed else ''},"
-                     f"原件留在 _待處理/ 待人搬")
+        notes.append(L("攝入回報的群組「{group}」不在原件樹裡{why},原件留在 _待處理/ 待人搬", group=group[:60],
+                       why=L("(名稱不能當資料夾)") if target.managed else ""))
     return now, notes
 
 
@@ -1352,7 +1376,7 @@ def finish_stopped(cfg: Config, name: str) -> str:
     要在 resume 之前做:STOP 期間沒有其他攝入,攝入前的 HEAD 到現在的 commit 就是這一筆的。
     """
     if not cfg.ingest_stop_path.exists():
-        raise IngestError("攝入沒有停住:finish-stopped 只能在 STOP 期間、resume 之前用")
+        raise IngestError(L("攝入沒有停住:finish-stopped 只能在 STOP 期間、resume 之前用"))
     try:
         info = json.loads(cfg.ingest_stop_path.read_text(encoding="utf-8"))
     except ValueError:
@@ -1361,7 +1385,8 @@ def finish_stopped(cfg: Config, name: str) -> str:
     if info.get("種類") not in FINISHABLE:
         # 原件消失、中斷這類 STOP 的驗證沒過或沒跑完:照回報補完會把沒驗證過的攝入記成完成(原件被蓋掉時,
         # 還會把蓋掉別人的那個位置記成這一筆的原件),要人看過再處理
-        raise IngestError(f"這種 STOP 不能用 finish-stopped 補完,要人處理:{info.get('原因', '(ingest.stop 讀不懂)')}")
+        raise IngestError(L("這種 STOP 不能用 finish-stopped 補完,要人處理:{why}",
+                            why=info.get('原因', L("(ingest.stop 讀不懂)"))))
     target = cfg.repo(cfg.target_repo)
     with Ledger(cfg.ledger_path) as ledger:
         stopped = ledger.stopped_ingests()
@@ -1372,31 +1397,32 @@ def finish_stopped(cfg: Config, name: str) -> str:
         else:
             rows = [(sha, p) for sha, p in stopped if Path(p).name == name]
         if len(rows) != 1:
-            raise IngestError(f"處理紀錄裡 STOP 狀態、叫 {name} 的有 {len(rows)} 筆(要剛好一筆)")
+            raise IngestError(L("處理紀錄裡 STOP 狀態、叫 {name} 的有 {n} 筆(要剛好一筆)", name=name, n=len(rows)))
         sha, path = rows[0]
         if info.get("sha256") and sha != info["sha256"]:
-            raise IngestError(f"{name} 不是這次 STOP 的那一筆(ingest.stop 記的是 {info.get('檔案')}):要人處理")
+            raise IngestError(L("{name} 不是這次 STOP 的那一筆(ingest.stop 記的是 {other}):要人處理", name=name,
+                                other=info.get('檔案')))
         try:
             saved = json.loads(ledger.ingest_row(sha)["result"] or "")
             result, before = saved["claude"], saved["before"]
         except (TypeError, ValueError, KeyError):
-            raise IngestError(f"{name} 沒有這次攝入存下的回報(在 claude 回報之前就中斷,或是這個版本之前 STOP 的):"
-                              f"要人手動處理") from None
+            raise IngestError(L("{name} 沒有這次攝入存下的回報(在 claude 回報之前就中斷,或是這個版本之前 STOP 的):"
+                                "要人手動處理", name=name)) from None
         if result.get("decision") != "ingested":
-            raise IngestError(f"{name} 的攝入回報不是 ingested:要人判斷")
+            raise IngestError(L("{name} 的攝入回報不是 ingested:要人判斷", name=name))
         commits = [c for rc in cfg.repos for c in new_commits(rc, before[rc.key])]
         if any(c["repo"] != target.repo_dir.name for c in commits):
-            raise IngestError("攝入期間個人 WIKI 有 commit:要人處理")
+            raise IngestError(L("攝入期間個人 WIKI 有 commit:要人處理"))
         if not commits:
-            raise IngestError(f"{name} 沒有 {target.repo_dir.name} 的 commit:要人判斷")
+            raise IngestError(L("{name} 沒有 {repo} 的 commit:要人判斷", name=name, repo=target.repo_dir.name))
         now = _locate(ledger, cfg, sha, Path(path))
         if now is None:
-            raise IngestError(f"找不到 {name} 的原件:要人處理")
+            raise IngestError(L("找不到 {name} 的原件:要人處理", name=name))
         # 增刪行數照樣進摘要:大量刪減的 STOP 補完的那筆,事後審核最需要看它。在搬原件之前算:git 出錯時
         # 什麼都還沒動,不會留下「原件搬了、處理紀錄沒記」的半套
         added, deleted, _ = diff_lines(target, before[target.key])
         now, notes = _place_raw(target, now, result, groups_of(target.raw_root))
-        notes.append("STOP 後檢查過 commit,用 finish-stopped 補完(沒有重攝入);commit 要等 resume 之後那一輪才推上 GitHub")
+        notes.append(L("STOP 後檢查過 commit,用 finish-stopped 補完(沒有重攝入);commit 要等 resume 之後那一輪才推上 GitHub"))
         ledger.move_item(sha, str(now))
         o = Outcome(name, "done", str(now), commits, result.get("pages", []), result.get("questions", []),
                     _unverified(cfg, name, result), notes, summary=result.get("summary", ""), lines=f"+{added}／−{deleted}")
@@ -1407,9 +1433,10 @@ def finish_stopped(cfg: Config, name: str) -> str:
         # 以「失敗」出現過,claude 回報的 questions 沒有人看得到
         post_summary(cfg, IngestReport([o]))
     except Exception as e:  # noqa: BLE001 —— 摘要發不出去不影響已補完的這筆
-        log.error("當日摘要發佈失敗:%s", e)
-        notes.append(f"當日摘要發佈失敗:{e}")
-    return f"{name} 已補完:原件在 {now},commit {'、'.join(c['hash'][:7] for c in commits)},行數 {o.lines}" + \
+        log.error(L("當日摘要發佈失敗:%s"), e)
+        notes.append(L("當日摘要發佈失敗:{e}", e=e))
+    return L("{name} 已補完:原件在 {path},commit {hashes},行數 {lines}", name=name, path=now,
+             hashes=L("、").join(c['hash'][:7] for c in commits), lines=o.lines) + \
         ("".join(f"\n- {n}" for n in notes))
 
 
@@ -1424,16 +1451,16 @@ def quarantine(cfg: Config, path: str) -> str:
     p = Path(path)
     p = (p if p.is_absolute() else target.repo_dir / p).resolve()
     if not p.is_relative_to(repo) or ".git" in p.relative_to(repo).parts:
-        raise IngestError(f"{path} 不在 {target.repo_dir.name} 的工作區裡")
+        raise IngestError(L("{path} 不在 {repo} 的工作區裡", path=path, repo=target.repo_dir.name))
     if not p.is_file() or p.is_symlink():
-        raise IngestError(f"{path} 不是一般檔案")
+        raise IngestError(L("{path} 不是一般檔案", path=path))
     rel = p.relative_to(repo).as_posix()
     st = git(target.repo_dir, "status", "--porcelain", "--untracked-files=all", "-z", "--", rel)
     if st.rstrip("\0") != f"?? {rel}":
-        raise IngestError(f"{rel} 不是沒追蹤的檔(git status:{st!r}):不收")
+        raise IngestError(L("{path} 不是沒追蹤的檔(git status:{st}):不收", path=rel, st=repr(st)))
     dest_dir = cfg.quarantine_dir / datetime.now().strftime("%Y%m%d-%H%M%S") / p.parent.relative_to(repo)
     dest = _move_no_clobber(p, dest_dir)
-    return f"{rel} 已搬到 {dest}"
+    return L("{path} 已搬到 {dest}", path=rel, dest=dest)
 
 
 def prune_md_cache(cfg: Config, now: datetime | None = None) -> int:
@@ -1461,51 +1488,54 @@ def prune_md_cache(cfg: Config, now: datetime | None = None) -> int:
             ledger.forget_md(sha)
             n += 1
     if n:
-        log.info("轉寫快取:刪掉 %d 份攝入已結束超過 %g 天的 md", n, cfg.md_cache_keep_days)
+        log.info(L("轉寫快取:刪掉 %d 份攝入已結束超過 %g 天的 md"), n, cfg.md_cache_keep_days)
     return n
 
 
 # -- 當日摘要 ------------------------------------------------------------------------
 
 def render_summary(cfg: Config, report: IngestReport, when: datetime) -> str:
-    lines = [f"## {when:%H:%M} 這一輪", ""]
+    lines = [L("## {time} 這一輪", time=f"{when:%H:%M}"), ""]
     done = [o for o in report.outcomes if o.status == "done"]
     if done:
-        lines.append("### 已攝入")
+        lines.append(L("### 已攝入"))
         for o in done:
             group = Path(o.raw_path).parent.name
-            links = "、".join((f"[{c['repo']} {c['hash'][:7]}](https://github.com/{c['github']}/commit/{c['hash']})"
-                               if c["github"] else f"{c['repo']} {c['hash'][:7]}")
-                             for c in o.commits)
-            lines.append(f"- **{o.name}** → `{group}`｜{links}" + (f"｜行數 {o.lines}" if o.lines else ""))
+            links = L("、").join((f"[{c['repo']} {c['hash'][:7]}](https://github.com/{c['github']}/commit/{c['hash']})"
+                                  if c["github"] else f"{c['repo']} {c['hash'][:7]}")
+                                 for c in o.commits)
+            lines.append(L("- **{name}** → `{group}`｜{links}", name=o.name, group=group, links=links)
+                         + (L("｜行數 {lines}", lines=o.lines) if o.lines else ""))
             for pg in o.pages:
-                lines.append(f"  - {'新頁' if pg['action'] == 'new' else '擴充'} `{pg['path']}`:{pg['summary']}")
+                lines.append(L("  - {action} `{path}`:{summary}", path=pg['path'], summary=pg['summary'],
+                               action=L("新頁") if pg['action'] == 'new' else L("擴充")))
             for n in o.notes:
                 lines.append(f"  - ⚠️ {n}")
-            lines += [f"  - 🔍 未驗:{u}" for u in o.unverified]
+            lines += [L("  - 🔍 未驗:{item}", item=u) for u in o.unverified]
             for q in o.questions:
                 lines.append(f"  - ❓ {q}")
         lines.append("")
     discarded = [o for o in report.outcomes if o.status == "discarded"]
     if discarded:
-        lines.append("### 捨棄候選(未攝入,原件留在 `_捨棄候選/`,確認後才刪)")
+        lines.append(L("### 捨棄候選(未攝入,原件留在 `_捨棄候選/`,確認後才刪)"))
         for o in discarded:
-            lines.append(f"- **{o.name}**:{'、'.join(o.notes)}")
+            lines.append(L("- **{name}**:{notes}", name=o.name, notes=L("、").join(o.notes)))
             lines += [f"  - ❓ {q}" for q in o.questions]
         lines.append("")
     gone = [o for o in report.outcomes if o.status == "gone"]
     if gone:
-        lines.append("### 攝入前已從收件區手動移走(略過)")
+        lines.append(L("### 攝入前已從收件區手動移走(略過)"))
         lines += [f"- {o.name}" for o in gone]
         lines.append("")
     failed = [o for o in report.outcomes if o.status == "failed"]
     if failed or report.alerts:
-        lines.append("### 失敗與警示")
-        lines += [f"- **{o.name}**:{o.error}" for o in failed]
+        lines.append(L("### 失敗與警示"))
+        lines += [L("- **{name}**:{notes}", name=o.name, notes=o.error) for o in failed]
         lines += [f"- {a}" for a in report.alerts if not any(o.error and o.error in a for o in failed)]
         lines.append("")
     # 單庫(朋友的 Windows 版)沒有個人庫可搬
-    lines.append(f"有錯請在 Claude Code 裡說是哪一筆({SUMMARY_FIX_BACKFILL if cfg.has_backfill else SUMMARY_FIX_SINGLE})。")
+    lines.append(L("有錯請在 Claude Code 裡說是哪一筆({fix})。",
+                   fix=L(SUMMARY_FIX_BACKFILL) if cfg.has_backfill else L(SUMMARY_FIX_SINGLE)))
     return "\n".join(lines)
 
 
@@ -1514,17 +1544,17 @@ def _mail_summary(cfg: Config, report: IngestReport, when: datetime, body: str) 
     from .notify import MailError, send
 
     st = [o.status for o in report.outcomes]
-    counts = {"攝入": st.count("done"), "捨棄候選": st.count("discarded"), "失敗": st.count("failed")}
-    parts = [f"{k} {v}" for k, v in counts.items() if v] or ["警示"]
-    subject = f"wiki-feeder 攝入摘要 {when:%m/%d %H:%M}:{'、'.join(parts)}"
+    counts = {L("攝入"): st.count("done"), L("捨棄候選"): st.count("discarded"), L("失敗"): st.count("failed")}
+    parts = [f"{k} {v}" for k, v in counts.items() if v] or [L("警示")]
+    subject = L("wiki-feeder 攝入摘要 {time}:{parts}", time=f"{when:%m/%d %H:%M}", parts=L("、").join(parts))
     if report.alerts:
         # 卡住(停止重試、STOP、doc2md 跑不起來、收件匣讀不到)要人處理:主旨一眼看得出來
-        subject = f"⚠️ 需要處理｜{subject}"
+        subject = L("⚠️ 需要處理｜{subject}", subject=subject)
     if not cfg.mail_to or not cfg.mail_from:
         return None
     try:
         send(cfg, subject, body)
-        log.info("當日摘要已寄出:%s", subject)
+        log.info(L("當日摘要已寄出:%s"), subject)
         return True
     except MailError as e:
         log.error("%s", e)
@@ -1547,7 +1577,7 @@ def post_summary(cfg: Config, report: IngestReport, when: datetime | None = None
     try:
         _archive_summary(cfg, when, body)
     except OSError as e:
-        log.error("當日摘要寫不進本機:%s", e)
+        log.error(L("當日摘要寫不進本機:%s"), e)
     sent = _mail_summary(cfg, report, when, body)
     if gaps and sent is not False:   # 沒寄到的話下一封再附
         toolgaps.mark_reported(cfg, when)
@@ -1562,6 +1592,6 @@ def _archive_summary(cfg: Config, when: datetime, body: str) -> None:
     """一天一個檔,每輪追加一段(## HH:MM 這一輪);不輪替、不刪,跟信箱裡那份一樣留著。"""
     cfg.summaries_dir.mkdir(parents=True, exist_ok=True)
     path = cfg.summaries_dir / f"{when:%Y-%m-%d}.md"
-    head = "" if path.exists() else f"# 攝入摘要 {when:%Y-%m-%d}\n\n"
+    head = "" if path.exists() else L("# 攝入摘要 {date}", date=f"{when:%Y-%m-%d}") + "\n\n"
     with open(path, "a", encoding="utf-8") as f:
         f.write(head + body + "\n\n")

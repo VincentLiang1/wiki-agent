@@ -9,6 +9,7 @@ import os
 import shutil
 from pathlib import Path
 
+from .i18n import L
 from .osplat import fsync_path, is_placeholder
 
 _CHUNK = 1024 * 1024
@@ -67,7 +68,7 @@ def copy_verified(src: Path, dest_dir: Path, final_name: str, expected_sha: str)
         fsync_path(partial)
         got = sha256_of(partial)
         if got != expected_sha:
-            raise VerifyError(f"{src}: 複製後 SHA-256 不符({got[:12]} ≠ {expected_sha[:12]})")
+            raise VerifyError(L("{src}: 複製後 SHA-256 不符({got} ≠ {want})", src=src, got=got[:12], want=expected_sha[:12]))
         os.link(partial, final)
     finally:
         partial.unlink(missing_ok=True)

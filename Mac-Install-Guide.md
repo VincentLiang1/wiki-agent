@@ -1,10 +1,10 @@
 # wiki-agent Installation Guide for Mac
 
-[繁體中文](Mac安裝說明.md) | **English**
+[繁體中文](Mac安裝說明.md) | [简体中文](Mac安装说明.md) | **English**
 
 Follow the steps in order; it takes about 30–40 minutes (mostly waiting for downloads). Each step says where to go, what to click and what you should see. If your screen looks different from what is described here, stop and send a photo of the screen to the person helping you install.
 
-> **About the language**: the installer and the summary emails speak Traditional Chinese, and so does scribe2md for now (English and Traditional Chinese editions of scribe2md are planned). Wherever you will see Chinese text on screen, this guide quotes it exactly and gives the English meaning next to it, so you can match what you see; if your scribe2md already shows English, follow the English names given in parentheses. In the installer you can almost always just press Enter to accept the default answer.
+> **About the language**: the installer, the summary emails and the alerts come in English, Traditional Chinese or Simplified Chinese — the installer's first question asks which one. scribe2md (the transcription app) is in Chinese for now; English and Traditional Chinese editions are planned. For its screens this guide quotes the Chinese text and gives the English meaning in parentheses; if your scribe2md already shows English, follow those English names.
 
 ## 0. Make sure iCloud Drive is turned on
 
@@ -49,49 +49,55 @@ curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/insta
 
 ### 5-1. Command line developer tools (first time only)
 
-A window pops up: *"The "git" command requires the command line developer tools. Would you like to install the tools now?"*
+Terminal shows `=== 1/4 Command Line Tools (git) ===` and a window pops up: *"The "git" command requires the command line developer tools. Would you like to install the tools now?"*
 
 - Click **Install** (not "Get Xcode") → click **Agree** on the license → wait for the progress bar (about 5–15 minutes) → click **Done**
 - Terminal carries on by itself; you don't need to paste the line again
 
-It then installs uv, downloads the program into the `wiki-agent` folder in your home folder and prepares the Python environment (a few minutes the first time).
+It then goes through `=== 2/4 uv (Python environment manager) ===` and `=== 3/4 Downloading the program to … ===` (into the `wiki-agent` folder in your home folder) and prepares the Python environment (a few minutes the first time). At `=== 4/4 Settings ===` the questions begin.
 
 ### 5-2. Answer the questions
 
-Every question ends with `(直接按 Enter = …)` ("press Enter = …", showing the default). **Pressing Enter is almost always the right answer**:
+The first question picks the language for everything that follows (the questions, the summary emails, the alerts and a newly created knowledge base):
+
+```
+語言 / 语言 / Language:1 繁體中文  2 简体中文  3 English(Enter = English)
+```
+
+Type `3` and press Enter (if your Mac is set to English, just press Enter). After that, every question ends with `(Enter = …)` showing the default, and yes/no questions end with `(Y/n)` — **pressing Enter is almost always the right answer**:
 
 | Question on screen | What to do |
 | --- | --- |
-| Checking Claude Code | Automatic. It continues only after showing `✓ …(已登入)` ("signed in"); if it says you're not signed in, go back to step 2 |
-| `【收件匣】` (inbox) | Enter (the `_WikiBox` folder in iCloud Drive). If asked `還沒有,要建立嗎?` ("doesn't exist yet, create it?"), press Enter again |
-| `【知識庫】` (knowledge base) | If you already have a WIKI folder set up following the handout, **drag it from Finder into the Terminal window** and press Enter. If not, just press Enter, and press Enter again when asked whether to create it |
-| `【原件資料夾】` (originals folder) | Enter (`Raw_Sources`, next to WIKI) |
-| `要照講義請 Claude 建好規則檔嗎?` ("Ask Claude to create the rules file following the handout?") | (Asked only for a new knowledge base) Enter. Claude spends 1–3 minutes writing `CLAUDE.md` and the table of contents `index.md`, using your Claude quota |
-| `要在 CLAUDE.md 最後補上「版本紀錄由 wiki-feeder 代管」嗎?` ("Add a 'version history is managed by wiki-feeder' section at the end of CLAUDE.md?") | Enter (yes). Your existing rules are not changed; one section is added at the end |
-| `【知識庫名稱】` (knowledge base name) | The name shown in the summary email. Press Enter, or type a name you like |
-| `【轉寫】` (transcription) | Automatic: it finds the scribe2md you installed in step 3 and test-converts a small file. When it says `可以用` ("works"), you're through |
-| `【摘要信】` (summary email) — the Gmail address to send from | Defaults to the Gmail you signed in to Claude with; type another address to use a different one; type `-` if you don't want emails |
-| Gmail app password | Paste the 16 letters from step 4 (**nothing is shown while you type** — just paste and press Enter). A test email is sent; if it arrives on your phone, it worked |
-| Can it read the inbox | Automatic. `iCloud	可讀` ("readable") means it's fine |
-| Installing the schedule | Automatic. You'll see two lines ending in `:已裝好` ("installed") |
+| `=== Checking Claude Code ===` | Automatic. It continues only after showing `✓ … (signed in)`; if it says `✗ Claude Code isn't signed in`, go back to step 2 |
+| `[Inbox] The folder the iPhone drops files into (_WikiBox in iCloud Drive)` | Enter. If asked whether to create it, press Enter again |
+| `[Knowledge base] The WIKI folder built from the handout (…)` | If you already have a WIKI folder set up following the handout, **drag it from Finder into the Terminal window** and press Enter. If not, just press Enter, and press Enter again when asked whether to create it |
+| `[Originals folder] Raw_Sources (…)` | Enter (`Raw_Sources`, next to WIKI) |
+| `… has no CLAUDE.md yet. Ask Claude to create the rules file and table of contents from the handout?` | (Asked only for a new knowledge base) Enter. Claude spends 1–3 minutes writing `CLAUDE.md` and the table of contents `index.md` — in the language you picked — using your Claude quota |
+| `Add a section at the end of CLAUDE.md saying "version history is managed by wiki-feeder; don't run git yourself"?` | Enter (yes). Your existing rules are not changed; one section is added at the end |
+| `[Knowledge base name] Name shown in the summary email` | Press Enter (`Knowledge base`), or type a name you like |
+| `[Transcription] …` | Automatic: it finds the scribe2md you installed in step 3 and test-converts a small file. When it says `works`, you're through |
+| `[Summary email] …` then `Sending Gmail address` | Defaults to the Gmail you signed in to Claude with; type another address to use a different one; type `-` if you don't want emails |
+| `Gmail app password (16 characters, not shown as you type)` | Paste the 16 letters from step 4 (**nothing is shown while you type** — just paste and press Enter). A test email is sent; if it arrives on your phone, it worked |
+| `=== Can the inbox be read? (in Terminal) ===` | Automatic. `iCloud	readable` means it's fine |
+| `=== Installing the schedule (one round per minute) ===` | Automatic. You'll see two lines ending in `: installed` |
 
 ### 5-3. Full Disk Access (required)
 
-The schedule runs in the background, and macOS requires you to separately allow it to read iCloud Drive. The installer automatically opens **System Settings → Privacy & Security → Full Disk Access**, and Terminal prints a long path (ending in something like `python3.12`):
+Under `=== Full Disk Access ===` it says: `The schedule runs in the background and needs separate permission to read iCloud Drive.` The installer automatically opens **System Settings → Privacy & Security → Full Disk Access**, and Terminal prints a long path (ending in something like `python3.12`):
 
 1. In Terminal, **select that path and copy it with ⌘C**
 2. In System Settings, click **+** below the list (you'll be asked for your Mac password or Touch ID)
 3. When the file picker opens, press **⌘ + Shift + G**, paste the path with ⌘V, press Enter, then click **Open**
 4. A new entry `python3.12` (or similar) appears in the list — **make sure its switch on the right is on**
-5. Go back to Terminal and press Enter. It test-reads the inbox in the background; `✓ launchd 底下讀得到收件匣` ("the inbox is readable under launchd") means you're done. If it says it can't read it, repeat 1–4
+5. Go back to Terminal, where it says `Once it's added, press Enter and I'll try reading the inbox once in the background…`, and press Enter. `✓ The inbox can be read under launchd` means you're done. If it says `Still can't read it. Try again?`, repeat 1–4
 
-When you see `✓ 安裝完成` ("installation complete") you can close Terminal.
+When you see `✓ Installation complete.` you can close Terminal.
 
 ## 6. Check that it really works
 
 1. On the iPhone, open the **Files** app → **iCloud Drive** → **_WikiBox** and drop any file into it (for example, share a recording from Voice Memos, or save a photo of a whiteboard here)
 2. Wait a few minutes (longer recordings take longer). In Finder, open `SOURCE5/WIKI/Wiki_Pages` in your home folder (or the knowledge base you chose): a new page appears, and the original file is filed into a topic folder under `Raw_Sources`
-3. If you set up the summary email, you'll receive one titled `wiki-feeder 攝入摘要` ("wiki-feeder ingest summary")
+3. If you set up the summary email, you'll receive one titled `wiki-feeder ingest summary …`
 
 If nothing happens, check the log: in Finder press **⌘ + Shift + G**, paste `~/Library/Application Support/wiki-feeder/logs`, open `feeder.log` and look at the last few lines.
 
@@ -110,9 +116,9 @@ Once set up, `上次同步` ("last synced") at the bottom of that column on the 
 
 ## Updating
 
-In Finder, open the **wiki-agent** folder in your home folder → double-click **更新.command** ("update"; the first time macOS asks whether you're sure you want to open it — click **Open**). If a file is being processed, Terminal says it is waiting for the current round to finish; then it downloads the new version. When you see `✓ 更新好了` ("updated"), press Enter to close. You don't need to reinstall the schedule.
+In Finder, open the **wiki-agent** folder in your home folder → double-click **更新.command** ("update"; the first time macOS asks whether you're sure you want to open it — click **Open**). If a file is being processed, Terminal says `The current round hasn't finished yet … waiting for it to finish before updating`; then it downloads the new version. When you see `✓ Update done; the next round uses the new program`, press Enter to close. You don't need to reinstall the schedule.
 
-If it says Python changed version and the executable must be added to Full Disk Access again, repeat step 5-3 with the new path it prints.
+If it says `⚠ Python changed version: add this executable to Full Disk Access again`, repeat step 5-3 with the new path it prints.
 
 ## Uninstalling
 
@@ -121,7 +127,7 @@ If it says Python changed version and the executable must be added to Full Disk 
 
 ## When something goes wrong
 
-- **The email subject starts with `⚠️ 需要處理` ("action needed")**: open Terminal, type `cd ~/wiki-agent && claude`, paste the whole email into Claude and ask it to handle it according to wiki-agent's rules (you can write to Claude in English)
-- **`Claude Code 沒登入或登入過期` ("Claude Code is not signed in or the sign-in expired")**: type `claude` in Terminal and sign in again; the next round picks up where it left off
+- **The email subject starts with `⚠️ Needs attention`**: open Terminal, type `cd ~/wiki-agent && claude`, paste the whole email into Claude and ask it to handle it according to wiki-agent's rules (you can write to Claude in English)
+- **The email says Claude Code is not signed in or the sign-in expired**: type `claude` in Terminal and sign in again; the next round picks up where it left off
 - **It can't read the inbox**: usually Full Disk Access is missing or switched off — check step 5-3. You can also run `.venv/bin/python scripts/macsched.py check` in the wiki-agent folder to test-read it
 - **Don't run git in the knowledge base yourself** (including asking Claude to commit for you): the program only accepts versions it has verified itself; one extra commit makes it stop and wait for a person

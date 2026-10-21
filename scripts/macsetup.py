@@ -20,7 +20,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from wiki_feeder.config import CONFIG_FILE, Config, ConfigError, state_dir_for  # noqa: E402
+from wiki_feeder import i18n  # noqa: E402
+from wiki_feeder.config import CONFIG_FILE, ConfigError, state_dir_for  # noqa: E402
+from wiki_feeder.i18n import L, N_  # noqa: E402
 
 
 def _script(name: str):
@@ -33,7 +35,7 @@ def _script(name: str):
 ws = _script("winsetup")          # 共用:toml_path、render_config、write_config、check_doc2md、claude_logged_in、問答
 say, ask, yes = ws.say, ws.ask, ws.yes
 SCRIBE2MD = "https://github.com/VincentLiang1/scribe2md/releases/latest"
-HEADER = "# wiki-feeder 設定檔(install.sh 問答產生;要改就用「文字編輯」改,改完下一分鐘生效)"
+HEADER = N_("# wiki-feeder 設定檔(install.sh 問答產生;要改就用「文字編輯」改,改完下一分鐘生效)")
 
 
 def icloud_drive(home: Path) -> Path:
@@ -47,7 +49,7 @@ def scribe2md_doc2md(home: Path) -> Path:
 
 def render_config(a: dict) -> str:
     text = ws.render_config(a)
-    return HEADER + text[text.index("\n"):]
+    return L(HEADER) + text[text.index("\n"):]
 
 
 def find_claude(home: Path) -> Path | None:
@@ -70,31 +72,32 @@ def save_password(account: str, password: str, run=subprocess.run) -> bool:
 def pick(prompt: str, folder: bool, default: str = "") -> str:
     """貼上路徑(可以把資料夾從 Finder 拖進終端機視窗);直接按 Enter 開選擇視窗(有預設值時用預設值)。"""
     say(prompt)
-    v = input(f"  貼上路徑(或把資料夾拖進這個視窗)後按 Enter{'' if default else ',或直接按 Enter 開選擇視窗'}"
-              f"{f'(直接按 Enter = {default})' if default else ''}:").strip().strip("'\"")
+    v = input(L("  貼上路徑(或把資料夾拖進這個視窗)後按 Enter(直接按 Enter = {default}):", default=default) if default
+              else L("  貼上路徑(或把資料夾拖進這個視窗)後按 Enter,或直接按 Enter 開選擇視窗:")).strip().strip("'\"")
     v = v.replace("\\ ", " ")                  # 拖進終端機的路徑,空白前面會加反斜線
     if v or default:
         return str(Path(v or default).expanduser())
     kind = "folder" if folder else "file"
-    r = subprocess.run(["osascript", "-e", f'POSIX path of (choose {kind} with prompt "{prompt[:60]}")'],
+    title = prompt[:60].replace('"', "'")
+    r = subprocess.run(["osascript", "-e", f'POSIX path of (choose {kind} with prompt "{title}")'],
                        capture_output=True, text=True)
     v = r.stdout.strip()
     if not v:
-        v = input("  沒有選,請貼上路徑:").strip().strip("'\"").replace("\\ ", " ")
+        v = input(L("  沒有選,請貼上路徑:")).strip().strip("'\"").replace("\\ ", " ")
     return str(Path(v).expanduser()) if v else ""
 
 
 def ask_inbox(home: Path) -> str:
     drive = icloud_drive(home)
     if not drive.is_dir():
-        say("⚠ 找不到 iCloud 雲碟。請到「系統設定 → 你的名字 → iCloud → iCloud 雲碟」打開,再重跑安裝。")
+        say(L("⚠ 找不到 iCloud 雲碟。請到「系統設定 → 你的名字 → iCloud → iCloud 雲碟」打開,再重跑安裝。"))
     default = str(drive / "_WikiBox")
     while True:
-        p = Path(pick("【收件匣】iPhone 丟檔進來的資料夾(iCloud 雲碟裡的 _WikiBox)", True, default))
+        p = Path(pick(L("【收件匣】iPhone 丟檔進來的資料夾(iCloud 雲碟裡的 _WikiBox)"), True, default))
         if p.parent.is_dir():
             break
-        say(f"  找不到 {p.parent},請再確認")
-    if not p.is_dir() and yes(f"  {p} 還沒有,要建立嗎?"):
+        say(L("  找不到 {path},請再確認", path=p.parent))
+    if not p.is_dir() and yes(L("  {path} 還沒有,要建立嗎?", path=p)):
         p.mkdir()
     return str(p)
 
@@ -103,19 +106,19 @@ def ask_doc2md(home: Path) -> str:
     exe = scribe2md_doc2md(home)
     while True:
         if not exe.is_file():
-            say(f"【轉寫】找不到 scribe2md 的 doc2md({exe})。")
-            say(f"  請先到 {SCRIBE2MD} 下載 scribe2md-mac.zip、解壓縮,把 App 拖進「應用程式」、打開一次")
-            say("  (第一次打開會自己裝好),關掉它再回到這裡。")
-            v = input("  裝好了按 Enter;doc2md 在別的地方就貼上路徑:").strip().strip("'\"").replace("\\ ", " ")
+            say(L("【轉寫】找不到 scribe2md 的 doc2md({path})。", path=exe))
+            say(L("  請先到 {url} 下載 scribe2md-mac.zip、解壓縮,把 App 拖進「應用程式」、打開一次", url=SCRIBE2MD))
+            say(L("  (第一次打開會自己裝好),關掉它再回到這裡。"))
+            v = input(L("  裝好了按 Enter;doc2md 在別的地方就貼上路徑:")).strip().strip("'\"").replace("\\ ", " ")
             if v:
                 exe = Path(v).expanduser()
             continue
-        say("  試轉一個小檔(最多幾十秒)…")
+        say(L("  試轉一個小檔(最多幾十秒)…"))
         ok, msg = ws.check_doc2md(exe)
-        say(f"  {exe}:{msg}")
+        say(L("  {path}:{msg}", path=exe, msg=msg))
         if ok:
             return str(exe)
-        v = input("  換一個路徑(直接按 Enter 再試一次):").strip().strip("'\"").replace("\\ ", " ")
+        v = input(L("  換一個路徑(直接按 Enter 再試一次):")).strip().strip("'\"").replace("\\ ", " ")
         if v:
             exe = Path(v).expanduser()
 
@@ -128,89 +131,83 @@ def run_cli(*args: str) -> subprocess.CompletedProcess:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="macsetup", description="wiki-feeder 第一次安裝的問答(Mac)")
-    ap.add_argument("--no-schedule", action="store_true", help="不裝排程(實測用)")
-    ap.add_argument("--prefix", default=None, help="launchd 標籤的開頭(實測用)")
+    ap = argparse.ArgumentParser(prog="macsetup", description=L("wiki-feeder 第一次安裝的問答(Mac)"))
+    ap.add_argument("--no-schedule", action="store_true", help=L("不裝排程(實測用)"))
+    ap.add_argument("--prefix", default=None, help=L("launchd 標籤的開頭(實測用)"))
     args = ap.parse_args(argv)
     home = Path.home()
     state = state_dir_for("darwin", home, os.environ)
     path = state / CONFIG_FILE
 
-    say("=== 檢查 Claude Code ===")
+    lang = ws.ask_lang(ws.config_lang(path) or i18n.detect())
+    say(L("=== 檢查 Claude Code ==="))
     claude = find_claude(home)
     if not claude:
-        say("✗ 找不到 claude。請先裝 Claude Code(https://claude.com/claude-code 的 Mac 安裝指令),裝好後再跑一次安裝")
+        say(L("✗ 找不到 claude。請先裝 Claude Code(https://claude.com/claude-code 的 Mac 安裝指令),裝好後再跑一次安裝"))
         return 1
     status = ws.claude_status(claude)
     if not status.get("loggedIn"):
-        say("✗ Claude Code 還沒登入。請在終端機打 claude、登入你自己的帳號,再跑一次安裝")
+        say(L("✗ Claude Code 還沒登入。請在終端機打 claude、登入你自己的帳號,再跑一次安裝"))
         return 1
-    say(f"✓ {claude}(已登入)")
+    say(L("✓ {path}(已登入)", path=claude))
 
-    cfg = None
-    if path.is_file():
-        say(f"\n已經有設定檔 {path}:")
-        say(path.read_text(encoding="utf-8-sig"))
-        if yes("沿用這份(不重填)?"):
-            try:
-                cfg = Config.from_file(path, state)
-            except ConfigError as e:
-                say(f"✗ 這份讀不了:{e}\n  請重填")
+    # 沿用舊檔又換了語言時,ws 改語言那一行;第一行註解照原樣留著(寫的是 Mac 的)
+    cfg = ws.reuse_config(path, state, lang)
     while cfg is None:
-        say("\n=== 設定(每一題都可以貼上路徑;有預設值時直接按 Enter) ===")
-        a = {"icloud": ask_inbox(home)}
+        say(L("\n=== 設定(每一題都可以貼上路徑;有預設值時直接按 Enter) ==="))
+        a = {"icloud": ask_inbox(home), "lang": lang}
         a["wiki"], a["raw"] = ask_wiki(str(ws.find_wiki(home) or ws.default_wiki(home, False)), claude)
-        a["label"] = ask("【知識庫名稱】摘要信上顯示的名字", "知識庫")
+        a["label"] = ask(L("【知識庫名稱】摘要信上顯示的名字"), L("知識庫"))
         a["doc2md"] = ask_doc2md(home)
         a["mail_from"], a["mail_to"] = ask_mail(ws.mail_default(status))
         a["claude"] = str(claude)          # 一律寫:launchd 底下的 PATH 不一定跟終端機一樣
         try:
             cfg = ws.write_config(render_config(a), state)
         except (ValueError, ConfigError) as e:
-            say(f"✗ {e}\n  請重填")
+            say(L("✗ {e}\n  請重填", e=e))
             continue
-        say(f"\n✓ 已寫入 {path}")
+        say(L("\n✓ 已寫入 {path}", path=path))
 
     if cfg.mail_from:
-        say("\n=== 寄信 ===")
+        say(L("\n=== 寄信 ==="))
         while True:
-            if yes("要(重新)輸入 Gmail 應用程式密碼嗎?", True):
+            if yes(L("要(重新)輸入 Gmail 應用程式密碼嗎?"), True):
                 import getpass
-                pw = getpass.getpass("  Gmail 的應用程式密碼(16 個字,打字時不會顯示):").replace(" ", "")
+                pw = getpass.getpass(L("  Gmail 的應用程式密碼(16 個字,打字時不會顯示):")).replace(" ", "")
                 if not save_password(cfg.mail_from, pw):
-                    say("  ✗ 存不進鑰匙圈")
+                    say(L("  ✗ 存不進鑰匙圈"))
             r = run_cli("test-mail")
             say((r.stdout + r.stderr).strip())
-            if r.returncode == 0 or not yes("沒寄成功,要再輸入一次密碼嗎?"):
+            if r.returncode == 0 or not yes(L("沒寄成功,要再輸入一次密碼嗎?")):
                 break
 
-    say("\n=== 讀得到收件匣嗎(在終端機裡) ===")
+    say(L("\n=== 讀得到收件匣嗎(在終端機裡) ==="))
     r = run_cli("collect", "--list")
-    say((r.stdout + r.stderr).strip() or "(沒有任何輸出:不算通過)")
+    say((r.stdout + r.stderr).strip() or L("(沒有任何輸出:不算通過)"))
 
     if args.no_schedule:
-        say("\n(--no-schedule:不裝排程)")
+        say(L("\n(--no-schedule:不裝排程)"))
         return 0
     ms = _script("macsched")
     prefix = args.prefix or ms.PREFIX
-    say("\n=== 裝排程(每分鐘一輪) ===")
+    say(L("\n=== 裝排程(每分鐘一輪) ==="))
     if not ms.install(home, prefix):
         return 1
-    say("\n=== 完整磁碟取用權限 ===")
-    say("排程在背景跑,要另外允許它讀 iCloud 雲碟。請照安裝說明第 5 步:")
-    say("  系統設定 → 隱私權與安全性 → 完整磁碟取用權限 → 左下角「+」→ 按 ⌘⇧G、貼上下面這一行 → 打開 → 確認開關是開的")
+    say(L("\n=== 完整磁碟取用權限 ==="))
+    say(L("排程在背景跑,要另外允許它讀 iCloud 雲碟。請照安裝說明第 5 步:"))
+    say(L("  系統設定 → 隱私權與安全性 → 完整磁碟取用權限 → 左下角「+」→ 按 ⌘⇧G、貼上下面這一行 → 打開 → 確認開關是開的"))
     say(f"  {ms.fda_path()}")
     subprocess.run(["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"],
                    capture_output=True)
     while True:
-        input("  加好之後按 Enter,我在背景試讀一次收件匣…")
+        input(L("  加好之後按 Enter,我在背景試讀一次收件匣…"))
         if ms.check(home, prefix) == 0:
             break
-        if not yes("  還是讀不到,要再試一次嗎?"):
-            say("  先不管:排程照樣在跑,只是收件匣讀不到;之後加好權限就會自己恢復")
+        if not yes(L("  還是讀不到,要再試一次嗎?")):
+            say(L("  先不管:排程照樣在跑,只是收件匣讀不到;之後加好權限就會自己恢復"))
             break
-    say("\n✓ 安裝完成。一分鐘後程式就開始自己跑;往 _WikiBox 丟一個檔,幾分鐘後知識庫裡會多一頁。")
-    say(f"  看紀錄:{state / 'logs' / 'feeder.log'};停掉排程:雙擊 移除排程.command;更新程式:雙擊 更新.command")
+    say(L("\n✓ 安裝完成。一分鐘後程式就開始自己跑;往 _WikiBox 丟一個檔,幾分鐘後知識庫裡會多一頁。"))
+    say(L("  看紀錄:{log};停掉排程:雙擊 移除排程.command;更新程式:雙擊 更新.command", log=state / "logs" / "feeder.log"))
     return 0
 
 
@@ -223,7 +220,7 @@ def ask_wiki(default: str, claude: Path) -> tuple[str, str]:
 def ask_mail(default: str) -> tuple[str, str]:
     frm, to = ws.ask_mail(default)
     if not frm:
-        say("  (Mac:之後要寄,重跑 install.sh 那一行就好)")
+        say(L("  (Mac:之後要寄,重跑 install.sh 那一行就好)"))
     return frm, to
 
 

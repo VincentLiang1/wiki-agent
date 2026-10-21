@@ -1531,3 +1531,101 @@ def test_wiki_push_failure_is_retried_next_round_without_stop(env, monkeypatch):
     assert not c.ingest_stop_path.exists(), r2.outcomes[0].error
     assert r2.outcomes[0].status == "done"
     assert _remote_log(w_remote)[0] == "docs(backfill): 通用知識"   # 補推上去了
+
+
+# -- 介面語言(朋友版):提示詞維持繁中,只附回報語言;摘要與信照介面語言 ---------------------------------
+
+_CJK = __import__("re").compile(r"[㐀-鿿！-｠　-〿]")
+
+
+def _prompt_args(env, tmp_path):
+    target = env["cfg"].repo(env["cfg"].target_repo)
+    raw = target.raw_root / "_待處理" / "週會.txt"
+    return (target, raw, {"轉寫": {"類型": "文字"}}, "", ["群組"], ("/x/uv", "run", "wiki-feeder"), tmp_path,
+            ("甲公司",))
+
+
+def test_prompt_in_traditional_chinese_is_unchanged_by_the_language_parameter(env, tmp_path):
+    """使用者本人那台是 zh-Hant:提示一個字都不能多(安全規則有測試與突變釘住)。"""
+    from wiki_feeder.ingest import PROMPT_LANG, _prompt
+    args = _prompt_args(env, tmp_path)
+    zh = _prompt(*args, lang="zh-Hant")
+    assert zh == _prompt(*args)
+    assert zh.endswith("待確認事項、一句摘要。\n")
+    assert not any(v in zh for v in PROMPT_LANG.values())
+
+
+@pytest.mark.parametrize("lang,must", [("en", ("in English", "Ingest: <original file name>")),
+                                       ("zh-Hans", ("简体中文", "摄入:<原件文件名>"))])
+def test_prompt_for_friends_asks_for_report_and_commit_message_in_their_language(env, tmp_path, lang, must):
+    """提示本身照舊繁中;最後多一段「回報、commit message 用哪種語言」——朋友看得懂摘要信與 git 歷史。"""
+    from wiki_feeder.ingest import PROMPT_LANG, _prompt
+    args = _prompt_args(env, tmp_path)
+    out = _prompt(*args, lang=lang)
+    assert out == _prompt(*args) + PROMPT_LANG[lang]
+    assert all(m in PROMPT_LANG[lang] for m in must)
+    assert "commit_message" in PROMPT_LANG[lang] and "CLAUDE.md" in PROMPT_LANG[lang]
+
+
+def test_ingest_passes_the_configured_language_to_the_prompt(env, monkeypatch):
+    from wiki_feeder.ingest import PROMPT_LANG
+    seen = []
+    real_run = subprocess.run
+
+    def spy(cmd, *a, **k):
+        if "-p" in cmd:
+            seen.append(k.get("input", ""))
+        return real_run(cmd, *a, **k)
+
+    monkeypatch.setattr("wiki_feeder.ingest.subprocess.run", spy)
+    env["cfg"] = replace(env["cfg"], lang="en")
+    _feed(env, "a.txt", b"aaa")
+    ingest(env["cfg"])
+
+    (prompt,) = seen
+    assert prompt.endswith(PROMPT_LANG["en"])
+
+
+def test_summary_and_mail_subject_are_in_english_for_english_friends(env, monkeypatch):
+    """朋友選英文:摘要的段落標題、信的主旨(含「需要處理」)都是英文。要等主代理合併譯文(locales/en.json)才會過。"""
+    from wiki_feeder import i18n, notify
+    from wiki_feeder.ingest import Outcome, post_summary
+
+    i18n.set_lang("en")
+    c = replace(env["cfg"], lang="en", mail_from="me@example.com", mail_to="me@example.com")
+    done = Outcome("週會.txt", "done", str(env["fraw"] / "會議與月報" / "週會.txt"),
+                   commits=[{"repo": "FWIKI", "github": "me/FWIKI", "hash": "a" * 40, "subject": "Ingest: 週會.txt"}],
+                   pages=[{"repo": "FWIKI", "path": "Wiki_Pages/會議與月報/週會.md", "action": "new", "summary": "s"}],
+                   unverified=["x"], lines="+3／−0")
+    failed = Outcome("壞檔.pdf", "failed", "", error="STOP: something")
+    report = IngestReport([done, failed], alerts=["a1"])
+
+    text = render_summary(c, report, datetime(2026, 10, 6, 9, 5))
+    heads = [ln for ln in text.splitlines() if ln.startswith("#")]
+    assert heads and not [h for h in heads if _CJK.search(h)], heads
+    assert "### Ingested" in text and "Failures and alerts" in text
+    last = text.splitlines()[-1]
+    assert "revert" in last and not _CJK.search(last), last
+
+    _FakeSMTP.sent = []
+    monkeypatch.setattr(notify.smtplib, "SMTP_SSL", _FakeSMTP)
+    monkeypatch.setattr(notify, "smtp_password", lambda cfg: "app-password")
+    post_summary(c, report, datetime(2026, 10, 6, 9, 5))
+    (msg,) = _FakeSMTP.sent
+    subject = msg["Subject"]
+    assert subject.startswith("⚠️ Needs attention"), subject
+    assert "10/06 09:05" in subject and not _CJK.search(subject), subject
+
+
+def test_mail_subject_without_alerts_is_english_too(env, monkeypatch):
+    from wiki_feeder import i18n, notify
+    from wiki_feeder.ingest import Outcome, post_summary
+
+    i18n.set_lang("en")
+    c = replace(env["cfg"], lang="en", mail_from="me@example.com", mail_to="me@example.com")
+    _FakeSMTP.sent = []
+    monkeypatch.setattr(notify.smtplib, "SMTP_SSL", _FakeSMTP)
+    monkeypatch.setattr(notify, "smtp_password", lambda cfg: "app-password")
+    post_summary(c, IngestReport([Outcome("a.txt", "discarded", "", notes=["空白"])]), datetime(2026, 10, 6))
+    (msg,) = _FakeSMTP.sent
+    assert "Needs attention" not in msg["Subject"] and not _CJK.search(msg["Subject"]), msg["Subject"]

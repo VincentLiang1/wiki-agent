@@ -334,3 +334,34 @@ def test_transcript_with_only_speaker_headers_is_empty(tmp_path):
     )
     assert parse_md(md).body_chars == 0
 
+
+
+def test_stopped_retrying_alerts_follow_the_interface_language(ccfg, monkeypatch):
+    """朋友選英文:停止重試的警示(進摘要信)是英文;英文不可被 network_down 當成斷網吞掉(逾時的說法不寫 timed out)。"""
+    import re
+
+    from wiki_feeder import i18n
+    from wiki_feeder.collect import network_down
+
+    i18n.set_lang("en")
+    monkeypatch.setenv("FAKE_DOC2MD_MODE", "fail")
+    _drop(ccfg, "bad.pdf", b"%PDF-broken")
+    for _ in range(ccfg.convert_max_attempts):
+        r = convert(ccfg)
+    stopped = [a for a in r.alerts if a.startswith("bad.pdf")]
+    assert len(stopped) == 1 and "reconvert bad.pdf" in stopped[0]
+    assert not re.search(r"[㐀-鿿]", stopped[0].split(":")[0])
+    assert "已停止重試" not in stopped[0] and not network_down(stopped[0])
+    stuck = [a for a in r.alerts if "_待處理" in a]
+    assert len(stuck) == 1 and "卡在" not in stuck[0] and "bad.pdf" in stuck[0]
+    assert not re.search(r"[㐀-鿿]", stuck[0].replace("_待處理", ""))
+
+
+def test_timeouts_in_english_are_not_mistaken_for_network_down():
+    """doc2md、run_net 的逾時是要人看的問題:譯文寫成 timed out 的話,會被當成斷網、不列進摘要。"""
+    from wiki_feeder import i18n
+    from wiki_feeder.collect import network_down
+
+    for lang in i18n.LANGS:
+        assert not network_down(i18n.L("doc2md 超過 {seconds} 秒沒跑完", lang, seconds="3600"))
+        assert not network_down(i18n.L("{cmd} 逾時 {seconds} 秒,已中止", lang, cmd="git push", seconds="300"))

@@ -135,3 +135,66 @@ def test_command_files_are_executable_zsh_and_exit_zero(name):
     assert subprocess.run(["zsh", "-n", str(p)]).returncode == 0
     mode = subprocess.run(["git", "ls-files", "-s", name], cwd=ROOT, capture_output=True, text=True).stdout
     assert not mode or mode.startswith("100755")                            # 進了 git 就要是可執行
+
+
+# -- 介面語言 -------------------------------------------------------------------------------------------
+
+def _fake_check(tmp_path, monkeypatch, output: str, expected: int = 1):
+    """check():launchctl 換成假的,bootstrap 時寫出 `collect --list` 的輸出。"""
+    _, state = ms.paths(tmp_path)
+    log = state / "logs" / "check.launchd.log"
+
+    def launchctl(*a):
+        if a[0] == "bootstrap":
+            log.write_text(output, encoding="utf-8")
+        return subprocess.CompletedProcess(a, 0, "state = not running" if a[0] == "print" else "", "")
+    monkeypatch.setattr(ms, "_launchctl", launchctl)
+    monkeypatch.setattr(ms, "_expected_inboxes", lambda: expected)
+    return ms.check(tmp_path, "test.wa")
+
+
+def test_check_needs_a_readable_line_for_every_inbox(tmp_path, monkeypatch):
+    assert _fake_check(tmp_path, monkeypatch, "icloud\t可讀,0 組候選\n") == 0
+    assert _fake_check(tmp_path, monkeypatch, "") == 1                                  # 空輸出不算過
+    out = "icloud\t可讀,0 組候選\nonedrive\t錯誤:onedrive 收件匣沒有讀取權限\n"
+    assert _fake_check(tmp_path, monkeypatch, out, expected=2) == 1                     # 一個讀不到就不算過
+
+
+def test_check_recognises_the_english_readable_marker(tmp_path, monkeypatch):
+    """cli 照設定檔的語言印「可讀」;英文介面也要認得。要等主代理合併 locales/en.json 才會過。"""
+    from wiki_feeder import i18n
+    i18n.set_lang("en")
+    word = ms.L("可讀")
+    assert word != "可讀"
+    assert _fake_check(tmp_path, monkeypatch, f"icloud\t{word}, 0 candidate groups\n") == 0
+
+
+def test_sched_reads_the_language_from_the_config_file(tmp_path, monkeypatch):
+    """.command 直接叫 macsched、不經 cli:自己讀 [general] language;沒有設定檔就照系統語言。"""
+    monkeypatch.setattr(ms.i18n, "detect", lambda: "zh-Hans")
+    assert ms.config_lang(tmp_path) == "zh-Hans"
+    _, state = ms.paths(tmp_path)
+    state.mkdir(parents=True)
+    (state / "config.toml").write_text('[general]\nlanguage = "en"\n', encoding="utf-8")
+    assert ms.config_lang(tmp_path) == "en"
+
+
+SH_LANG = 'source <(sed "/^main \\"\\$@\\"$/d" install.sh); detect_lang "$1"'
+
+
+@pytest.mark.parametrize("apple, want", [('(\n    "zh-Hant-TW",\n    "en-TW"\n)', "zh-Hant"),
+                                         ('(\n    "zh-Hans-CN"\n)', "zh-Hans"),
+                                         ('(\n    "en-US",\n    "zh-Hant-TW"\n)', "en"),
+                                         ('( "zh-HK" )', "zh-Hant"), ("", "en")])
+def test_install_sh_picks_its_message_language_from_the_first_system_language(apple, want):
+    r = subprocess.run(["bash", "-c", SH_LANG, "_", apple], cwd=ROOT, capture_output=True, text=True)
+    assert r.stdout.strip() == want
+
+
+def test_install_sh_has_three_languages_for_every_message():
+    """Python 裝好之前的訊息:每一句 msg 都給三種語言,不留單一語言的 echo。"""
+    body = (ROOT / "install.sh").read_text(encoding="utf-8").split("\nmain() {", 1)[1]
+    assert not [ln for ln in body.splitlines() if 'echo "' in ln and any("一" <= c <= "鿿" for c in ln)]
+    r = subprocess.run(["bash", "-c", 'source <(sed "/^main \\"\\$@\\"$/d" install.sh); WA_LANG=zh-Hans msg 甲 乙 C; '
+                        'WA_LANG=en msg 甲 乙 C'], cwd=ROOT, capture_output=True, text=True)
+    assert r.stdout.split() == ["乙", "C"]

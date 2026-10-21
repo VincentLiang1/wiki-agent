@@ -20,6 +20,7 @@ from pathlib import Path
 from . import doc2md, silence
 from .collect import _alert, _streak, heartbeat, run_lock
 from .config import Config
+from .i18n import L
 from .ledger import Ledger
 
 log = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ def convert(cfg: Config) -> ConvertReport:
     report = ConvertReport()
     with run_lock(cfg.convert_lock_path) as got:
         if not got:
-            log.info("另一個 convert 正在執行,這次直接結束")
+            log.info(L("另一個 convert 正在執行,這次直接結束"))
             report.locked = True
             return report
         with Ledger(cfg.ledger_path) as ledger:
@@ -79,11 +80,11 @@ def _convert_one(cfg: Config, ledger: Ledger, sha: str, path: Path, report: Conv
     except Exception as e:  # noqa: BLE001 —— 任何失敗:記錄、下一輪重試
         log_path = getattr(e, "log_path", None)
         n = ledger.conversion_failed(sha, kind, str(e), log_path)
-        log.error("%s 轉檔失敗(第 %d 次):%s", path.name, n, e)
+        log.error(L("%s 轉檔失敗(第 %d 次):%s"), path.name, n, e)
         report.failed.append(path.name)
         if n >= cfg.convert_max_attempts:
-            report.alerts.append(f"{path.name} 轉檔連續失敗 {n} 次,已停止重試:{e}。"
-                                 f"查明原因後用 `uv run wiki-feeder reconvert {path.name}` 救回")
+            report.alerts.append(L("{name} 轉檔連續失敗 {n} 次,已停止重試:{e}。"
+                                   "查明原因後用 `uv run wiki-feeder reconvert {name}` 救回", name=path.name, n=n, e=e))
         return
     status = "done" if kind != "unsupported" else "skipped"
     ledger.conversion_done(sha, kind, status, result.get("md"))
@@ -95,10 +96,10 @@ def _doc2md_down(cfg: Config, e: doc2md.Doc2mdUnavailable, report: ConvertReport
     """doc2md 跑不起來:這輪不轉、不扣任何檔的次數。連續幾輪才警示(重新安裝 meeting-scribe 的那一分鐘
     也會碰到,不必每次都寄信);警示文字固定,卡著的期間每天寄一次。"""
     n = _streak(cfg, "doc2md")
-    log.warning("%s(連續第 %d 輪,這輪不轉寫)", e, n)
+    log.warning(L("%s(連續第 %d 輪,這輪不轉寫)"), e, n)
     if n >= cfg.unavailable_alert_after:
-        report.alerts.append(f"doc2md 跑不起來({e.reason}),轉寫暫停中:待轉寫的檔不算失敗,修好後下一輪自動繼續。"
-                             f"確認 {cfg.doc2md_cmd[0] if cfg.doc2md_cmd else 'doc2md'} 能執行")
+        report.alerts.append(L("doc2md 跑不起來({reason}),轉寫暫停中:待轉寫的檔不算失敗,修好後下一輪自動繼續。"
+                               "確認 {cmd} 能執行", reason=e.reason, cmd=cfg.doc2md_cmd[0] if cfg.doc2md_cmd else "doc2md"))
 
 
 def _remind_stuck(cfg: Config, ledger: Ledger, report: ConvertReport) -> None:
@@ -106,8 +107,9 @@ def _remind_stuck(cfg: Config, ledger: Ledger, report: ConvertReport) -> None:
     只在失敗那一輪報一次的話,漏看那封信,檔案就永遠卡著沒人知道。"""
     stuck = [Path(d).name for _, d, _ in ledger.stuck_conversions(cfg.convert_max_attempts) if Path(d).exists()]
     if stuck:
-        report.alerts.append(f"有 {len(stuck)} 個檔轉寫已停止重試,卡在 _待處理/:{'、'.join(sorted(stuck)[:10])}。"
-                             f"查明原因後用 `uv run wiki-feeder reconvert <檔名>`(或 `--all`)救回")
+        report.alerts.append(L("有 {n} 個檔轉寫已停止重試,卡在 _待處理/:{names}。"
+                               "查明原因後用 `uv run wiki-feeder reconvert <檔名>`(或 `--all`)救回",
+                               n=len(stuck), names=L("、").join(sorted(stuck)[:10])))
 
 
 def reconvert(cfg: Config, name: str | None) -> str:
@@ -117,11 +119,12 @@ def reconvert(cfg: Config, name: str | None) -> str:
         if name is not None:
             stuck = [s for s in stuck if Path(s[1]).name == name]
         if not stuck:
-            return f"沒有{'叫 ' + name + ' 的' if name else ''}已停止重試的轉寫檔"
+            return L("沒有叫 {name} 的已停止重試的轉寫檔", name=name) if name else L("沒有已停止重試的轉寫檔")
         for sha, _, _ in stuck:
             ledger.conversion_reset(sha)
-    names = "、".join(Path(d).name for _, d, _ in stuck)
-    return f"已重新排入轉寫:{names};下一輪(約一分鐘內)開始,再失敗 {cfg.convert_max_attempts} 次才會停"
+    names = L("、").join(Path(d).name for _, d, _ in stuck)
+    return L("已重新排入轉寫:{names};下一輪(約一分鐘內)開始,再失敗 {n} 次才會停", names=names,
+             n=cfg.convert_max_attempts)
 
 
 def _result_for(cfg: Config, kind: str, path: Path) -> dict:
@@ -149,7 +152,7 @@ def _result_for(cfg: Config, kind: str, path: Path) -> dict:
             out["長度"] = silence.fmt_time(duration)
             out["長段空白"] = silence.describe(gaps)
         except Exception as e:  # noqa: BLE001
-            log.warning("%s 無法分析長段空白:%s", path.name, e)
+            log.warning(L("%s 無法分析長段空白:%s"), path.name, e)
             out["長段空白"] = None
             out["警告"] = f"無法分析音訊的長段空白:{e}"
         out["未命名講者"] = info.unnamed_speakers

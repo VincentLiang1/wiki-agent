@@ -144,3 +144,13 @@ def test_add_image_source_must_be_an_original_or_cache(repo, tmp_path):
         with pytest.raises(PageToolError):
             add_image(repo, [raw], src, "Wiki_Pages/群組/images/頁/圖.jpg")
     assert not (repo / "Wiki_Pages/群組/images").exists()
+
+
+def test_refusals_follow_the_interface_language(repo, tmp_path):
+    from wiki_feeder import i18n
+    raw = tmp_path / "FRaw_Sources"
+    raw.mkdir()
+    other = _png(tmp_path / "別處" / "圖.png")
+    i18n.set_lang("en")
+    with pytest.raises(PageToolError, match="is not a file in the originals tree or the transcription cache"):
+        add_image(repo, [raw], str(other), "Wiki_Pages/群組/images/頁/圖.jpg")

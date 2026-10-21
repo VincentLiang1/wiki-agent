@@ -20,7 +20,9 @@ import subprocess
 import sys
 import time
 
-WINDOWS = sys.platform == "win32"
+from .i18n import L
+
+WINDOWS =sys.platform == "win32"
 
 SF_DATALESS = 0x40000000                       # macOS:內容還在雲端(iCloud 佔位檔)
 # Windows 雲端檔案(Cloud Files API,iCloud for Windows 與 OneDrive 都用它)的佔位檔屬性
@@ -187,7 +189,7 @@ def decode_cmd(src: str, out_wav: str, rate: int, ffmpeg: str = "", windows: boo
     (它的 static-ffmpeg 套件下載到 venv 裡)。"""
     if windows:
         if not ffmpeg:
-            raise RuntimeError("沒有 ffmpeg:設定檔 [tools] ffmpeg 填 meeting-scribe 裡的 ffmpeg.exe")
+            raise RuntimeError(L("沒有 ffmpeg:設定檔 [tools] ffmpeg 填 meeting-scribe 裡的 ffmpeg.exe"))
         return [ffmpeg, "-nostdin", "-v", "error", "-y", "-i", src, "-ac", "1", "-ar", str(rate),
                 "-acodec", "pcm_s16le", "-f", "wav", out_wav]
     return ["/usr/bin/afconvert", "-f", "WAVE", "-d", f"LEI16@{rate}", "-c", "1", src, out_wav]

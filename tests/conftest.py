@@ -36,6 +36,15 @@ def _fake_home(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _source_language():
+    """介面語言是整個行程一份(i18n.set_lang):每個測試從繁中原文開始,測英文的自己設、結束還原。"""
+    from wiki_feeder import i18n
+    i18n.set_lang(i18n.SOURCE)
+    yield
+    i18n.set_lang(i18n.SOURCE)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_logging():
     root = logging.getLogger()
     handlers, level = root.handlers[:], root.level

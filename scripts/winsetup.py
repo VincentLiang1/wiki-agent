@@ -20,14 +20,18 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
+from wiki_feeder import i18n  # noqa: E402
 from wiki_feeder.config import CONFIG_FILE, Config, ConfigError, state_dir_for  # noqa: E402
+from wiki_feeder.i18n import L, N_  # noqa: E402
 
 SMTP_SERVICE = "wiki-feeder-smtp"
+HEADER = N_("# wiki-feeder 設定檔(安裝.bat 問答產生;要改就用記事本改,改完下一分鐘生效)")
 
 
 # -- 設定檔(純函式,測試在 Mac 也跑) --------------------------------------------------
@@ -35,7 +39,7 @@ SMTP_SERVICE = "wiki-feeder-smtp"
 def toml_path(p: str) -> str:
     """路徑寫成 TOML 字面字串:單引號裡反斜線照原樣。不能有單引號與換行(字面字串跳脫不了)。"""
     if "'" in p or "\n" in p or "\r" in p:
-        raise ValueError(f"路徑裡有單引號或換行,設定檔寫不進去:{p}(請把資料夾改名)")
+        raise ValueError(L("路徑裡有單引號或換行,設定檔寫不進去:{p}(請把資料夾改名)", p=p))
     return f"'{p}'"
 
 
@@ -45,13 +49,15 @@ def toml_text(s: str) -> str:
 
 
 def render_config(a: dict) -> str:
-    """問答結果 → config.toml 的內容。鍵與 Config.from_file 認得的一致,沒填的選填鍵不寫。"""
-    lines = ["# wiki-feeder 設定檔(安裝.bat 問答產生;要改就用記事本改,改完下一分鐘生效)", "", "[inbox]"]
+    """問答結果 → config.toml 的內容。鍵與 Config.from_file 認得的一致,沒填的選填鍵不寫。
+    第一行是註解(macsetup 換成 Mac 的那一行);[general] language 放最前面,沒給就用現在的介面語言。"""
+    lines = [L(HEADER), "", "[general]", f"language = {toml_text(a.get('lang') or i18n.get_lang())}", "",
+             "[inbox]"]
     for k in ("icloud", "onedrive"):
         if a.get(k):
             lines.append(f"{k} = {toml_path(a[k])}")
     lines += ["", "[wiki]", f"dir = {toml_path(a['wiki'])}", f"raw = {toml_path(a['raw'])}",
-              f"label = {toml_text(a.get('label') or '知識庫')}",
+              f"label = {toml_text(a.get('label') or L('知識庫'))}",
               "", "[mail]", f"from = {toml_text(a.get('mail_from', ''))}", f"to = {toml_text(a.get('mail_to', ''))}",
               "", "[tools]", f"doc2md = {toml_path(a['doc2md'])}"]
     if a.get("claude"):
@@ -97,7 +103,7 @@ def find_doc2md(roots: list[Path]) -> list[Path]:
 def check_doc2md(exe: Path) -> tuple[bool, str]:
     """真的轉一個小 .txt:要印出「執行記錄:」才算(舊版不印,程式會當成 doc2md 跑不起來)。"""
     if not exe.is_file():
-        return False, "找不到這個檔"
+        return False, L("找不到這個檔")
     with tempfile.TemporaryDirectory() as d:
         src = Path(d) / "安裝測試.txt"
         src.write_text("wiki-feeder 安裝測試\n", encoding="utf-8")
@@ -105,11 +111,11 @@ def check_doc2md(exe: Path) -> tuple[bool, str]:
             r = subprocess.run([str(exe), str(src), "--out-dir", str(Path(d) / "out"), "--prune-days", "0"],
                                capture_output=True, timeout=300)
         except (OSError, subprocess.TimeoutExpired) as e:
-            return False, f"執行失敗:{e}"
+            return False, L("執行失敗:{e}", e=e)
     out = (r.stdout + r.stderr).decode("utf-8", "replace")
     if "執行記錄" not in out:
-        return False, "沒有印出「執行記錄:」——這是舊版的 meeting-scribe,請裝新版(scribe2md)"
-    return True, "可以用"
+        return False, L("沒有印出「執行記錄:」——這是舊版的 meeting-scribe,請裝新版(scribe2md)")
+    return True, L("可以用")
 
 
 def find_claude(home: Path) -> Path | None:
@@ -164,21 +170,65 @@ def say(msg: str = "") -> None:
 
 
 def ask(prompt: str, default: str = "") -> str:
-    hint = f"(直接按 Enter = {default})" if default else ""
-    v = input(f"{prompt}{hint}:").strip().strip('"')
+    hint = L("(直接按 Enter = {default})", default=default) if default else ""
+    v = input(L("{prompt}{hint}:", prompt=prompt, hint=hint)).strip().strip('"')
     return v or default
 
 
 def yes(prompt: str, default: bool = True) -> bool:
-    v = input(f"{prompt}({'Y/n' if default else 'y/N'}):").strip().lower()
+    v = input(L("{prompt}({choice}):", prompt=prompt, choice="Y/n" if default else "y/N")).strip().lower()
     return default if not v else v.startswith("y")
+
+
+LANG_CHOICES = ("zh-Hant", "zh-Hans", "en")
+
+
+def config_lang(path: Path) -> str | None:
+    """設定檔裡的 [general] language;沒有檔、讀不了、沒寫或不認得都回 None。"""
+    try:
+        lang = tomllib.loads(path.read_text(encoding="utf-8-sig")).get("general", {}).get("language")
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError, AttributeError):
+        return None
+    return lang if lang in i18n.LANGS else None
+
+
+def ask_lang(default: str) -> str:
+    """問答的第一題(還不知道語言,三種寫法並列、不經 L)。選完 set_lang,之後的問答照它。"""
+    if default not in LANG_CHOICES:
+        default = i18n.SOURCE
+    choices = "  ".join(f"{i} {i18n.NAMES[x]}" for i, x in enumerate(LANG_CHOICES, 1))
+    v = input(f"語言 / 语言 / Language:{choices}(Enter = {i18n.NAMES[default]}):").strip()
+    lang = LANG_CHOICES[int(v) - 1] if v.isdigit() and 0 < int(v) <= len(LANG_CHOICES) else default
+    i18n.set_lang(lang)
+    return lang
+
+
+def set_config_lang(text: str, lang: str) -> str:
+    """沿用舊設定檔但換了語言:改 [general] language;舊檔沒有這一節就補在第一節之前。"""
+    lines = text.splitlines()
+    sect = None
+    for i, ln in enumerate(lines):
+        t = ln.strip()
+        if t.startswith("["):
+            sect = t
+        elif sect == "[general]" and t.split("=", 1)[0].strip() == "language":
+            lines[i] = f"language = {toml_text(lang)}"
+            return "\n".join(lines) + "\n"
+    new = ["[general]", f"language = {toml_text(lang)}"]
+    if "[general]" in (ln.strip() for ln in lines):
+        at = [ln.strip() for ln in lines].index("[general]") + 1
+        lines[at:at] = new[1:]
+    else:
+        at = next((i for i, ln in enumerate(lines) if ln.strip().startswith("[")), len(lines))
+        lines[at:at] = new + [""]
+    return "\n".join(lines) + "\n"
 
 
 def pick(prompt: str, folder: bool, default: str = "") -> str:
     """貼上路徑;直接按 Enter 開選擇視窗(有預設值時用預設值)。"""
     say(prompt)
-    v = input(f"  貼上路徑後按 Enter{'' if default else ',或直接按 Enter 開選擇視窗'}"
-              f"{f'(直接按 Enter = {default})' if default else ''}:").strip().strip('"')
+    v = input(L("  貼上路徑後按 Enter(直接按 Enter = {default}):", default=default) if default
+              else L("  貼上路徑後按 Enter,或直接按 Enter 開選擇視窗:")).strip().strip('"')
     if v or default:
         return str(Path(v or default))
     try:
@@ -190,7 +240,7 @@ def pick(prompt: str, folder: bool, default: str = "") -> str:
         v = filedialog.askdirectory(title=prompt) if folder else filedialog.askopenfilename(title=prompt)
         root.destroy()
     except Exception:          # 沒有 tkinter 或開不了視窗:改回打字
-        v = input("  開不了選擇視窗,請貼上路徑:").strip().strip('"')
+        v = input(L("  開不了選擇視窗,請貼上路徑:")).strip().strip('"')
     return str(Path(v)) if v else ""
 
 
@@ -198,13 +248,13 @@ def ask_inbox(home: Path) -> str:
     icloud = find_icloud(home)
     default = str(icloud / "_WikiBox") if icloud else ""
     if not icloud:
-        say("⚠ 找不到 iCloud 雲碟(%USERPROFILE%\\iCloudDrive)。請先裝 iCloud for Windows、打開「iCloud 雲碟」。")
+        say(L("⚠ 找不到 iCloud 雲碟(%USERPROFILE%\\iCloudDrive)。請先裝 iCloud for Windows、打開「iCloud 雲碟」。"))
     while True:
-        p = Path(pick("【收件匣】iPhone 丟檔進來的資料夾(iCloud 雲碟裡的 _WikiBox)", True, default))
+        p = Path(pick(L("【收件匣】iPhone 丟檔進來的資料夾(iCloud 雲碟裡的 _WikiBox)"), True, default))
         if p.parent.is_dir():
             break
-        say(f"  找不到 {p.parent},請再確認")
-    if not p.is_dir() and yes(f"  {p} 還沒有,要建立嗎?"):
+        say(L("  找不到 {path},請再確認", path=p.parent))
+    if not p.is_dir() and yes(L("  {path} 還沒有,要建立嗎?", path=p)):
         p.mkdir()
     # 「永遠保留在此裝置上」:收件匣裡的檔才會真的下載下來(程式碰到佔位檔也會自己要求下載,這是先做好的保險)
     subprocess.run(["attrib", "+P", str(p)], capture_output=True)
@@ -213,7 +263,8 @@ def ask_inbox(home: Path) -> str:
 
 # 知識庫還沒建:照〈LLM Wiki 新手教學講義-桌面版〉第三步的建庫提示詞,請 claude 在 WIKI 裡搭骨架
 # (使用者 2026-10-20:「給的目錄不存在也幫忙建立,包含 CLAUDE.md」)。原文是 Windows 的路徑寫法,Mac 換成 /
-HANDOUT_PROMPT = """請根據 Andrej Karpathy 的 LLM Wiki 設計模式,在這個資料夾裡幫我建立一套個人知識庫系統。
+# 三種語言:知識庫用安裝時選的語言建(英文版另寫,簡中版整段手寫在 hans 覆寫裡)
+HANDOUT_PROMPT = N_("""請根據 Andrej Karpathy 的 LLM Wiki 設計模式,在這個資料夾裡幫我建立一套個人知識庫系統。
 - 原始資料在 {raw}(我放、你只讀不改),底下的 _待處理\\ 是統一入口:
   我新丟的檔案一律先進 _待處理\\;你攝入前要先判讀內容歸屬,把檔案 mv 到 {raw} 底下
   對應的主題子目錄(子目錄命名對齊 Wiki_Pages\\ 的群組)再開始編頁,頁面裡標的來源路徑寫
@@ -229,17 +280,14 @@ HANDOUT_PROMPT = """請根據 Andrej Karpathy 的 LLM Wiki 設計模式,在這�
 
 這是安裝程式在背景替我送的,沒有人能回答問題:偏好問題一律照你的建議做,不要停下來問。
 只在這個資料夾裡建檔;不要動 {raw}、不要執行 git(版本紀錄由另一支程式代管)。
-建好之後,用兩三句白話說你建了什麼。"""
+建好之後,用兩三句白話說你建了什麼。""")
 # 資料夾裡已經有東西(只是缺 CLAUDE.md)時多給的一句;程式另外比對、改到的一律還原
-KEEP_EXISTING = "\n這個資料夾裡已經有一些檔:已經有的檔一個都不要改、不要刪,只補缺的。"
+KEEP_EXISTING = N_("\n這個資料夾裡已經有一些檔:已經有的檔一個都不要改、不要刪,只補缺的。")
 
 # 講義沒有 git 的部分:朋友的庫由 wiki-feeder 代管 git(spec §5.13),這一節由程式固定補在 CLAUDE.md 最後,
 # 不交給 claude 寫——它自己 commit 一筆,下一輪攝入就因「本機有沒驗證過的 commit」STOP(§5.6)
-GIT_HEADING = "## 版本紀錄(wiki-feeder 代管 git)"
-GIT_SECTION = f"""
-{GIT_HEADING}
-
-這個資料夾的版本紀錄由 wiki-feeder 用 git 代管:第一次自動攝入時它會 `git init`,每一筆攝入一個 commit,
+GIT_HEADING = N_("## 版本紀錄(wiki-feeder 代管 git)")
+GIT_BODY = N_("""這個資料夾的版本紀錄由 wiki-feeder 用 git 代管:第一次自動攝入時它會 `git init`,每一筆攝入一個 commit,
 另外在它的執行狀態目錄留一份備份。iPhone 丟進收件匣的檔,wiki-feeder 會自動轉寫、放進原件資料夾的 `_待處理`、照本檔攝入。
 
 - **不要自己執行 git**(init、add、commit、push、reset、checkout、stash 都不要),也不要動 `.git/`:
@@ -247,7 +295,16 @@ GIT_SECTION = f"""
 - 手動改的頁直接存檔就好,不必 commit:下一次自動攝入前,wiki-feeder 會先把它們存成一筆「手動修改快照」
 - 自動攝入的 commit message 格式:`攝入:<原件檔名>——一句摘要`,body 列這次新增、擴充了哪些頁
 - 要看某一頁的歷史、或要還原到之前的版本:告訴使用者,請他找幫他安裝 wiki-feeder 的人處理,不要自己動 git
-"""
+""")
+
+
+def git_section() -> str:
+    return "\n" + L(GIT_HEADING) + "\n\n" + L(GIT_BODY)
+
+
+def has_git_section(text: str) -> bool:
+    """三種語言的標題都算(換了語言重跑安裝,不再補一次)。"""
+    return any(h in text for h in i18n.variants(GIT_HEADING))
 
 
 def raw_ref(wiki: Path, raw: Path, windows: bool) -> str:
@@ -257,7 +314,7 @@ def raw_ref(wiki: Path, raw: Path, windows: bool) -> str:
 
 
 def handout_prompt(wiki: Path, raw: Path, windows: bool) -> str:
-    text = HANDOUT_PROMPT.format(raw=raw_ref(wiki, raw, windows))
+    text = L(HANDOUT_PROMPT, raw=raw_ref(wiki, raw, windows))
     return text if windows else text.replace("\\", "/")
 
 
@@ -265,10 +322,10 @@ def add_git_section(wiki: Path) -> bool:
     """CLAUDE.md 最後補上代管 git 的一節;已經有就不動。回傳有沒有補。"""
     p = wiki / "CLAUDE.md"
     text = p.read_text(encoding="utf-8-sig")
-    if GIT_HEADING in text:
+    if has_git_section(text):
         return False
     with open(p, "a", encoding="utf-8", newline="\n") as f:
-        f.write(("" if text.endswith("\n") else "\n") + GIT_SECTION)
+        f.write(("" if text.endswith("\n") else "\n") + git_section())
     return True
 
 
@@ -298,11 +355,11 @@ def scaffold_wiki(claude: Path, wiki: Path, raw: Path, windows: bool, run=subpro
             "--permission-mode", "acceptEdits", "--tools", "Read,Write,Edit,Glob,Grep",
             "--allowedTools", "Read", "Glob", "Grep"]
     try:
-        r = run(args, cwd=wiki, input=handout_prompt(wiki, raw, windows) + (KEEP_EXISTING if before else ""),
+        r = run(args, cwd=wiki, input=handout_prompt(wiki, raw, windows) + (L(KEEP_EXISTING) if before else ""),
                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1200)
     except (OSError, subprocess.TimeoutExpired) as e:
         r = None
-        err = f"claude 跑不起來:{e}"
+        err = L("claude 跑不起來:{e}", e=e)
     finally:
         restored = [p for p, data in before.items() if not p.is_file() or p.read_bytes() != data]
         for p in restored:
@@ -315,50 +372,50 @@ def scaffold_wiki(claude: Path, wiki: Path, raw: Path, windows: bool, run=subpro
     except ValueError:
         said = (r.stdout + r.stderr).strip()[-500:]
     if restored:
-        said += f"\n(它改到了原本就有的 {len(restored)} 個檔,已經照原樣還原)"
+        said += L("\n(它改到了原本就有的 {n} 個檔,已經照原樣還原)", n=len(restored))
     missing = [n for n in ("CLAUDE.md", "Wiki_Pages/index.md") if not (wiki / n).is_file()]
     if missing:
-        return False, f"沒建出 {'、'.join(missing)}。claude 說:{said or '(沒有回應)'}"
+        return False, L("沒建出 {missing}。claude 說:{said}", missing=L("、").join(missing), said=said or L("(沒有回應)"))
     # 只查頁面:CLAUDE.md 裡「禁止 [[名稱]]」那條規則本身就有這兩個字
     if any("[[" in p.read_text(encoding="utf-8", errors="replace") for p in (wiki / "Wiki_Pages").rglob("*.md")):
-        said += "\n⚠ 裡面出現了 [[…]](Obsidian 的寫法):之後請它全部改成 [名稱](路徑.md)"
+        said += L("\n⚠ 裡面出現了 [[…]](Obsidian 的寫法):之後請它全部改成 [名稱](路徑.md)")
     return True, said
 
 
 def ask_wiki(default: str = "", claude: Path | None = None, windows: bool = True) -> tuple[str, str]:
     """知識庫與原件資料夾;不存在就建,沒有 CLAUDE.md 就照講義請 claude 建(使用者 2026-10-20)。"""
     while True:
-        w = Path(pick("【知識庫】照講義建的 WIKI 資料夾(還沒有就直接用預設、會幫你建)", True, default))
+        w = Path(pick(L("【知識庫】照講義建的 WIKI 資料夾(還沒有就直接用預設、會幫你建)"), True, default))
         if not w.is_dir():
-            if not yes(f"  {w} 還沒有,要建立嗎?"):
+            if not yes(L("  {path} 還沒有,要建立嗎?", path=w)):
                 continue
             w.mkdir(parents=True)
         if "onedrive" in str(w).lower():
-            say("  ⚠ 知識庫在 OneDrive 裡:OneDrive 同步會跟程式的 git 打架,建議搬出來")
+            say(L("  ⚠ 知識庫在 OneDrive 裡:OneDrive 同步會跟程式的 git 打架,建議搬出來"))
         break
     guess = w.parent / "Raw_Sources"
     while True:
-        r = Path(pick("【原件資料夾】Raw_Sources(主題群組是它底下的資料夾;與 WIKI 並排)", True, str(guess)))
+        r = Path(pick(L("【原件資料夾】Raw_Sources(主題群組是它底下的資料夾;與 WIKI 並排)"), True, str(guess)))
         if r.is_dir():
             break
-        if yes(f"  {r} 還沒有,要建立嗎?"):
+        if yes(L("  {path} 還沒有,要建立嗎?", path=r)):
             r.mkdir(parents=True)
             break
     (r / "_待處理").mkdir(exist_ok=True)
     if not (w / "CLAUDE.md").is_file():
-        if claude and yes(f"  {w} 裡還沒有 CLAUDE.md:要照講義請 Claude 建好規則檔與目錄索引嗎?(約 1～3 分鐘,用你的 Claude 額度)"):
-            say("  Claude 正在建……")
+        if claude and yes(L("  {path} 裡還沒有 CLAUDE.md:要照講義請 Claude 建好規則檔與目錄索引嗎?(約 1～3 分鐘,用你的 Claude 額度)", path=w)):
+            say(L("  Claude 正在建……"))
             ok, said = scaffold_wiki(claude, w, r, windows)
             say(f"  {'✓' if ok else '✗'} {said}")
         if not (w / "CLAUDE.md").is_file():
-            say("  ⚠ 還是沒有 CLAUDE.md:自動攝入會照不到規則。之後在 Claude 桌面版照講義第三步建好,再重跑安裝")
+            say(L("  ⚠ 還是沒有 CLAUDE.md:自動攝入會照不到規則。之後在 Claude 桌面版照講義第三步建好,再重跑安裝"))
             return str(w), str(r)
-    if GIT_HEADING not in (w / "CLAUDE.md").read_text(encoding="utf-8-sig", errors="replace") and yes(
-            "  要在 CLAUDE.md 最後補上「版本紀錄由 wiki-feeder 代管、不要自己執行 git」這一節嗎?(建議要)"):
+    if not has_git_section((w / "CLAUDE.md").read_text(encoding="utf-8-sig", errors="replace")) and yes(
+            L("  要在 CLAUDE.md 最後補上「版本紀錄由 wiki-feeder 代管、不要自己執行 git」這一節嗎?(建議要)")):
         add_git_section(w)
-        say("  ✓ 已補上")
+        say(L("  ✓ 已補上"))
     if ignore_md_cache(w):
-        say("  ✓ .gitignore 補上 .md_cache/(轉檔的中間產物不進版本紀錄)")
+        say(L("  ✓ .gitignore 補上 .md_cache/(轉檔的中間產物不進版本紀錄)"))
     return str(w), str(r)
 
 
@@ -367,33 +424,33 @@ def ask_doc2md(home: Path) -> str:
     found = find_doc2md([r for r in roots if r.is_dir()])
     while True:
         if found:
-            say("【轉寫】找到這些 meeting-scribe 的 doc2md:")
+            say(L("【轉寫】找到這些 meeting-scribe 的 doc2md:"))
             for i, p in enumerate(found, 1):
                 say(f"  {i}. {p}")
-            v = input("  輸入編號(直接按 Enter = 1);不是這些就貼上 doc2md.exe 的路徑,輸入 0 開選擇視窗:").strip().strip('"')
+            v = input(L("  輸入編號(直接按 Enter = 1);不是這些就貼上 doc2md.exe 的路徑,輸入 0 開選擇視窗:")).strip().strip('"')
             v = v or "1"
             exe = found[int(v) - 1] if v.isdigit() and 0 < int(v) <= len(found) else None if v == "0" else Path(v)
             if exe is None:
-                exe = Path(pick("doc2md.exe 在 meeting-scribe 資料夾的 .venv\\Scripts 底下", False) or ".")
+                exe = Path(pick(L("doc2md.exe 在 meeting-scribe 資料夾的 .venv\\Scripts 底下"), False) or ".")
         else:
-            say("【轉寫】找不到 meeting-scribe。請先照它的說明解壓縮、跑它的 安裝.bat。")
-            exe = Path(pick("doc2md.exe(在 meeting-scribe 資料夾的 .venv\\Scripts 底下)", False) or ".")
-        say("  試轉一個小檔(最多幾十秒)…")
+            say(L("【轉寫】找不到 meeting-scribe。請先照它的說明解壓縮、跑它的 安裝.bat。"))
+            exe = Path(pick(L("doc2md.exe(在 meeting-scribe 資料夾的 .venv\\Scripts 底下)"), False) or ".")
+        say(L("  試轉一個小檔(最多幾十秒)…"))
         ok, msg = check_doc2md(exe)
-        say(f"  {exe}:{msg}")
+        say(L("  {path}:{msg}", path=exe, msg=msg))
         if ok:
             return str(exe)
 
 
 def ask_mail(default: str = "") -> tuple[str, str]:
-    say("【摘要信】每天把處理了什麼寄給你。要用 Gmail,而且要先開「兩步驟驗證」、產生「應用程式密碼」。")
-    frm = ask("  寄件的 Gmail(先不設定就輸入 -)" if default else "  寄件的 Gmail(先不設定就直接按 Enter)", default)
+    say(L("【摘要信】每天把處理了什麼寄給你。要用 Gmail,而且要先開「兩步驟驗證」、產生「應用程式密碼」。"))
+    frm = ask(L("  寄件的 Gmail(先不設定就輸入 -)") if default else L("  寄件的 Gmail(先不設定就直接按 Enter)"), default)
     if frm == "-":
         frm = ""
     if not frm:
-        say("  先不寄信:之後要寄,重跑 安裝.bat 就好")
+        say(L("  先不寄信:之後要寄,重跑 安裝.bat 就好"))
         return "", ""
-    to = ask("  收件信箱", frm)
+    to = ask(L("  收件信箱"), frm)
     return frm, to
 
 
@@ -401,8 +458,27 @@ def save_password(account: str) -> None:
     import getpass
 
     import keyring
-    pw = getpass.getpass("  Gmail 的應用程式密碼(16 個字,打字時不會顯示):").replace(" ", "")
+    pw = getpass.getpass(L("  Gmail 的應用程式密碼(16 個字,打字時不會顯示):")).replace(" ", "")
     keyring.set_password(SMTP_SERVICE, account, pw)
+
+
+def reuse_config(path: Path, state: Path, lang: str) -> Config | None:
+    """已經有設定檔:給他看、問要不要沿用。沿用但剛選了別的語言,就只改 [general] language(兩支共用)。"""
+    if not path.is_file():
+        return None
+    text = path.read_text(encoding="utf-8-sig")
+    say(L("\n已經有設定檔 {path}:", path=path))
+    say(text)
+    if not yes(L("沿用這份(不重填)?")):
+        return None
+    try:
+        cfg = Config.from_file(path, state)
+        if cfg.lang != lang:
+            cfg = write_config(set_config_lang(text, lang), state)
+        return cfg
+    except ConfigError as e:
+        say(L("✗ 這份讀不了:{e}\n  請重填", e=e))
+        return None
 
 
 def run_cli(*args: str) -> subprocess.CompletedProcess:
@@ -413,39 +489,32 @@ def run_cli(*args: str) -> subprocess.CompletedProcess:
 # -- 主流程 ----------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="winsetup", description="wiki-feeder 第一次安裝的問答")
-    ap.add_argument("--no-schedule", action="store_true", help="不裝排程(實測用)")
+    ap = argparse.ArgumentParser(prog="winsetup", description=L("wiki-feeder 第一次安裝的問答"))
+    ap.add_argument("--no-schedule", action="store_true", help=L("不裝排程(實測用)"))
     args = ap.parse_args(argv)
     home = Path.home()
     state = state_dir_for(sys.platform, home, os.environ)
     path = state / CONFIG_FILE
 
-    say("=== 檢查 Claude Code ===")
+    lang = ask_lang(config_lang(path) or i18n.detect())
+    say(L("=== 檢查 Claude Code ==="))
     claude = find_claude(home)
     if not claude:
-        say("✗ 找不到 claude。請先裝 Claude Code(官方安裝程式),裝好後再跑一次 安裝.bat")
+        say(L("✗ 找不到 claude。請先裝 Claude Code(官方安裝程式),裝好後再跑一次 安裝.bat"))
         return 1
     status = claude_status(claude)
     if not status.get("loggedIn"):
-        say("✗ Claude Code 還沒登入。請開一個新的命令視窗打 claude 登入你自己的帳號,再跑一次 安裝.bat")
+        say(L("✗ Claude Code 還沒登入。請開一個新的命令視窗打 claude 登入你自己的帳號,再跑一次 安裝.bat"))
         return 1
-    say(f"✓ {claude}(已登入)")
+    say(L("✓ {path}(已登入)", path=claude))
 
-    cfg = None
-    if path.is_file():
-        say(f"\n已經有設定檔 {path}:")
-        say(path.read_text(encoding="utf-8-sig"))
-        if yes("沿用這份(不重填)?"):
-            try:
-                cfg = Config.from_file(path, state)
-            except ConfigError as e:
-                say(f"✗ 這份讀不了:{e}\n  請重填")
+    cfg = reuse_config(path, state, lang)
     while cfg is None:
-        say("\n=== 設定(每一題都可以貼上路徑;路徑有預設值時直接按 Enter) ===")
-        a = {"icloud": ask_inbox(home)}
+        say(L("\n=== 設定(每一題都可以貼上路徑;路徑有預設值時直接按 Enter) ==="))
+        a = {"icloud": ask_inbox(home), "lang": lang}
         a["wiki"], a["raw"] = ask_wiki(str(find_wiki(home, (Path("C:/"), Path("D:/"))) or default_wiki(home, True)),
                                        claude, True)
-        a["label"] = ask("【知識庫名稱】摘要信上顯示的名字", "知識庫")
+        a["label"] = ask(L("【知識庫名稱】摘要信上顯示的名字"), L("知識庫"))
         a["doc2md"] = ask_doc2md(home)
         a["mail_from"], a["mail_to"] = ask_mail(mail_default(status))
         a["claude"] = str(claude)          # 一律寫:排程底下的 PATH 不一定跟命令視窗一樣
@@ -453,35 +522,35 @@ def main(argv: list[str] | None = None) -> int:
             text = render_config(a)
             cfg = write_config(text, state)
         except (ValueError, ConfigError) as e:
-            say(f"✗ {e}\n  請重填")
+            say(L("✗ {e}\n  請重填", e=e))
             continue
-        say(f"\n✓ 已寫入 {path}")
+        say(L("\n✓ 已寫入 {path}", path=path))
 
     if cfg.mail_from:
-        say("\n=== 寄信 ===")
+        say(L("\n=== 寄信 ==="))
         while True:
-            if yes("要(重新)輸入 Gmail 應用程式密碼嗎?", True):
+            if yes(L("要(重新)輸入 Gmail 應用程式密碼嗎?"), True):
                 save_password(cfg.mail_from)
             r = run_cli("test-mail")
             say((r.stdout + r.stderr).strip())
-            if r.returncode == 0 or not yes("沒寄成功,要再輸入一次密碼嗎?"):
+            if r.returncode == 0 or not yes(L("沒寄成功,要再輸入一次密碼嗎?")):
                 break
 
-    say("\n=== 讀得到收件匣嗎 ===")
+    say(L("\n=== 讀得到收件匣嗎 ==="))
     r = run_cli("collect", "--list")
-    say((r.stdout + r.stderr).strip() or "(沒有任何輸出:不算通過)")
+    say((r.stdout + r.stderr).strip() or L("(沒有任何輸出:不算通過)"))
 
     if args.no_schedule:
-        say("\n(--no-schedule:不裝排程)")
+        say(L("\n(--no-schedule:不裝排程)"))
         return 0
-    say("\n=== 裝排程(每分鐘一輪) ===")
+    say(L("\n=== 裝排程(每分鐘一輪) ==="))
     import importlib.util
     spec = importlib.util.spec_from_file_location("winsched", REPO / "scripts" / "winsched.py")
     ws = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ws)
     ws.install(state)
-    say("\n✓ 安裝完成。一分鐘後程式就開始自己跑;往 _WikiBox 丟一個檔,幾分鐘後知識庫裡會多一頁。")
-    say("  看紀錄:%LOCALAPPDATA%\\wiki-feeder\\logs\\feeder.log;停掉排程:移除排程.bat;更新程式:更新.bat")
+    say(L("\n✓ 安裝完成。一分鐘後程式就開始自己跑;往 _WikiBox 丟一個檔,幾分鐘後知識庫裡會多一頁。"))
+    say(L("  看紀錄:%LOCALAPPDATA%\\wiki-feeder\\logs\\feeder.log;停掉排程:移除排程.bat;更新程式:更新.bat"))
     return 0
 
 

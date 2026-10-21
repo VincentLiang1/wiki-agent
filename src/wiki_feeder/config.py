@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import sys
@@ -12,6 +13,8 @@ import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
+
+from .i18n import LANGS, SOURCE, L
 
 CONFIG_FILE = "config.toml"
 INTAKE_DIR = "_收件區"     # 單庫設定的收件區:原件樹底下、不算原件(raw_skip_dirs)
@@ -155,6 +158,7 @@ class Config:
     vp_bridge_fresh: float = 600         # 狀態檔要在這段時間內寫過才算數(剛睡醒、橋樑還沒跑的舊狀態不算)
     vp_bridge_checks: int = 8            # 出手之後最多查幾次(每 15 秒一次)
     md_cache_keep_days: float = 7       # 攝入完成(或捨棄、移走)幾天後刪掉轉寫快取;原件不動,要重轉再轉
+    lang: str = SOURCE                  # 介面語言(i18n.py):朋友的設定檔 [general] language;使用者本人永遠 zh-Hant
 
     @property
     def ledger_path(self) -> Path:
@@ -287,15 +291,14 @@ class Config:
         path = state / CONFIG_FILE
         if path.exists():
             return cls.from_file(path, state)
-        if PLATFORM == "darwin":    # 使用者的 Windows 也有這個私人 repo:那台不可拿到 Mac 的路徑
-            try:
-                from . import owner_mac
-            except ModuleNotFoundError as e:
-                if e.name != f"{__package__}.owner_mac":
-                    raise
-            else:
-                return owner_mac.config()
-        raise ConfigError(f"找不到設定檔 {path}:先執行安裝(Windows 是 安裝.bat、Mac 是 install.sh),它會問完問題寫好這個檔")
+        # 使用者的 Windows 也有這個私人 repo:那台不可拿到 Mac 的路徑。先查檔案在不在,不靠例外種類:
+        # `from . import owner_mac` 找不到時丟的是 ImportError(cannot import name)、不是 ModuleNotFoundError,
+        # 只接後者的話公開 repo 的 Mac 少放設定檔就是一大串 traceback(2026-10-21 第八次發佈前在複本抓到)
+        if PLATFORM == "darwin" and importlib.util.find_spec(f"{__package__}.owner_mac") is not None:
+            from . import owner_mac
+            return owner_mac.config()
+        raise ConfigError(L("找不到設定檔 {path}:先執行安裝(Windows 是 {bat}、Mac 是 install.sh),它會問完問題寫好這個檔",
+                            path=path, bat="安裝.bat"))   # 檔名是中文:英文譯文也照原樣
 
     @classmethod
     def from_file(cls, path: Path, state: Path) -> "Config":
@@ -307,21 +310,25 @@ class Config:
             # utf-8-sig:記事本的「UTF-8 (BOM)」、PowerShell 5.1 寫的檔開頭有 BOM,tomllib 不認
             data = tomllib.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
-            raise ConfigError(f"設定檔 {path} 讀不了:{e}") from e
+            raise ConfigError(L("設定檔 {path} 讀不了:{e}", path=path, e=e)) from e
         known = {"inbox": {"icloud", "onedrive"}, "wiki": {"dir", "raw", "label", "github", "branch"},
-                 "mail": {"from", "to"}, "tools": {"doc2md", "claude", "ffmpeg"}}
+                 "mail": {"from", "to"}, "tools": {"doc2md", "claude", "ffmpeg"}, "general": {"language"}}
         problems = [f"[{k}]" for k in data if k not in known]
         problems += [f"[{k}] {x}" for k, keys in known.items() for x in data.get(k, {}) if x not in keys]
         if problems:
-            raise ConfigError(f"設定檔 {path} 有不認得的設定:{'、'.join(problems)}")
+            raise ConfigError(L("設定檔 {path} 有不認得的設定:{keys}", path=path, keys=L("、").join(problems)))
         inbox, wiki, mail, tools = (data.get(k, {}) for k in ("inbox", "wiki", "mail", "tools"))
+        lang = data.get("general", {}).get("language", SOURCE)
+        if lang not in LANGS:
+            raise ConfigError(L("設定檔 {path} 的 [general] language 只能是 {langs}:{value}", path=path,
+                                 langs=L("、").join(LANGS), value=repr(lang)))
         for k in ("dir", "raw"):
             if not wiki.get(k):
-                raise ConfigError(f"設定檔 {path} 沒有 [wiki] {k}")
+                raise ConfigError(L("設定檔 {path} 沒有 [wiki] {key}", path=path, key=k))
         if not tools.get("doc2md"):
-            raise ConfigError(f"設定檔 {path} 沒有 [tools] doc2md(meeting-scribe 安裝資料夾裡的 doc2md)")
+            raise ConfigError(L("設定檔 {path} 沒有 [tools] doc2md(meeting-scribe 安裝資料夾裡的 doc2md)", path=path))
         if not inbox.get("icloud") and not inbox.get("onedrive"):
-            raise ConfigError(f"設定檔 {path} 沒有任何收件匣([inbox] icloud 或 onedrive)")
+            raise ConfigError(L("設定檔 {path} 沒有任何收件匣([inbox] icloud 或 onedrive)", path=path))
 
         def opt(v: str | None) -> Path | None:
             return Path(v) if v else None
@@ -336,7 +343,7 @@ class Config:
             icloud_inbox=opt(inbox.get("icloud")),
             onedrive_inbox=opt(inbox.get("onedrive")),
             futures=None,
-            repos=(RepoConfig("main", wiki.get("label", "知識庫"), Path(wiki["dir"]), raw,
+            repos=(RepoConfig("main", wiki.get("label", L("知識庫", lang)), Path(wiki["dir"]), raw,
                               wiki.get("github", ""), wiki.get("branch", "master"), managed=True),),
             target_repo="main",
             backfill_repo="",
@@ -346,4 +353,5 @@ class Config:
             mail_to=mail.get("to", ""),
             doc2md_cmd=(tools["doc2md"],),
             ffmpeg=tools.get("ffmpeg") or find_ffmpeg(Path(tools["doc2md"])),
+            lang=lang,
         )

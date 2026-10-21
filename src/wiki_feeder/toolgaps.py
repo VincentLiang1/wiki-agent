@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .config import Config
+from .i18n import L
 
 log = logging.getLogger(__name__)
 
@@ -94,7 +95,7 @@ def record(cfg: Config, name: str, kind: str, items: list[str], when: datetime |
                 f.write(json.dumps({"time": when.isoformat(timespec="seconds"), "file": name, "kind": kind,
                                     "text": t}, ensure_ascii=False) + "\n")
     except OSError as e:
-        log.error("攝入工具缺口寫不進去:%s", e)
+        log.error(L("攝入工具缺口寫不進去:%s"), e)
 
 
 def ignored(cfg: Config) -> list[str]:
@@ -170,21 +171,22 @@ def digest(cfg: Config, now: datetime | None = None, days: int = WINDOW_DAYS) ->
     banned = {"Bash: " + " ".join(f) for f in forbidden()}
     # 刻意禁止的排最後:那不是可以補的指令
     order = sorted(groups.items(), key=lambda kv: (kv[0][1] in banned, -len(kv[1]["files"]), kv[0]))
-    lines = [f"### 🧰 攝入工具缺口(近 {days} 天,可以考慮補只讀指令的)"]
+    lines = [L("### 🧰 攝入工具缺口(近 {days} 天,可以考慮補只讀指令的)", days=days)]
     for (kind, k), g in order[:MAX_ITEMS]:
         d = sorted(g["days"])
         when = d[0] if len(d) == 1 else f"{d[0]}～{d[-1]}"
-        label = "刻意禁止" if k in banned else "被擋下" if kind == "denied" else "未驗"
+        label = L("刻意禁止") if k in banned else L("被擋下") if kind == "denied" else L("未驗")
         mark = "🔁 " if len(g["files"]) > 1 else ""
-        again = f"{g['again']} 修好後又出現," if g.get("again") else ""
-        lines.append(f"- {mark}{label}「{k}」:{again}{len(g['files'])} 筆攝入({when}),例:{g['example'][:120]}")
+        again = L("{date} 修好後又出現,", date=g["again"]) if g.get("again") else ""
+        lines.append(L("- {mark}{label}「{key}」:{again}{n} 筆攝入({when}),例:{example}", mark=mark, label=label,
+                       key=k, again=again, n=len(g["files"]), when=when, example=g["example"][:120]))
     if len(order) > MAX_ITEMS:
-        lines.append(f"- 另有 {len(order) - MAX_ITEMS} 項,`wiki-feeder tool-gaps` 看全部")
+        lines.append(L("- 另有 {n} 項,`wiki-feeder tool-gaps` 看全部", n=len(order) - MAX_ITEMS))
     if any(k in banned for _, k in groups):
-        lines.append("「刻意禁止」的是權限故意擋的(會清檔、會動到別的庫、有替代指令),不會放行;"
-                     "反覆出現表示攝入提示沒講清楚,要改的是提示。")
-    lines.append("要不要補指令,在 Claude Code 裡說「看一下攝入工具缺口」;確定不做的用 "
-                 "`wiki-feeder tool-gaps --ignore <關鍵字>` 從提醒拿掉。已經補好的不再列出,只列還要改良的。")
+        lines.append(L("「刻意禁止」的是權限故意擋的(會清檔、會動到別的庫、有替代指令),不會放行;"
+                       "反覆出現表示攝入提示沒講清楚,要改的是提示。"))
+    lines.append(L("要不要補指令,在 Claude Code 裡說「看一下攝入工具缺口」;確定不做的用 "
+                   "`wiki-feeder tool-gaps --ignore <關鍵字>` 從提醒拿掉。已經補好的不再列出,只列還要改良的。"))
     return lines
 
 
@@ -199,4 +201,4 @@ def mark_reported(cfg: Config, now: datetime) -> None:
     try:
         cfg.tool_gaps_reported_path.write_text(f"{now:%Y-%m-%d}\n", encoding="utf-8")
     except OSError as e:
-        log.error("攝入工具缺口的提醒日期寫不進去:%s", e)
+        log.error(L("攝入工具缺口的提醒日期寫不進去:%s"), e)

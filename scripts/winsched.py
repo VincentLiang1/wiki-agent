@@ -35,10 +35,17 @@ import argparse
 import os
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "src"))
+
+from wiki_feeder import i18n  # noqa: E402
+from wiki_feeder.config import CONFIG_FILE, state_dir_for  # noqa: E402
+from wiki_feeder.i18n import L  # noqa: E402
+
 FOLDER = "wiki-feeder"
 TASKS = {"collect": ["collect"], "process": ["process"]}
 INTERVAL = "PT1M"
@@ -63,7 +70,7 @@ def task_xml(args: list[str], python: Path, workdir: Path, user: str = "",
     return f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>wiki-feeder {escape(" ".join(args))}:每分鐘一輪</Description>
+    <Description>{escape(L("wiki-feeder {args}:每分鐘一輪", args=" ".join(args)))}</Description>
   </RegistrationInfo>
   <Triggers>
     <LogonTrigger>
@@ -134,24 +141,26 @@ def schtasks(*args: str) -> tuple[int, str]:
 def install(state: Path) -> None:
     py = venv_python()
     if not py.exists():
-        sys.exit(f"找不到 {py}:先在 repo 根目錄跑 `uv sync`")
+        sys.exit(L("找不到 {path}:先在 repo 根目錄跑 `uv sync`", path=py))
     state.mkdir(parents=True, exist_ok=True)
     for key, args in TASKS.items():
         xml = state / f"task-{key}.xml"
         xml.write_text(task_xml(args, py, REPO), encoding="utf-16")   # schtasks /XML 要 UTF-16
         rc, msg = schtasks("/Create", "/TN", task_name(key), "/XML", str(xml), "/F")
-        print(f"{task_name(key)}:{'已建立' if rc == 0 else '建立失敗 ' + msg}")
+        print(L("{task}:已建立", task=task_name(key)) if rc == 0
+              else L("{task}:建立失敗 {msg}", task=task_name(key), msg=msg))
 
 
 def uninstall() -> None:
     for key in TASKS:
         rc, msg = schtasks("/Delete", "/TN", task_name(key), "/F")
-        print(f"{task_name(key)}:{'已刪除' if rc == 0 else msg}")
+        print(L("{task}:已刪除", task=task_name(key)) if rc == 0 else f"{task_name(key)}:{msg}")
     # schtasks 刪不了資料夾,用工作排程器的 COM 介面刪;裡面還有別的任務就刪不掉,不勉強
     r = subprocess.run(["powershell", "-NoProfile", "-Command",
                         "$s = New-Object -ComObject Schedule.Service; $s.Connect(); "
                         f"$s.GetFolder('\\').DeleteFolder('{FOLDER}', 0)"], capture_output=True)
-    print(f"{FOLDER}\\ 資料夾:{'已刪除' if r.returncode == 0 else '沒刪(不存在或裡面還有別的任務)'}")
+    print(L("{folder}\\ 資料夾:已刪除", folder=FOLDER) if r.returncode == 0
+          else L("{folder}\\ 資料夾:沒刪(不存在或裡面還有別的任務)", folder=FOLDER))
 
 
 def running() -> list[str]:
@@ -168,20 +177,21 @@ def disable(poll: float = 10) -> None:
     import time
     for key in TASKS:
         rc, msg = schtasks("/Change", "/TN", task_name(key), "/DISABLE")
-        print(f"{task_name(key)}:{'已停用' if rc == 0 else msg}")
+        print(L("{task}:已停用", task=task_name(key)) if rc == 0 else f"{task_name(key)}:{msg}")
     waited = 0.0
     while busy := running():
         if waited % 60 == 0:
-            print(f"等正在跑的一輪做完({'、'.join(busy)};長錄音可能要幾十分鐘,不要關這個視窗)…", flush=True)
+            print(L("等正在跑的一輪做完({tasks};長錄音可能要幾十分鐘,不要關這個視窗)…", tasks=L("、").join(busy)),
+                  flush=True)
         time.sleep(poll)
         waited += poll
-    print("沒有正在跑的了")
+    print(L("沒有正在跑的了"))
 
 
 def enable() -> None:
     for key in TASKS:
         rc, msg = schtasks("/Change", "/TN", task_name(key), "/ENABLE")
-        print(f"{task_name(key)}:{'已啟用' if rc == 0 else msg}")
+        print(L("{task}:已啟用", task=task_name(key)) if rc == 0 else f"{task_name(key)}:{msg}")
 
 
 def status() -> None:
@@ -194,11 +204,24 @@ def check() -> None:
     """用 venv 的 python 跑一次只列收件匣、不搬檔;讀得到每個收件匣才算過(空輸出不算)。"""
     r = subprocess.run([str(venv_python(windowless=False)), "-X", "utf8", "-m", "wiki_feeder", "collect", "--list"],
                        cwd=REPO, capture_output=True, text=True, encoding="utf-8")
-    print((r.stdout + r.stderr).strip() or "(沒有任何輸出:不算通過,看 %LOCALAPPDATA%\\wiki-feeder\\logs\\feeder.log)")
+    print((r.stdout + r.stderr).strip() or L("(沒有任何輸出:不算通過,看 %LOCALAPPDATA%\\wiki-feeder\\logs\\feeder.log)"))
+
+
+def config_lang() -> str:
+    """.bat 直接叫這支、不經 cli:自己讀設定檔的 [general] language;讀不到就看系統語言。"""
+    try:
+        path = state_dir_for(sys.platform, Path.home(), os.environ) / CONFIG_FILE
+        lang = tomllib.loads(path.read_text(encoding="utf-8-sig"))["general"]["language"]
+        if lang in i18n.LANGS:
+            return lang
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError, KeyError, TypeError):
+        pass
+    return i18n.detect()
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="winsched", description="wiki-feeder 的 Windows 工作排程器任務")
+    i18n.set_lang(config_lang())
+    ap = argparse.ArgumentParser(prog="winsched", description=L("wiki-feeder 的 Windows 工作排程器任務"))
     ap.add_argument("cmd", choices=["install", "uninstall", "status", "check", "xml", "disable", "enable"])
     args = ap.parse_args(argv)
     if args.cmd == "xml":
@@ -206,9 +229,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"== {task_name(key)} ==\n{task_xml(a, venv_python(), REPO)}")
         return 0
     if sys.platform != "win32":
-        print("這支只在 Windows 上用;Mac 用 scripts/launchd.py", file=sys.stderr)
+        print(L("這支只在 Windows 上用;Mac 用 scripts/launchd.py"), file=sys.stderr)
         return 2
-    sys.path.insert(0, str(REPO / "src"))
     from wiki_feeder.config import Config
     {"install": lambda: install(Config.default().state_dir), "uninstall": uninstall,
      "status": status, "check": check, "disable": disable, "enable": enable}[args.cmd]()

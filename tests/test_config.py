@@ -1,6 +1,8 @@
 """設定檔(朋友的 Windows 版):單庫、沒有 FUTURES、拼錯的鍵要大聲失敗。全部用 tmp_path,不讀真的家目錄。"""
 from __future__ import annotations
 
+import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -81,15 +83,28 @@ def test_windows_without_config_file_refuses_instead_of_using_the_owners_mac_set
         Config.default()
 
 
-def test_mac_without_config_file_refuses_when_it_is_not_the_owners_mac(tmp_path, monkeypatch):
-    """公開 repo 沒有 owner_mac.py:Mac 朋友少放一個設定檔,不可安靜地用別人的路徑收件、寄別人的信。"""
+def test_mac_without_config_file_refuses_when_it_is_not_the_owners_mac(tmp_path):
+    """公開 repo 沒有 owner_mac.py:Mac 朋友少放一個設定檔,不可安靜地用別人的路徑收件、寄別人的信。
+
+    真的複製一份不含 owner_mac.py 的套件、在子行程裡讀:原本用 sys.modules[...] = None 假裝沒有這個檔,
+    丟的是 ModuleNotFoundError,跟真的少一個檔(ImportError)不一樣,程式只接前者也照樣過(2026-10-21)。"""
+    import subprocess
+
     import wiki_feeder
 
-    monkeypatch.setattr("wiki_feeder.config.PLATFORM", "darwin")
-    monkeypatch.setitem(sys.modules, "wiki_feeder.owner_mac", None)    # 等於沒有這個檔
-    monkeypatch.delattr(wiki_feeder, "owner_mac", raising=False)
-    with pytest.raises(ConfigError, match="找不到設定檔.*install.sh"):
-        Config.default()
+    pkg = tmp_path / "pkg" / "wiki_feeder"
+    shutil.copytree(Path(wiki_feeder.__file__).parent, pkg,
+                    ignore=shutil.ignore_patterns("owner_mac.py", "__pycache__"))
+    code = ("import wiki_feeder.config as c\n"
+            "assert c.__file__.startswith(%r), c.__file__\n"
+            "c.PLATFORM = 'darwin'\n"
+            "try:\n    c.Config.default()\nexcept c.ConfigError as e:\n    print('ConfigError', e)\n") % str(pkg)
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {**os.environ, "PYTHONPATH": str(pkg.parent), "HOME": str(home)}
+    r = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 0, r.stderr[-800:]
+    assert "ConfigError" in r.stdout and "install.sh" in r.stdout
 
 
 def test_config_file_wins_over_owner_defaults(tmp_path, monkeypatch):
@@ -100,3 +115,23 @@ def test_config_file_wins_over_owner_defaults(tmp_path, monkeypatch):
     (state / CONFIG_FILE).write_text(GOOD.format(root=tmp_path.as_posix()), encoding="utf-8")
     c = Config.default()
     assert c.futures is None and c.state_dir == state
+
+
+def test_config_errors_follow_the_interface_language(tmp_path):
+    """朋友看得到的錯誤:英文介面時是英文(路徑與鍵名照原樣)。"""
+    import re
+
+    from wiki_feeder import i18n
+
+    i18n.set_lang("en")
+    for text, said in [(GOOD.replace("[mail]", "[mial]"), "[mial]"), (GOOD.replace("dir = ", "# dir = "), "[wiki] dir"),
+                       (GOOD + "\n[general]\nlanguage = 'fr'\n", "'fr'")]:
+        with pytest.raises(ConfigError) as e:
+            Config.from_file(_write(tmp_path, text), tmp_path / "state")
+        assert said in str(e.value) and not re.search(r"[㐀-鿿]", str(e.value)), str(e.value)
+
+
+def test_language_comes_from_the_config_file(tmp_path):
+    c = Config.from_file(_write(tmp_path, GOOD + "\n[general]\nlanguage = 'en'\n"), tmp_path / "state")
+    assert c.lang == "en"
+    assert Config.from_file(_write(tmp_path, GOOD), tmp_path / "state").lang == "zh-Hant"

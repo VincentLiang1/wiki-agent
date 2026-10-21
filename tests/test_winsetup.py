@@ -86,3 +86,61 @@ def test_update_bat_waits_for_the_running_round_and_always_reenables():
     assert i_disable < i_pull < i_enable
     assert not any("goto" in ln for ln in lines[i_pull:i_enable])    # 失敗也走到 enable
     assert not any("/End" in ln or "taskkill" in ln for ln in lines)
+
+
+# -- 介面語言(繁中原文／簡中／English):問答第一題選,寫進設定檔 [general] language ---------------------
+
+def _cjk(s: str) -> bool:
+    return any("一" <= ch <= "鿿" for ch in s)
+
+
+def test_language_question_defaults_and_ignores_a_bad_choice(monkeypatch):
+    """還不知道語言時三種寫法並列;直接按 Enter／打錯都用預設(偵測到的或設定檔裡的)。"""
+    from wiki_feeder import i18n
+    m = _mod()
+    prompts = []
+    for answer, default, want in (("", "zh-Hans", "zh-Hans"), ("9", "en", "en"), ("2", "en", "zh-Hans"),
+                                  ("1", "en", "zh-Hant"), ("", "xx", "zh-Hant")):
+        monkeypatch.setattr("builtins.input", lambda p, a=answer: prompts.append(p) or a)
+        assert m.ask_lang(default) == want and i18n.get_lang() == want
+    assert all(s in prompts[0] for s in ("繁體中文", "简体中文", "English", "Language"))
+
+
+def test_choosing_english_makes_the_following_prompts_english(monkeypatch):
+    """選 3 之後 ask／yes 的提示(含「直接按 Enter = …」「Y/n」)都是英文。要等主代理合併 locales/en.json 才會過。"""
+    m = _mod()
+    answers = iter(["3", "", ""])
+    prompts = []
+    monkeypatch.setattr("builtins.input", lambda p: prompts.append(p) or next(answers))
+    assert m.ask_lang("zh-Hant") == "en"
+    assert m.ask(m.L("  收件信箱"), "amy@gmail.com") == "amy@gmail.com"
+    assert m.yes(m.L("沿用這份(不重填)?"))
+    assert not any(_cjk(p) for p in prompts[1:]), prompts
+    assert "amy@gmail.com" in prompts[1] and "Y/n" in prompts[2]
+    assert m.L("知識庫") != "知識庫" and not _cjk(m.L("知識庫"))
+
+
+def test_config_records_the_chosen_language_first(tmp_path):
+    from wiki_feeder import i18n
+    m = _mod()
+    text = m.render_config({**ANSWERS, "lang": "en"})
+    lines = text.splitlines()
+    assert lines[0].startswith("#") and lines[2:4] == ["[general]", 'language = "en"']
+    assert m.write_config(text, tmp_path).lang == "en"
+    i18n.set_lang("zh-Hans")                                            # 沒給就用現在的介面語言
+    assert 'language = "zh-Hans"' in m.render_config(ANSWERS)
+    assert m.config_lang(tmp_path / CONFIG_FILE) == "en"
+    assert m.config_lang(tmp_path / "沒有.toml") is None
+
+
+def test_reusing_an_old_config_only_switches_the_language(tmp_path):
+    """沿用舊設定檔(沒有 [general] 的舊版、或已經有的)又換了語言:只改那一行,其他照舊、讀得回來。"""
+    m = _mod()
+    old = "\n".join(ln for ln in m.render_config(ANSWERS).splitlines()
+                    if ln not in ("[general]", 'language = "zh-Hant"')) + "\n"
+    assert "[general]" not in old
+    cfg = m.write_config(m.set_config_lang(old, "en"), tmp_path)
+    assert cfg.lang == "en" and cfg.repos[0].label == ANSWERS["label"]
+    again = m.set_config_lang((tmp_path / CONFIG_FILE).read_text(encoding="utf-8"), "zh-Hans")
+    assert again.count("[general]") == 1 and again.count("language =") == 1
+    assert m.write_config(again, tmp_path).lang == "zh-Hans"

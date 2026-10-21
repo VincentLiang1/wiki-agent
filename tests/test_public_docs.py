@@ -10,27 +10,30 @@ PUBLIC = ROOT / "public" if (ROOT / "public").is_dir() else ROOT
 ONE_LINER = "curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash"
 
 
-def test_readme_links_to_both_guides_and_states_the_license():
-    text = (PUBLIC / "README.md").read_text(encoding="utf-8")
-    for name in re.findall(r"\]\(([^)#:]+\.md)\)", text):
-        assert (PUBLIC / name).is_file(), name
-    assert "Mac安裝說明.md" in text and "Windows安裝說明.md" in text
-    assert "All rights reserved" in text and "## English" in text
-    # 頁首就看得到英文說明的連結(GitHub 把「## English」的錨點產生成 #english)
-    assert "](#english)" in text.split("\n## ", 1)[0]
+# 三種語言(spec §10):每一份都有繁中、簡中、英文版,頁首互相連結;README 各自連到同語言的安裝說明
+READMES = ("README.md", "README.zh-Hans.md", "README.en.md")
+GUIDES = {"mac": ("Mac安裝說明.md", "Mac安装说明.md", "Mac-Install-Guide.md"),
+          "win": ("Windows安裝說明.md", "Windows安装说明.md", "Windows-Install-Guide.md")}
+
+
+def _head(name: str) -> str:
+    return (PUBLIC / name).read_text(encoding="utf-8").split("\n## ", 1)[0]
+
+
+def test_readme_in_three_languages_links_to_its_guides_and_states_the_license():
+    for i, name in enumerate(READMES):
+        text = (PUBLIC / name).read_text(encoding="utf-8")
+        assert "All rights reserved" in text, name
+        assert all(f"]({other})" in _head(name) for other in READMES if other != name), name
+        assert GUIDES["mac"][i] in text and GUIDES["win"][i] in text, name
 
 
 def test_the_one_line_install_matches_install_sh():
     """README 與 Mac 安裝說明貼的那一行、install.sh 自己註解裡的那一行、它 clone 的 repo,四處要是同一個。"""
     sh = (ROOT / "install.sh").read_text(encoding="utf-8")
     assert ONE_LINER in sh and 'repo_url="https://github.com/VincentLiang1/wiki-agent.git"' in sh
-    for doc in ("README.md", "Mac安裝說明.md", "Mac-Install-Guide.md"):
+    for doc in (*READMES, *GUIDES["mac"]):
         assert ONE_LINER in (PUBLIC / doc).read_text(encoding="utf-8"), doc
-
-
-# 每份中文安裝說明都有英文版(檔名英文),兩邊在頁首互相連結
-GUIDES = {"mac": ("Mac安裝說明.md", "Mac-Install-Guide.md"),
-          "win": ("Windows安裝說明.md", "Windows-Install-Guide.md")}
 
 
 def test_every_public_md_links_resolve():
@@ -39,14 +42,10 @@ def test_every_public_md_links_resolve():
             assert (PUBLIC / name).is_file(), (md.name, name)
 
 
-def test_each_chinese_guide_has_an_english_twin_linked_both_ways():
-    readme = (PUBLIC / "README.md").read_text(encoding="utf-8")
-    english = readme.split("## English", 1)[1]
-    for zh, en in GUIDES.values():
-        zh_head = (PUBLIC / zh).read_text(encoding="utf-8").split("\n## ", 1)[0]
-        en_head = (PUBLIC / en).read_text(encoding="utf-8").split("\n## ", 1)[0]
-        assert f"]({en})" in zh_head and f"]({zh})" in en_head, en
-        assert f"]({en})" in english, en
+def test_each_guide_links_to_its_other_two_languages():
+    for trio in GUIDES.values():
+        for name in trio:
+            assert all(f"]({other})" in _head(name) for other in trio if other != name), name
 
 
 def test_guides_name_the_files_that_really_exist():

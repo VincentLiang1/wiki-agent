@@ -63,3 +63,20 @@ def test_dump_command_cannot_be_shadowed_from_the_repo_cwd(tmp_path):
     cmd = INGEST_TOOLS_CMD   # Config.default() 與設定檔都用它;Windows 沒設定檔時 default() 會報錯
     subprocess.run([*cmd, "office-dump", str(tmp_path / "a.txt")], cwd=tmp_path, capture_output=True, timeout=60)
     assert not (tmp_path / "pwned").exists()
+
+
+def test_dump_labels_follow_the_interface_language_but_cell_text_does_not(tmp_path):
+    from wiki_feeder import i18n
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "名單"
+    ws["A1"] = "已聯絡"
+    ws["A1"].fill = PatternFill("solid", fgColor="FFFF00")
+    p = tmp_path / "名單.xlsx"
+    wb.save(p)
+    i18n.set_lang("en")
+    out = dump(p)
+    assert out.startswith("# 名單.xlsx (original text, not converted to Traditional Chinese)")
+    assert "## Sheet: 名單 (1 rows × 1 columns)" in out
+    assert "A1: '已聯絡'|fill #FFFF00" in out
+    assert dump(tmp_path / "x.rtf").startswith(".rtf is not supported")

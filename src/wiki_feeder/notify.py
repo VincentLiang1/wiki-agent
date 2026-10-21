@@ -12,6 +12,7 @@ import subprocess
 from email.message import EmailMessage
 
 from .config import Config
+from .i18n import L
 from .osplat import secret
 
 
@@ -23,8 +24,8 @@ def smtp_password(cfg: Config) -> str:
     # Mac 鑰匙圈、Windows 認證管理員(osplat.secret)
     pw = secret(cfg.smtp_keychain_service, cfg.mail_from)
     if not pw:
-        raise MailError(f"鑰匙圈(Windows 是認證管理員)裡找不到寄信密碼"
-                        f"(service={cfg.smtp_keychain_service}, account={cfg.mail_from})")
+        raise MailError(L("鑰匙圈(Windows 是認證管理員)裡找不到寄信密碼(service={service}, account={account})",
+                          service=cfg.smtp_keychain_service, account=cfg.mail_from))
     return pw.replace(" ", "")
 
 
@@ -43,4 +44,4 @@ def send(cfg: Config, subject: str, body: str) -> None:
             s.login(cfg.mail_from, password)
             s.send_message(msg)
     except (OSError, smtplib.SMTPException) as e:
-        raise MailError(f"寄信失敗:{e}") from e
+        raise MailError(L("寄信失敗:{e}", e=e)) from e

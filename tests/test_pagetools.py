@@ -262,3 +262,19 @@ def test_agreed_ratios_and_outside_denominators_are_not_flagged(repo):
                     "| 丙 | 350 | 28.0% |\n| 扣回 | -100 | — |\n", encoding="utf-8")
     out = table_sums(repo, "Wiki_Pages/分攤.md")
     assert "佔比欄 佔期貨:= 金額 ÷ 表上沒有的分母(各列反推約 1,247～1,253),3 列一致" in out
+
+
+def test_tool_output_follows_the_interface_language(repo):
+    """朋友選英文時 check-pages／table-sums 的說明跟著翻;頁面內容(那一行、表頭)原樣印。"""
+    from wiki_feeder import i18n
+    i18n.set_lang("en")
+    assert [k for _, k, _ in scan_text(BROKEN[0])] == ["broken bold (** still present after rendering)"]
+    assert scan_text("路徑\x82")[0][1] == "control characters U+0082"
+    (repo / "Wiki_Pages" / "統計.md").write_text(TABLE_PAGE, encoding="utf-8")
+    out = table_sums(repo, "Wiki_Pages/統計.md").splitlines()
+    assert out[0] == "Line 7 [統計 > 統計摘要] **依廠商**：: 3 rows, 1 total rows"
+    assert out[1] == "  筆數: sum 3 (1 more cells are not numbers and were not counted), total row matches"
+    roots = [PageRoot("FWIKI", repo)]
+    assert check_pages(roots, ["Wiki_Pages/新頁.md"]) == "Wiki_Pages/新頁.md: no problems"
+    with pytest.raises(PageToolError, match="is not a commit hash"):
+        commit_detail(repo, "--output=x")

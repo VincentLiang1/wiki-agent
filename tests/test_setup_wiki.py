@@ -125,3 +125,47 @@ def test_wikilink_check_looks_at_pages_not_the_rule_that_forbids_it(tmp_path):
     pages["Wiki_Pages/index.md"] = "見 [[某頁]]\n"
     ok, said = ws.scaffold_wiki(Path("/x/claude"), tmp_path / "W2", tmp_path / "R", False, run=_fake_claude(pages, []))
     assert ok and "[[" in said
+
+
+# -- 三種語言:知識庫用安裝時選的語言建;代管 git 那一節認得三種寫法的標題 ------------------------------
+
+def test_english_handout_prompt_asks_for_an_english_wiki(tmp_path):
+    """要等主代理合併 locales/en.json 才會過。資料夾名(_待處理、Wiki_Pages、index.md、.md_cache)是程式寫死的,照原樣。"""
+    from wiki_feeder import i18n
+    i18n.set_lang("en")
+    wiki, raw = tmp_path / "LLMWIKI" / "WIKI", tmp_path / "LLMWIKI" / "Raw_Sources"
+    prompt = ws.handout_prompt(wiki, raw, False)
+    assert "English" in prompt and "Markdown" in prompt and "繁體中文" not in prompt
+    assert "../Raw_Sources/" in prompt and "../Raw_Sources/_待處理/" in prompt and "\\" not in prompt
+    for kept in ("Wiki_Pages/", "index.md", ".md_cache/", "CLAUDE.md", "[[", "git"):
+        assert kept in prompt
+    assert "..\\Raw_Sources\\" in ws.handout_prompt(wiki, raw, True)
+    assert not any("一" <= ch <= "鿿" for ch in prompt.replace("_待處理", ""))
+    keep = ws.L(ws.KEEP_EXISTING)                                            # 已經有的檔不要動:也是英文
+    assert keep.startswith("\n") and keep.strip() and not any("一" <= ch <= "鿿" for ch in keep)
+
+
+def test_english_git_section_uses_the_english_commit_format(tmp_path):
+    """要等主代理合併 locales/en.json 才會過。"""
+    from wiki_feeder import i18n
+    i18n.set_lang("en")
+    (tmp_path / "CLAUDE.md").write_text("# Rules\n", encoding="utf-8")
+    assert ws.add_git_section(tmp_path)
+    text = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "Ingest: <original file name> — one-line summary" in text and ws.L(ws.GIT_HEADING) in text
+    assert not any("一" <= ch <= "鿿" for ch in text.replace("_待處理", ""))
+
+
+def test_git_section_heading_in_any_language_counts_as_present(tmp_path, monkeypatch):
+    """用英文裝過、改用繁中重跑安裝:CLAUDE.md 已經有英文標題,不可再補一節中文的。"""
+    from wiki_feeder import i18n
+    en_heading = "## Version history (git managed by wiki-feeder)"
+    monkeypatch.setitem(i18n._catalogs, "en", {**i18n.catalog("en"), ws.GIT_HEADING: en_heading})
+    wiki = tmp_path / "WIKI"
+    wiki.mkdir()
+    (wiki / "CLAUDE.md").write_text(f"# Rules\n\n{en_heading}\n\nDon't run git.\n", encoding="utf-8")
+    assert i18n.get_lang() == "zh-Hant" and not ws.add_git_section(wiki)
+    assert ws.GIT_HEADING not in (wiki / "CLAUDE.md").read_text(encoding="utf-8")
+    monkeypatch.setattr("builtins.input", lambda *_: "")                     # ask_wiki 也不再問要不要補
+    ws.ask_wiki(str(wiki), None, False)
+    assert ws.GIT_HEADING not in (wiki / "CLAUDE.md").read_text(encoding="utf-8")

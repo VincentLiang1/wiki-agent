@@ -13,6 +13,8 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .i18n import L
+
 TEXT_EXTS = {".md", ".txt"}  # 本來就是文字:不轉,直接攝入
 AUDIO_EXTS = {".m4a", ".mp3", ".wav", ".mp4", ".mov", ".avi"}
 DOC_EXTS = {
@@ -65,25 +67,25 @@ def build_args(cmd: tuple[str, ...], src: Path, out_dir: Path) -> list[str]:
 def run(cmd: tuple[str, ...], src: Path, out_dir: Path, timeout: float) -> tuple[Path, str]:
     """轉一個檔,回傳 (md 路徑, 紀錄檔路徑)。"""
     if not cmd:
-        raise Doc2mdUnavailable("沒有設定 doc2md 指令", "沒有設定 doc2md 指令")
+        raise Doc2mdUnavailable(L("沒有設定 doc2md 指令"), L("沒有設定 doc2md 指令"))
     out_dir.mkdir(parents=True, exist_ok=True)
     try:
         r = subprocess.run(build_args(cmd, src, out_dir), capture_output=True, text=True, timeout=timeout)
     except OSError as e:   # 找不到、沒有執行權限(例如重新安裝 meeting-scribe 到一半)
-        raise Doc2mdUnavailable(f"doc2md 指令無法執行:{e}", f"指令無法執行 {cmd[0]}") from e
+        raise Doc2mdUnavailable(L("doc2md 指令無法執行:{e}", e=e), L("指令無法執行 {cmd}", cmd=cmd[0])) from e
     except subprocess.TimeoutExpired as e:
-        raise ConvertError(f"doc2md 超過 {timeout:.0f} 秒沒跑完") from e
+        raise ConvertError(L("doc2md 超過 {seconds} 秒沒跑完", seconds=f"{timeout:.0f}")) from e
     out = (r.stdout or "") + "\n" + (r.stderr or "")
     m = re.search(r"執行記錄[::]\s*(\S.*)", out)
     tail = " / ".join(x for x in out.strip().splitlines()[-3:])
     if not m:
-        raise Doc2mdUnavailable(f"doc2md 沒有真的執行(沒有印出「執行記錄:」):{tail}",
-                                "啟動就結束、沒有印出「執行記錄:」")
+        raise Doc2mdUnavailable(L("doc2md 沒有真的執行(沒有印出「執行記錄:」):{tail}", tail=tail),
+                                L("啟動就結束、沒有印出「執行記錄:」"))
     log_path = m.group(1).strip()
     # 絕對路徑的那幾行(Windows 是 C:\…,不以 / 開頭)
     mds = [ln.strip() for ln in (r.stdout or "").splitlines() if ln.strip().endswith(".md") and Path(ln.strip()).is_absolute()]
     if r.returncode != 0 or not mds or not Path(mds[-1]).is_file():
-        raise ConvertError(f"doc2md 轉換失敗(紀錄檔 {log_path}):{tail}", log_path)
+        raise ConvertError(L("doc2md 轉換失敗(紀錄檔 {log}):{tail}", log=log_path, tail=tail), log_path)
     return Path(mds[-1]), log_path
 
 

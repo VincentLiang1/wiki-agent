@@ -21,6 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import Config
+from .i18n import L
 from .inboxes import Candidate, FolderInbox, FuturesInbox, InboxUnavailable
 from .ledger import Ledger
 from .mover import copy_verified, pick_names, sha256_of
@@ -123,7 +124,7 @@ def collect(cfg: Config, inboxes: list | None = None) -> Report:
     report = Report()
     with run_lock(cfg.lock_path) as got:
         if not got:
-            log.info("另一個 collect 正在執行,這次直接結束")
+            log.info(L("另一個 collect 正在執行,這次直接結束"))
             report.locked = True
             return report
         inboxes = build_inboxes(cfg) if inboxes is None else inboxes
@@ -131,7 +132,7 @@ def collect(cfg: Config, inboxes: list | None = None) -> Report:
             if cfg.raw_roots:
                 hashed, gone = ledger.refresh_raw_index(cfg.raw_roots, cfg.raw_skip_dirs)
                 if hashed or gone:
-                    log.info("既有原件索引:新算 %d 個、移除 %d 筆", hashed, gone)
+                    log.info(L("既有原件索引:新算 %d 個、移除 %d 筆"), hashed, gone)
             for inbox in inboxes:
                 heartbeat(cfg.lock_path)
                 _collect_one(cfg, inbox, ledger, report)
@@ -206,11 +207,12 @@ def _unavailable(cfg: Config, inbox, e: InboxUnavailable, report: Report) -> Non
     if n >= cfg.unavailable_alert_after:
         _inbox_alert(inbox, e, report)
     else:
-        log.warning("%s(連續第 %d 輪,滿 %d 輪才發警示)", e, n, cfg.unavailable_alert_after)
+        log.warning(L("%s(連續第 %d 輪,滿 %d 輪才發警示)"), e, n, cfg.unavailable_alert_after)
 
 
 def _inbox_alert(inbox, e: Exception, report: Report) -> None:
-    msg = str(e) if isinstance(e, InboxUnavailable) else f"{inbox.name} 發生預期外的錯誤:{type(e).__name__}: {e}"
+    msg = str(e) if isinstance(e, InboxUnavailable) else L("{inbox} 發生預期外的錯誤:{kind}: {e}", inbox=inbox.name,
+                                                         kind=type(e).__name__, e=e)
     log.error("%s", msg, exc_info=not isinstance(e, InboxUnavailable))
     report.alerts.append(msg)
 
@@ -236,7 +238,7 @@ def _stable_groups(groups: list[list[Candidate]], wait: float, report: Report) -
             stable.append(g)
         else:
             report.skipped_unstable.extend(c.rel for c in g)
-            log.info("檔案還在變動,下一輪再取:%s", ", ".join(c.rel for c in g))
+            log.info(L("檔案還在變動,下一輪再取:%s"), ", ".join(c.rel for c in g))
     return stable
 
 
@@ -246,7 +248,7 @@ def _take_group(cfg: Config, inbox, group: list[Candidate], ledger: Ledger, repo
         try:
             hashed.append((c, sha256_of(c.path), c.path.stat().st_size))
         except OSError as e:
-            log.error("%s:讀不到 %s:%s", inbox.name, c.rel, e)
+            log.error(L("%s:讀不到 %s:%s"), inbox.name, c.rel, e)
             report.failed.append(f"{inbox.name}:{c.rel}")
 
     fresh = []
@@ -267,7 +269,7 @@ def _take_group(cfg: Config, inbox, group: list[Candidate], ledger: Ledger, repo
             _write_sidecar(final, inbox, c, sha, size)
             ledger.record(sha, size, inbox.name, c.rel, str(final))
         except Exception as e:  # noqa: BLE001 —— 任何失敗都一樣:保留來源、下一輪再來
-            log.error("%s:%s 取件失敗,來源保留:%s", inbox.name, c.rel, e)
+            log.error(L("%s:%s 取件失敗,來源保留:%s"), inbox.name, c.rel, e)
             report.failed.append(f"{inbox.name}:{c.rel}")
             continue
         report.moved.append(str(final))
@@ -279,7 +281,7 @@ def _release(inbox, c: Candidate, report: Report) -> bool:
         inbox.release(c)
     except OSError as e:
         # 副本與紀錄都在,來源刪不掉只會讓下一輪判成重複再刪一次
-        msg = f"{inbox.name}:{c.rel} 已取到但清來源失敗:{e}"
+        msg = L("{inbox}:{rel} 已取到但清來源失敗:{e}", inbox=inbox.name, rel=c.rel, e=e)
         log.warning("%s", msg)
         report.alerts.append(msg)
         return False
@@ -330,7 +332,7 @@ def _alert(cfg: Config, msg: str) -> bool:
     連不上網路的不算警示(`network_down`):只寫 log,回傳 False。
     """
     if network_down(msg):
-        log.info("連不上網路,不列進摘要:%s", msg.splitlines()[0] if msg else msg)
+        log.info(L("連不上網路,不列進摘要:%s"), msg.splitlines()[0] if msg else msg)
         return False
     cfg.alerts_path.parent.mkdir(parents=True, exist_ok=True)
     seen_path = cfg.state_dir / "alerts_seen.json"

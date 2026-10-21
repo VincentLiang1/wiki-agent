@@ -1,6 +1,6 @@
 # wiki-agent Mac 安裝說明
 
-**繁體中文** | [English](Mac-Install-Guide.md)
+**繁體中文** | [简体中文](Mac安装说明.md) | [English](Mac-Install-Guide.md)
 
 照順序做,大約 30～40 分鐘(大多是等下載)。每一步都寫了「在哪裡、按什麼、會看到什麼」;畫面跟這裡寫的不一樣,就停下來把畫面拍給幫你裝的人看。
 
@@ -56,7 +56,13 @@ curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/insta
 
 ### 5-2. 回答問題
 
-每一題後面都有「(直接按 Enter = …)」,**大多直接按 Enter 就好**:
+第一題選語言(之後的問題、摘要信、警示、新建的知識庫都用這個語言):
+
+```
+語言 / 语言 / Language:1 繁體中文  2 简体中文  3 English(Enter = 繁體中文)
+```
+
+直接按 Enter 用電腦介面的語言;要換就輸入編號(簡體中文 2、English 3)。接下來每一題後面都有「(直接按 Enter = …)」,**大多直接按 Enter 就好**:
 
 | 題目 | 怎麼答 |
 | --- | --- |

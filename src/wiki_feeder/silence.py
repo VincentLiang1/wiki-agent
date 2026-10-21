@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .i18n import L
 from .osplat import decode_cmd
 
 _RATE = 8000
@@ -25,7 +26,7 @@ def decode(path: Path, out_wav: Path, ffmpeg: str = "") -> None:
     cmd = decode_cmd(str(path), str(out_wav), _RATE, ffmpeg)   # Mac:afconvert;Windows:meeting-scribe 的 ffmpeg
     r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0:
-        raise RuntimeError(f"{Path(cmd[0]).name} 解不開 {path.name}:{r.stderr.strip()}")
+        raise RuntimeError(L("{tool} 解不開 {name}:{err}", tool=Path(cmd[0]).name, name=path.name, err=r.stderr.strip()))
 
 
 def window_db(samples: np.ndarray, rate: int, window: float) -> np.ndarray:

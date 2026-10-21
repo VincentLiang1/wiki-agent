@@ -32,6 +32,8 @@ from pathlib import Path
 
 from markdown_it import MarkdownIt
 
+from .i18n import L, N_
+
 GIT_TIMEOUT = 60
 HISTORY_LIMIT = 50
 _REV = re.compile(r"[0-9a-f]{4,40}")
@@ -41,11 +43,11 @@ _MD = MarkdownIt("commonmark")
 _INLINE_CODE = re.compile(r"`[^`]*`")
 # 公事庫 CLAUDE.md 的 grep 健檢(〈H2 命名規則〉〈連結路徑〉〈交叉引用〉〈wikilink〉〈來源路徑不帶磁碟前綴〉);
 # H2 的字元類照該節「禁用」那一行(比它的 grep 多了頓號、全形減號);個人 WIKI 照它自己 CLAUDE.md 的 grep
-_WIKILINK = (re.compile(r"\[\["), "wikilink [[…]](本庫只用標準 Markdown 連結)")
-_ANCHOR = (re.compile(r"\]\(#[^)]*[A-Z]"), "錨點含大寫字母")
-_WIKI_RULES = [_WIKILINK, (re.compile(r"^## .*[：（）「」《》、－ .(),⁺]"), "H2 含禁用字元"), _ANCHOR]
-_PERSONAL_RULES = [_WIKILINK, (re.compile(r"^## .*[：（）「」《》 .(),⁺]"), "H2 含禁用字元"), _ANCHOR]
-DRIVE_KIND = "來源路徑帶磁碟前綴"
+_WIKILINK = (re.compile(r"\[\["), N_("wikilink [[…]](本庫只用標準 Markdown 連結)"))
+_ANCHOR = (re.compile(r"\]\(#[^)]*[A-Z]"), N_("錨點含大寫字母"))
+_WIKI_RULES = [_WIKILINK, (re.compile(r"^## .*[：（）「」《》、－ .(),⁺]"), N_("H2 含禁用字元")), _ANCHOR]
+_PERSONAL_RULES = [_WIKILINK, (re.compile(r"^## .*[：（）「」《》 .(),⁺]"), N_("H2 含禁用字元")), _ANCHOR]
+DRIVE_KIND = N_("來源路徑帶磁碟前綴")
 _CROSS = re.compile(r"^\s*[-*+]\s+\[([^]]+)\]\(\.\./([^)]+)\.md\)")
 _UNTYPED = re.compile(r"^\s*[-*+]\s+\[[^]]+\]\((?!https?://)[^)]+\.md\) — (?!基礎|進階|對比|對立)")
 _INDEX_LINE = re.compile(r"^- \[[^]]+\]\([^)]+\.md\) — (.*)$")
@@ -72,9 +74,9 @@ def git_text(repo: Path, *args: str) -> str:
         r = subprocess.run(["git", "-c", "core.quotePath=false", *args], cwd=repo, capture_output=True,
                            timeout=GIT_TIMEOUT)
     except (OSError, subprocess.SubprocessError) as e:
-        raise PageToolError(f"git 執行失敗:{e}") from e
+        raise PageToolError(L("git 執行失敗:{e}", e=e)) from e
     if r.returncode != 0:
-        raise PageToolError(r.stderr.decode("utf-8", "replace").strip() or f"git 結束碼 {r.returncode}")
+        raise PageToolError(r.stderr.decode("utf-8", "replace").strip() or L("git 結束碼 {code}", code=r.returncode))
     return r.stdout.decode("utf-8", "replace")
 
 
@@ -84,7 +86,7 @@ def page_path(repo: Path, path: str) -> str:
     p = Path(path)
     p = (p if p.is_absolute() else root / p).resolve()
     if not p.is_relative_to(root) or p == root or ".git" in p.relative_to(root).parts:
-        raise PageToolError(f"{path} 不在 {repo.name} 裡")
+        raise PageToolError(L("{path} 不在 {repo} 裡", path=path, repo=repo.name))
     return p.relative_to(root).as_posix()
 
 
@@ -94,13 +96,13 @@ def page_history(repo: Path, page: str | None = None, grep: str | None = None) -
     每個 commit 一行(雜湊、日期、標題):公事庫的 commit message 很長,印全文的話一頁的歷史就 70 KB
     (2026-10-06 實測)。全文用 commit_detail 看;--grep 照樣比對全文。"""
     if not page and not grep:
-        raise PageToolError("給一個頁面路徑,或用 --grep 給關鍵字")
+        raise PageToolError(L("給一個頁面路徑,或用 --grep 給關鍵字"))
     args = ["log", f"-n{HISTORY_LIMIT}", "--date=short", "--format=%h %ad %s"]
     if grep:
         args += ["--fixed-strings", "--regexp-ignore-case", f"--grep={grep}"]
     if page:
         args += ["--follow", "--", page_path(repo, page)]
-    return git_text(repo, *args).strip() or "(沒有符合的 commit)"
+    return git_text(repo, *args).strip() or L("(沒有符合的 commit)")
 
 
 def commit_detail(repo: Path, rev: str) -> str:
@@ -108,7 +110,7 @@ def commit_detail(repo: Path, rev: str) -> str:
     HEAD:claude commit 完要確認自己 commit 了什麼(2026-10-08、10-14 兩次改打 git show --stat HEAD 被擋)。"""
     rev = rev.strip()
     if rev != "HEAD" and not _REV.fullmatch(rev):
-        raise PageToolError(f"{rev!r} 不是 commit 雜湊(只收 4～40 位 16 進位,或 HEAD)")
+        raise PageToolError(L("{rev} 不是 commit 雜湊(只收 4～40 位 16 進位,或 HEAD)", rev=repr(rev)))
     return git_text(repo, "show", "--stat", "--no-ext-diff", "--no-textconv", "--date=short",
                 "--format=%H %ad%n%s%n%n%b", f"{rev}^{{commit}}", "--").strip()
 
@@ -129,6 +131,7 @@ def scan_text(text: str, rel: str = "", personal: bool = False, raw: Path | None
     # basic:朋友照講義建的庫只約定不用 [[…]];H2 禁用字元、跨群組顯示文字、type label、index 摘要字數是公事庫自己的規則,
     # 照樣查的話每筆摘要都是不相干的提醒,claude 還可能照著改朋友的頁(2026-10-20 Mac 朋友版實測)
     rules = [_WIKILINK] if basic else _PERSONAL_RULES if personal else _WIKI_RULES
+    rules = [(rx, L(kind)) for rx, kind in rules]
     drive = _drive(raw)
     wiki = rel.startswith("Wiki_Pages/")
     index = rel == "Wiki_Pages/index.md"
@@ -138,16 +141,16 @@ def scan_text(text: str, rel: str = "", personal: bool = False, raw: Path | None
         bad = sorted({f"U+{ord(ch):04X}" for ch in line
                       if ch != "\t" and unicodedata.category(ch) in ("Cc", "Cf", "Co", "Cs")})
         if bad:
-            problems.append((n, f"控制字元 {'、'.join(bad)}", line))
+            problems.append((n, L("控制字元 {codes}", codes=L("、").join(bad)), line))
         if drive and drive.search(line):
-            problems.append((n, DRIVE_KIND, line))
+            problems.append((n, L(DRIVE_KIND), line))
         if _FENCE.match(line):
             fenced = not fenced
             continue
         if fenced:
             continue
         if "**" in line and "**" in _CODE.sub("", _MD.render(line)):
-            problems.append((n, "粗體失效(渲染後還留著 **)", line))
+            problems.append((n, L("粗體失效(渲染後還留著 **)"), line))
         if not wiki:
             continue
         bare = _INLINE_CODE.sub("", line)
@@ -156,12 +159,12 @@ def scan_text(text: str, rel: str = "", personal: bool = False, raw: Path | None
             continue
         m = _CROSS.match(line)
         if m and m[1] != m[2]:
-            problems.append((n, f"跨群組清單項的顯示文字要寫成路徑 {m[2]}", line))
+            problems.append((n, L("跨群組清單項的顯示文字要寫成路徑 {path}", path=m[2]), line))
         if not index and _UNTYPED.match(line):
-            problems.append((n, "相關連結的 type label 不是 基礎／進階／對比／對立", line))
+            problems.append((n, L("相關連結的 type label 不是 基礎／進階／對比／對立"), line))
         m = _INDEX_LINE.match(line) if index else None
         if m and len(m[1]) > INDEX_SUMMARY_MAX:
-            problems.append((n, f"index 摘要 {len(m[1])} 字(上限 {INDEX_SUMMARY_MAX})", line))
+            problems.append((n, L("index 摘要 {n} 字(上限 {limit})", n=len(m[1]), limit=INDEX_SUMMARY_MAX), line))
     return problems
 
 
@@ -181,7 +184,7 @@ def locate(roots: list[PageRoot], path: str) -> tuple[PageRoot, str]:
             return root, page_path(root.path, str(p))
         except PageToolError:
             continue
-    raise PageToolError(f"{path} 不在 {'、'.join(r.name for r in roots)} 裡")
+    raise PageToolError(L("{path} 不在 {repo} 裡", path=path, repo=L("、").join(r.name for r in roots)))
 
 
 def check_pages(roots: list[PageRoot], pages: list[str]) -> str:
@@ -191,12 +194,13 @@ def check_pages(roots: list[PageRoot], pages: list[str]) -> str:
         name = rel if root is roots[0] else f"{root.name} {rel}"
         f = root.path / rel
         if not f.is_file():
-            out.append(f"{name}:找不到")
+            out.append(L("{name}:找不到", name=name))
             continue
         problems = scan_text(f.read_bytes().decode("utf-8", "replace"), rel, root.personal, root.raw, root.basic)
-        out += [f"{name}:第 {n} 行 {kind}:{line.strip()[:80]}" for n, kind, line in problems]
+        out += [L("{name}:第 {n} 行 {kind}:{line}", name=name, n=n, kind=kind, line=line.strip()[:80])
+                for n, kind, line in problems]
         if not problems:
-            out.append(f"{name}:沒有問題")
+            out.append(L("{name}:沒有問題", name=name))
     return "\n".join(out)
 
 
@@ -278,7 +282,7 @@ def _percent_checks(header: list[str], data: list[list[str]], totals: list[list[
             if b != k and any(x and not x[1] for x in base):
                 # 金額是 0 的列(零稅率、沒攤到)怎麼除都對,不算進「對得上幾列」
                 pairs = [(r, p[0], x[0]) for r, p, x in zip(data, col, base) if p and x and not x[1] and x[0]]
-                bases.append((base_name or f"第 {b + 1} 欄", b, base, pairs))
+                bases.append((base_name or L("第 {n} 欄", n=b + 1), b, base, pairs))
         # (1) 合計列、各列加總
         best = None
         for base_name, b, base, pairs in bases:
@@ -287,12 +291,14 @@ def _percent_checks(header: list[str], data: list[list[str]], totals: list[list[
             for total in dict.fromkeys((listed, sum((x[0] for x in base if x and not x[1]), Decimal(0)))):
                 if not total:
                     continue
-                bad = [f"{r[0].replace('**', '')} 寫 {_fmt(p, True)}、算出 {_fmt((x / total * 100).quantize(unit), True)}"
+                bad = [L("{row} 寫 {written}、算出 {computed}", row=r[0].replace('**', ''), written=_fmt(p, True),
+                         computed=_fmt((x / total * 100).quantize(unit), True))
                        for r, p, x in pairs if abs(p - x / total * 100) > unit]
                 if best is None or len(bad) < len(best[2]):
                     best = (base_name, total, bad, len(pairs))
         if best and best[3] and not best[2]:
-            out.append(f"  佔比欄 {name}:= {best[0]} ÷ {_fmt(best[1], False)},{best[3]} 列全部相符")
+            out.append(L("  佔比欄 {name}:= {base} ÷ {total},{n} 列全部相符", name=name, base=best[0],
+                         total=_fmt(best[1], False), n=best[3]))
             continue
         # (2) 表外的分母:每列給出分母的範圍 x×100÷(p±一個末位),全部有交集就一致
         found = None
@@ -306,13 +312,16 @@ def _percent_checks(header: list[str], data: list[list[str]], totals: list[list[
                 found = (base_name, lo, hi, len(use))
                 break
         if found:
-            out.append(f"  佔比欄 {name}:= {found[0]} ÷ 表上沒有的分母(各列反推約 {_fmt(found[1].quantize(1), False)}"
-                       f"～{_fmt(found[2].quantize(1), False)}),{found[3]} 列一致——請確認頁面寫的分母在這個範圍內")
+            out.append(L("  佔比欄 {name}:= {base} ÷ 表上沒有的分母(各列反推約 {lo}～{hi}),{n} 列一致"
+                         "——請確認頁面寫的分母在這個範圍內", name=name, base=found[0],
+                         lo=_fmt(found[1].quantize(1), False), hi=_fmt(found[2].quantize(1), False), n=found[3]))
         elif best and best[3] >= 3 and len(best[2]) * 2 <= best[3]:
-            out.append(f"  ⚠️ 佔比欄 {name}:最接近 {best[0]} ÷ {_fmt(best[1], False)},{len(best[2])} 列不符:"
-                       + ";".join(best[2][:5]) + (f"…另 {len(best[2]) - 5} 列" if len(best[2]) > 5 else ""))
+            out.append(L("  ⚠️ 佔比欄 {name}:最接近 {base} ÷ {total},{n} 列不符:", name=name, base=best[0],
+                         total=_fmt(best[1], False), n=len(best[2]))
+                       + L(";").join(best[2][:5])
+                       + (L("…另 {n} 列", n=len(best[2]) - 5) if len(best[2]) > 5 else ""))
         else:
-            out.append(f"  佔比欄 {name}:對不上表上任何一欄(可能是約定的比例、不是算出來的),沒有驗")
+            out.append(L("  佔比欄 {name}:對不上表上任何一欄(可能是約定的比例、不是算出來的),沒有驗", name=name))
     return out
 
 
@@ -322,7 +331,7 @@ def table_sums(repo: Path, page: str, heading: str | None = None) -> str:
     rel = page_path(repo, page)
     f = repo / rel
     if not f.is_file():
-        raise PageToolError(f"找不到 {rel}")
+        raise PageToolError(L("找不到 {path}", path=rel))
     out = []
     for start, heads, prev, header, rows in _tables(f.read_bytes().decode("utf-8", "replace")):
         # 公事庫的統計表多半用表前一行粗體標示(**依負擔單位**:),不是標題:兩個都比
@@ -332,10 +341,11 @@ def table_sums(repo: Path, page: str, heading: str | None = None) -> str:
         subs = [r for r, c in zip(rows, first) if _SUBTOTAL_ROW.search(c)]
         totals = [r for r, c in zip(rows, first) if _TOTAL_ROW.search(c) and not _SUBTOTAL_ROW.search(c)]
         data = [r for r in rows if r not in totals and r not in subs]
-        where = "〈" + " > ".join(heads) + "〉" if heads else ""
+        where = L("〈{path}〉", path=" > ".join(heads)) if heads else ""
         label = prev[:40] if prev and not prev.startswith("#") else ""
-        out.append(f"第 {start} 行{where}{label}:{len(data)} 列" + (f"、另有 {len(subs)} 列小計" if subs else "")
-                   + (f"、{len(totals)} 列合計" if totals else ""))
+        out.append(L("第 {line} 行{where}{label}:{n} 列", line=start, where=where, label=label, n=len(data))
+                   + (L("、另有 {n} 列小計", n=len(subs)) if subs else "")
+                   + (L("、{n} 列合計", n=len(totals)) if totals else ""))
         for k, name in enumerate(header):
             vals = [_number(r[k]) if k < len(r) else None for r in data]
             nums = [v for v in vals if v]
@@ -344,25 +354,26 @@ def table_sums(repo: Path, page: str, heading: str | None = None) -> str:
             pct = all(p for _, p in nums)
             total = sum((v for v, _ in nums), Decimal(0))
             other = sum(1 for r, v in zip(data, vals) if v is None and k < len(r) and r[k])
-            line = f"  {name or f'第 {k + 1} 欄'}:加總 {_fmt(total, pct)}"
+            line = L("  {name}:加總 {total}", name=name or L("第 {n} 欄", n=k + 1), total=_fmt(total, pct))
             if other:
-                line += f"(另有 {other} 格不是數字、沒算進去)"
+                line += L("(另有 {n} 格不是數字、沒算進去)", n=other)
             if len(totals) == 1 and k < len(totals[0]) and (t := _number(totals[0][k])):
                 sub = sum((v[0] for r in subs if k < len(r) and (v := _number(r[k]))), Decimal(0))
                 # 百分比各列四捨五入過:加總差在「每列最多差半個末位」以內是正常的
                 tol = Decimal(0) if not pct else len(nums) * Decimal(5).scaleb(
                     min(v.as_tuple().exponent for v, _ in nums) - 1)
                 if t[0] == total:
-                    line += ",合計列相符"
+                    line += L(",合計列相符")
                 elif abs(t[0] - total) <= tol:
-                    line += f",合計列寫 {_fmt(*t)}、差 {_fmt(t[0] - total, pct)}(在四捨五入誤差內)"
+                    line += L(",合計列寫 {written}、差 {diff}(在四捨五入誤差內)", written=_fmt(*t),
+                               diff=_fmt(t[0] - total, pct))
                 elif subs and t[0] == sub:
-                    line += ",合計列與小計列的加總相符"
+                    line += L(",合計列與小計列的加總相符")
                 else:
-                    line += f",⚠️ 合計列寫 {_fmt(*t)}、差 {_fmt(t[0] - total, pct)}"
-                    line += f"(小計列加總 {_fmt(sub, pct)})" if subs else ""
+                    line += L(",⚠️ 合計列寫 {written}、差 {diff}", written=_fmt(*t), diff=_fmt(t[0] - total, pct))
+                    line += L("(小計列加總 {sum})", sum=_fmt(sub, pct)) if subs else ""
             out.append(line)
         out += _percent_checks(header, data, totals)
     if not out:
-        return f"{rel}:沒有表格" + (f"(標題含「{heading}」的段落裡)" if heading else "")
+        return L("{path}:沒有表格", path=rel) + (L("(標題含「{heading}」的段落裡)", heading=heading) if heading else "")
     return "\n".join(out)

@@ -20,6 +20,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from .i18n import L
 from .osplat import WINDOWS
 from .pagetools import PageToolError, git_text, page_path
 
@@ -40,9 +41,9 @@ def make_handout(repo: Path, branch: str, src: str, out: str, flags: list[str]) 
     外部網址又跑回去)要看差異才知道。"""
     src_rel, out_rel = page_path(repo, src), page_path(repo, out)
     if not (src_rel.startswith("Wiki_Pages/") and src_rel.endswith(".md") and (repo / src_rel).is_file()):
-        raise PageToolError(f"{src} 不是 Wiki_Pages/ 底下的頁面")
+        raise PageToolError(L("{path} 不是 Wiki_Pages/ 底下的頁面", path=src))
     if not _HANDOUT_OUT.fullmatch(out_rel):
-        raise PageToolError(f"{out} 不是 handouts/<頁名>.md")
+        raise PageToolError(L("{path} 不是 handouts/<頁名>.md", path=out))
     with tempfile.TemporaryDirectory(prefix="wiki-feeder-handout-") as tmp:
         tools = Path(tmp) / "tools"
         tools.mkdir()
@@ -50,7 +51,7 @@ def make_handout(repo: Path, branch: str, src: str, out: str, flags: list[str]) 
         names = [n for n in git_text(repo, "ls-tree", "-z", "--name-only", f"{ref}:tools/").split("\0")
                  if n.endswith(".py") and "/" not in n]
         if HANDOUT_SCRIPT not in names:
-            raise PageToolError(f"{ref} 的 tools/ 裡沒有 {HANDOUT_SCRIPT}")
+            raise PageToolError(L("{ref} 的 tools/ 裡沒有 {script}", ref=ref, script=HANDOUT_SCRIPT))
         for n in names:   # 腳本會 import 同目錄的模組(改寫表),整個 tools/ 的 .py 都取出來
             (tools / n).write_bytes(_blob(repo, f"{ref}:tools/{n}"))
         dst = Path(tmp) / "out.md"
@@ -62,10 +63,10 @@ def make_handout(repo: Path, branch: str, src: str, out: str, flags: list[str]) 
                                 str((repo / src_rel).resolve()), "--out", str(dst), *flags],
                                cwd=tmp, capture_output=True, timeout=HANDOUT_TIMEOUT)
         except (OSError, subprocess.SubprocessError) as e:
-            raise PageToolError(f"{HANDOUT_SCRIPT} 執行失敗:{e}") from e
+            raise PageToolError(L("{script} 執行失敗:{e}", script=HANDOUT_SCRIPT, e=e)) from e
         if r.returncode != 0 or not dst.is_file():
             err = (r.stderr or r.stdout).decode("utf-8", "replace").strip()
-            raise PageToolError(f"{HANDOUT_SCRIPT} 失敗(講義沒有改):{err[-1500:]}")
+            raise PageToolError(L("{script} 失敗(講義沒有改):{err}", script=HANDOUT_SCRIPT, err=err[-1500:]))
         # 腳本寫 CRLF(給 Windows 用);庫裡追蹤的講義是 LF(Windows 的 git commit 時轉掉)。Mac 沒有這道轉換,
         # 照寫的話整份講義每一行都算改過(2026-10-15 對真的公事庫試跑:內容沒變,位元組全不同)
         new = dst.read_bytes().replace(b"\r\n", b"\n")
@@ -74,23 +75,25 @@ def make_handout(repo: Path, branch: str, src: str, out: str, flags: list[str]) 
     target.parent.mkdir(exist_ok=True)
     target.write_bytes(new)
     if old is None:
-        return f"已產生 {out_rel}(新講義)"
+        return L("已產生 {path}(新講義)", path=out_rel)
     if old == new:
-        return f"{out_rel} 沒有變(來源頁的修改不影響講義)"
+        return L("{path} 沒有變(來源頁的修改不影響講義)", path=out_rel)
     diff = list(difflib.unified_diff(old.decode("utf-8", "replace").splitlines(),
-                                     new.decode("utf-8", "replace").splitlines(), "舊講義", "新講義", lineterm=""))
-    more = f"\n⋯(差異共 {len(diff)} 行,只印前 {DIFF_MAX_LINES} 行)" if len(diff) > DIFF_MAX_LINES else ""
-    return (f"已重產 {out_rel},與舊講義的差異(新出現來源列、外部網址、對內章節的話,是參數跟舊版不同,"
-            f"補上參數再跑一次):\n" + "\n".join(diff[:DIFF_MAX_LINES]) + more)
+                                     new.decode("utf-8", "replace").splitlines(), L("舊講義"), L("新講義"),
+                                     lineterm=""))
+    more = (L("\n⋯(差異共 {n} 行,只印前 {limit} 行)", n=len(diff), limit=DIFF_MAX_LINES)
+            if len(diff) > DIFF_MAX_LINES else "")
+    return (L("已重產 {path},與舊講義的差異(新出現來源列、外部網址、對內章節的話,是參數跟舊版不同,"
+              "補上參數再跑一次):\n", path=out_rel) + "\n".join(diff[:DIFF_MAX_LINES]) + more)
 
 
 def _blob(repo: Path, spec: str) -> bytes:
     try:
         r = subprocess.run(["git", "cat-file", "blob", spec], cwd=repo, capture_output=True, timeout=60)
     except (OSError, subprocess.SubprocessError) as e:
-        raise PageToolError(f"git 執行失敗:{e}") from e
+        raise PageToolError(L("git 執行失敗:{e}", e=e)) from e
     if r.returncode != 0:
-        raise PageToolError(r.stderr.decode("utf-8", "replace").strip() or f"讀不到 {spec}")
+        raise PageToolError(r.stderr.decode("utf-8", "replace").strip() or L("讀不到 {spec}", spec=spec))
     return r.stdout
 
 
@@ -99,13 +102,13 @@ def add_image(repo: Path, sources: list[Path], src: str, dest: str) -> str:
     .jpg／.jpeg 原樣複製;其他格式用 PIL 轉(透明的部分墊白底,動畫取第一格)。目的地已經有檔就不做。"""
     p = Path(src).resolve()
     if not any(p.is_relative_to(s.resolve()) for s in sources) or not p.is_file():
-        raise PageToolError(f"{src} 不是原件樹或轉寫快取裡的檔")
+        raise PageToolError(L("{path} 不是原件樹或轉寫快取裡的檔", path=src))
     dest_rel = page_path(repo, dest)
     if not _IMAGE_DEST.fullmatch(dest_rel):
-        raise PageToolError(f"{dest} 不是 Wiki_Pages/<群組>/images/<頁名>/<檔名>.jpg(頁名不得有空格)")
+        raise PageToolError(L("{path} 不是 Wiki_Pages/<群組>/images/<頁名>/<檔名>.jpg(頁名不得有空格)", path=dest))
     target = repo / dest_rel
     if target.exists():
-        raise PageToolError(f"{dest_rel} 已經有檔,不覆蓋(換一個檔名)")
+        raise PageToolError(L("{path} 已經有檔,不覆蓋(換一個檔名)", path=dest_rel))
     if p.suffix.lower() in _JPEG:
         data = p.read_bytes()
     else:
@@ -123,8 +126,8 @@ def add_image(repo: Path, sources: list[Path], src: str, dest: str) -> str:
                 rgb.save(buf, "JPEG", quality=JPEG_QUALITY)
                 data = buf.getvalue()
         except (UnidentifiedImageError, OSError, ValueError) as e:
-            raise PageToolError(f"{p.name} 讀不成圖片:{e}") from e
+            raise PageToolError(L("{name} 讀不成圖片:{e}", name=p.name, e=e)) from e
     target.parent.mkdir(parents=True, exist_ok=True)
     with open(target, "xb") as f:   # x:目的地在這中間冒出來也不覆蓋
         f.write(data)
-    return f"已放進 {dest_rel}({len(data) // 1024} KB)"
+    return L("已放進 {path}({kb} KB)", path=dest_rel, kb=len(data) // 1024)
