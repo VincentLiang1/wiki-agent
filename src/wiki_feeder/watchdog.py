@@ -27,6 +27,7 @@ from pathlib import Path
 
 from .collect import build_inboxes, last_net_down, run_file, uptime
 from .config import Config
+from .i18n import L
 from .ledger import Ledger
 from .osplat import is_placeholder
 
@@ -126,9 +127,9 @@ def deploying(cfg: Config) -> bool:
     return False
 
 
-def agents_not_loaded() -> list[str]:
+def agents_not_loaded(labels: tuple[str, ...] = AGENT_LABELS) -> list[str]:
     dom = f"gui/{os.getuid()}"
-    return [lb for lb in AGENT_LABELS
+    return [lb for lb in labels
             if subprocess.run(["launchctl", "print", f"{dom}/{lb}"], capture_output=True).returncode != 0]
 
 
@@ -419,17 +420,18 @@ def last_sync(text: str | None) -> float | None:
     return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S").timestamp() if m else None
 
 
-def brctl_status() -> str | None:
+def brctl_status(timeout: float = 60) -> str | None:
     """brctl status 的輸出(含錯誤訊息);60 秒沒回應回 None。要在有「完整磁碟取用權限」的 python 底下跑:
     launchd 直接跑 brctl 會被擋(self-check failed ... Access denied,2026-10-22 實測)。
     ⚠️ 這也是叫醒 bird 的呼叫:bird 不是 KeepAlive,砍掉後要有人用 IPC 找它才會被叫起來(2026-10-22 審查:
     沒人找的話空窗到下一輪看門狗、約 3 分鐘)。"""
     try:
-        r = subprocess.run(["brctl", "status", "com.apple.CloudDocs"], capture_output=True, text=True, timeout=60)
+        r = subprocess.run(["brctl", "status", "com.apple.CloudDocs"], capture_output=True, text=True,
+                           timeout=timeout)
     except subprocess.TimeoutExpired:
         return None
     except OSError as e:
-        return f"brctl 跑不起來:{e}"
+        return L("brctl 跑不起來:{e}", e=e)
     return r.stdout + r.stderr
 
 
@@ -482,14 +484,16 @@ def mark_kicked(cfg: Config, now: float) -> None:
 
 def _probe_note(cfg: Config) -> tuple[str, bool]:
     """探針的狀態(寫進紀錄:定時重啟順手修好的上傳卡住,事後至少看得出來)與「剛寫入、還在等上傳」。"""
+    if cfg.icloud_probe_dir is None:
+        return "", False   # 朋友版沒有探針
     try:
         st = json.loads(cfg.icloud_probe_state_path.read_text(encoding="utf-8"))
         age = uptime() - st["up"]
     except (OSError, ValueError, KeyError, TypeError):
-        return "探針沒有狀態", False
+        return L("探針沒有狀態"), False
     if not st.get("pending"):
-        return "探針已確認傳上去", False
-    return f"探針寫入 {age / 60:.0f} 分鐘、等確認", 0 <= age < KICK_PROBE_GRACE
+        return L("探針已確認傳上去"), False
+    return L("探針寫入 {m} 分鐘、等確認", m=f"{age / 60:.0f}"), 0 <= age < KICK_PROBE_GRACE
 
 
 KICK_PROBE_GRACE = 180   # 探針寫入後這麼久內不重啟(看門狗一輪):重啟會打斷它的上傳,修理時又被誤判成卡住
@@ -503,16 +507,17 @@ def icloud_kick(cfg: Config, now: float, status: str | None, pending: list[str] 
     kicked = st.get("kicked")
     last = last_sync(status)
     if last is not None:
-        parts = [f"last-sync 距今 {now - last:.0f} 秒"]
+        parts = [L("last-sync 距今 {s} 秒", s=f"{now - last:.0f}")]
     elif status is None:
-        parts = ["brctl status 60 秒沒回應"]
+        parts = [L("brctl status 60 秒沒回應")]
     else:
-        parts = ["讀不到 last-sync:" + " ".join(status.split())[:200]]
+        parts = [L("讀不到 last-sync:") + " ".join(status.split())[:200]]
     probe, probe_fresh = _probe_note(cfg)
-    parts.append(probe)
+    if probe:
+        parts.append(probe)
     downloading = None
     if pending is None:
-        parts.append("收件匣讀不到")
+        parts.append(L("收件匣讀不到"))
     else:
         old = st.get("placeholders") if isinstance(st.get("placeholders"), dict) else {}
         seen = {n: old.get(n, now) for n in pending}
@@ -521,19 +526,19 @@ def icloud_kick(cfg: Config, now: float, status: str | None, pending: list[str] 
             _save_kick_state(cfg, st)
         downloading = [n for n, t in seen.items() if now - t < cfg.icloud_busy_max]
         stuck = len(seen) - len(downloading)
-        parts.append(f"收件匣佔位檔 {len(seen)} 個(下載中 {len(downloading)}、超過 {cfg.icloud_busy_max / 60:.0f} 分鐘 {stuck})"
-                     if seen else "收件匣沒有佔位檔")
+        parts.append(L("收件匣佔位檔 {n} 個(下載中 {d}、超過 {m} 分鐘 {s})", n=len(seen), d=len(downloading),
+                       m=f"{cfg.icloud_busy_max / 60:.0f}", s=stuck) if seen else L("收件匣沒有佔位檔"))
     since = now - kicked if isinstance(kicked, (int, float)) else None
     if since is not None and 0 <= since < cfg.icloud_kick_every:
-        return False, "、".join(parts) + f";距上次重啟 {since / 60:.0f} 分鐘,不重啟"
+        return False, L("、").join(parts) + L(";距上次重啟 {m} 分鐘,不重啟", m=f"{since / 60:.0f}")
     if downloading is None:
-        return False, "、".join(parts) + ";看不到收件匣有沒有檔在下載,這輪不重啟"
+        return False, L("、").join(parts) + L(";看不到收件匣有沒有檔在下載,這輪不重啟")
     if downloading:
         # 重啟會打斷下載(檔維持佔位、重開後重載);大檔下載超過 icloud_kick_every 的話每到期就被打斷一次
-        return False, "、".join(parts) + ";收件匣有檔在下載,不重啟"
+        return False, L("、").join(parts) + L(";收件匣有檔在下載,不重啟")
     if probe_fresh:
-        return False, "、".join(parts) + ";探針剛寫入,下一輪再重啟"
-    return True, "、".join(parts)
+        return False, L("、").join(parts) + L(";探針剛寫入,下一輪再重啟")
+    return True, L("、").join(parts)
 
 
 def icloud_log(cfg: Config, now: float, line: str) -> None:

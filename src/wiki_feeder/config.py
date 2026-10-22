@@ -151,7 +151,9 @@ class Config:
     icloud_sync_timeout: float = 600    # 寫了之後多久還沒傳上去算 iCloud 卡住
     icloud_restart_checks: int = 12     # 重啟 bird 之後最多查幾次(每 15 秒一次)
     # 下載端(使用者 2026-10-22):探針只測得到上傳,手機傳上去、Mac 下載不下來時查不出來,只能定時重啟 bird。
-    # icloud_probe_dir 有設才做(只有使用者本人的 Mac)。閒著時大約每 15～18 分鐘重啟一次,重啟後當場叫醒 bird
+    # 閒著時大約每 15～18 分鐘重啟一次,重啟後當場叫醒 bird。使用者本人的 Mac 由看門狗做;朋友的 Mac 有 iCloud 收件匣
+    # 就預設打開(使用者 2026-10-23:朋友也會碰到),由 macsched 的簡易看門狗(watch)做;設定檔 [inbox] icloud_restart = false 關掉
+    icloud_restart: bool = False
     icloud_kick_every: float = 900      # 距上次重啟多久才再重啟(秒,牆上時間)
     icloud_busy_max: float = 1800       # 收件匣的佔位檔出現多久內算「下載中」、不重啟;超過就是下載卡住,照樣重啟
     icloud_log_keep_days: float = 10    # icloud.log 留幾天
@@ -253,6 +255,10 @@ class Config:
         return self.state_dir / "icloud_kick.json"      # 上次重啟 bird 的時間、收件匣佔位檔第一次看到的時間
 
     @property
+    def watch_lock_path(self) -> Path:
+        return self.state_dir / "watch.lock"           # 朋友版簡易看門狗(wiki-feeder watch)防重入
+
+    @property
     def icloud_log_path(self) -> Path:
         return self.state_dir / "logs" / "icloud.log"   # 下載端每輪一行
 
@@ -324,7 +330,7 @@ class Config:
             data = tomllib.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
             raise ConfigError(L("設定檔 {path} 讀不了:{e}", path=path, e=e)) from e
-        known = {"inbox": {"icloud", "onedrive"}, "wiki": {"dir", "raw", "label", "github", "branch"},
+        known = {"inbox": {"icloud", "onedrive", "icloud_restart"}, "wiki": {"dir", "raw", "label", "github", "branch"},
                  "mail": {"from", "to"}, "tools": {"doc2md", "claude", "ffmpeg"}, "general": {"language"}}
         problems = [f"[{k}]" for k in data if k not in known]
         problems += [f"[{k}] {x}" for k, keys in known.items() for x in data.get(k, {}) if x not in keys]
@@ -342,6 +348,8 @@ class Config:
             raise ConfigError(L("設定檔 {path} 沒有 [tools] doc2md(meeting-scribe 安裝資料夾裡的 doc2md)", path=path))
         if not inbox.get("icloud") and not inbox.get("onedrive"):
             raise ConfigError(L("設定檔 {path} 沒有任何收件匣([inbox] icloud 或 onedrive)", path=path))
+        if not isinstance(inbox.get("icloud_restart", True), bool):
+            raise ConfigError(L("設定檔 {path} 的 [inbox] icloud_restart 只能是 true 或 false", path=path))
 
         def opt(v: str | None) -> Path | None:
             return Path(v) if v else None
@@ -355,6 +363,8 @@ class Config:
             state_dir=state,
             icloud_inbox=opt(inbox.get("icloud")),
             onedrive_inbox=opt(inbox.get("onedrive")),
+            # 只有 Mac 的 iCloud 有 bird 要顧;Windows 的 iCloud 是另一套程式,不動
+            icloud_restart=bool(inbox.get("icloud")) and PLATFORM == "darwin" and inbox.get("icloud_restart", True),
             futures=None,
             repos=(RepoConfig("main", wiki.get("label", L("知識庫", lang)), Path(wiki["dir"]), raw,
                               wiki.get("github", ""), wiki.get("branch", "master"), managed=True),),

@@ -17,6 +17,9 @@ from .ledger import Ledger
 from .osplat import WINDOWS, fill_missing_std_streams, hide_child_consoles
 
 
+CHECK_BRCTL_WAIT = 240   # 安裝時讀 iCloud 同步狀態最多等多久:要留時間給人按「允許」(macsched 的 check 總共等 300 秒)
+
+
 def _utf8_mode() -> bool:
     return bool(sys.flags.utf8_mode)
 
@@ -107,6 +110,9 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     rg.add_argument("name", help=L("檔名,例如 IMG_5872.JPG"))
     rg.add_argument("--note", required=True, help=L("背景說明,會寫進攝入提示"))
     sub.add_parser("resume", help=L("檢查過 STOP 之後解除:恢復攝入與補推"))
+    w = sub.add_parser("watch", help=L("朋友版 Mac 的簡易看門狗一輪:哪一輪卡住、排程沒載入就發警示到當日摘要,"
+                                       "並做 iCloud 定時重啟(每 3 分鐘;不自動修)"))
+    w.add_argument("--prefix", default="io.github.wiki-agent", help=L("排程標籤的前綴(實測時換一組)"))
     sub.add_parser("watchdog", help=L("看門狗的一輪:查有沒有卡住、CPU／記憶體被佔用,有就自動修理並寄信(launchd 每 3 分鐘)"))
     q = sub.add_parser("quarantine", help=L("把攝入留在公事庫的沒追蹤檔搬到隔離區(不刪)"))
     q.add_argument("path")
@@ -242,6 +248,13 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
         print(reconvert(cfg, None if args.all else args.name))
         return 0
 
+    if args.cmd == "watch":
+        # 朋友版 Mac 的第三個排程(macsched);使用者本人的由看門狗(watchdog)做
+        from .repair import friend_round
+        _setup_logging(cfg)
+        _post_alerts(cfg, friend_round(cfg, (f"{args.prefix}.collect", f"{args.prefix}.process")))
+        return 0
+
     if args.cmd == "watchdog":
         # 不握 deploy.lock:修理完要發佈,握著共享鎖等於自己擋自己
         from .repair import tick
@@ -333,6 +346,15 @@ def _work(args, cfg: Config) -> int:
                     print(f"{d}\t{L('可讀')}")
                 except OSError as e:
                     print(f"{d}\t{L('錯誤:')}{e}")
+        if args.dirs and cfg.icloud_restart:
+            # iCloud 定時重啟要讀 brctl status(也靠它叫醒 bird)。App 版第一次讀時系統把它算在 wiki-agent 頭上、
+            # 跳視窗等人按(2026-10-23 實測:沒人按就一直卡著)——要趁安裝時問完,半夜碰到就每輪卡 60 秒
+            from .watchdog import brctl_status, last_sync
+            st = brctl_status(timeout=CHECK_BRCTL_WAIT)
+            name = L("iCloud 同步狀態")
+            print(f"{name}\t{L('可讀')}" if last_sync(st) is not None
+                  else f"{name}\t{L('錯誤:')}" + (L("等了 {s} 秒沒有回應", s=CHECK_BRCTL_WAIT) if st is None
+                                                  else " ".join(st.split())[:200]))
         return 0
 
     _setup_logging(cfg)

@@ -44,17 +44,33 @@ def test_agents_run_this_checkout_with_home_and_path_set(tmp_path):
     assert ms.PREFIX == "io.github.wiki-agent" and "vli" not in ms.PREFIX
 
 
-def test_install_writes_two_agents_into_the_given_home(tmp_path, monkeypatch):
+def test_install_writes_three_agents_into_the_given_home(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(ms, "_launchctl", lambda *a: calls.append(a) or subprocess.CompletedProcess(a, 0, "", ""))
     monkeypatch.setattr(ms.Config, "default", classmethod(lambda cls: type("C", (), {
         "icloud_inbox": tmp_path / "in", "onedrive_inbox": None})()))
     assert ms.install(tmp_path, "test.wa")
     agents = tmp_path / "Library" / "LaunchAgents"
-    assert sorted(p.name for p in agents.iterdir()) == ["test.wa.collect.plist", "test.wa.process.plist"]
-    assert [a[0] for a in calls] == ["bootout", "bootstrap", "bootout", "bootstrap"]
+    assert sorted(p.name for p in agents.iterdir()) == ["test.wa.collect.plist", "test.wa.process.plist",
+                                                        "test.wa.watch.plist"]
+    assert [a[0] for a in calls] == ["bootout", "bootstrap"] * 3
     ms.uninstall(tmp_path, "test.wa")
     assert not list(agents.iterdir())
+
+
+def test_watch_runs_every_three_minutes_and_checks_its_own_labels(tmp_path, monkeypatch):
+    """簡易看門狗(使用者 2026-10-23):每 3 分鐘;查的是同一組標籤(實測換 --prefix 時不可去查朋友真的那組)。"""
+    import plistlib
+    monkeypatch.setattr(ms, "_launchctl", lambda *a: subprocess.CompletedProcess(a, 0, "", ""))
+    monkeypatch.setattr(ms.Config, "default", classmethod(lambda cls: type("C", (), {
+        "icloud_inbox": None, "onedrive_inbox": tmp_path / "od"})()))
+    app = tmp_path / "Applications" / "wiki-agent.app"
+    assert ms.install(tmp_path, "test.wa", app=app)
+    agents = tmp_path / "Library" / "LaunchAgents"
+    d = plistlib.loads((agents / "test.wa.watch.plist").read_bytes())
+    assert d["ProgramArguments"] == [str(app / ms.LAUNCHER), "watch", "--prefix", "test.wa"]   # App 版也經啟動器
+    assert d["StartInterval"] == 180 and "WatchPaths" not in d
+    assert plistlib.loads((agents / "test.wa.collect.plist").read_bytes())["StartInterval"] == 60
 
 
 def test_update_waits_for_the_running_round_and_blocks_new_ones(tmp_path):
@@ -245,9 +261,12 @@ def test_app_check_failure_points_at_files_and_folders_not_full_disk_access(tmp_
 
 
 def test_expected_readable_counts_every_inbox_and_both_folders_of_each_knowledge_base(monkeypatch, tmp_path):
-    cfg = type("C", (), {"icloud_inbox": tmp_path, "onedrive_inbox": None, "repos": (object(),)})()
+    cfg = type("C", (), {"icloud_inbox": tmp_path, "onedrive_inbox": None, "repos": (object(),),
+                         "icloud_restart": False})()
     monkeypatch.setattr(ms.Config, "default", classmethod(lambda cls: cfg))
     assert ms._expected_inboxes() == 3
+    cfg.icloud_restart = True             # iCloud 定時重啟還要讀得到 iCloud 同步狀態
+    assert ms._expected_inboxes() == 4
 
 
 def test_app_update_does_not_git_pull(tmp_path, monkeypatch, capsys):

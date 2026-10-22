@@ -979,7 +979,7 @@ class Clock:
 def _icloud(cfg, monkeypatch, **kw):
     clock = Clock()
     monkeypatch.setattr("wiki_feeder.watchdog.uptime", clock)
-    c = replace(cfg, icloud_probe_dir=cfg.icloud_inbox.parent / "_wiki-feeder-探針", **kw)
+    c = replace(cfg, icloud_probe_dir=cfg.icloud_inbox.parent / "_wiki-feeder-探針", icloud_restart=True, **kw)
     return c, clock
 
 
@@ -1362,7 +1362,7 @@ def test_icloud_kick_failure_is_mailed_not_swallowed(env, monkeypatch):
     deps.brctl_status = lambda: (_ for _ in ()).throw(RuntimeError("brctl 壞了"))
     _ticks(c, deps, t, 2, clock=clock)
     (subject, body), = calls.mail
-    assert "定時重啟出錯" in subject and "brctl 壞了" in body
+    assert "定時重啟出錯" in subject and "RuntimeError" in body
 
 
 def test_icloud_stall_fix_and_kick_share_one_restart_clock(env, dev, monkeypatch):
@@ -1420,11 +1420,11 @@ def test_kick_bird_keeps_going_when_the_clock_file_is_unwritable(env, monkeypatc
     assert back and "記不下重啟時間" in msg
 
 
-def test_icloud_kick_is_off_without_probe_dir(env):
-    """只有使用者本人的 Mac 設了探針資料夾;朋友那台、Windows 不重啟 bird。"""
+def test_icloud_kick_is_off_unless_enabled(env):
+    """icloud_restart 沒打開(Windows、沒有 iCloud 收件匣、朋友在設定檔關掉)就不重啟 bird。"""
     calls, bird, t = Calls(), Bird(), [T0]
     c = env["cfg"]
-    assert c.icloud_probe_dir is None
+    assert not c.icloud_restart
     _ticks(c, _kick_deps(c, calls, bird, t), t, 3)
     assert bird.kills == [] and not c.icloud_log_path.exists()
 
@@ -1452,3 +1452,94 @@ def test_bird_cpu_is_counted_across_restarts(cfg):
         found = resources(cfg, [{"pid": pid, "ppid": 1, "cpu": 95.0, "rss": 0, "etime": "01:00", "comm": BIRD}],
                           90.0, 32 * 2**30)
     assert [p.key for p in found] == ["resource:cpu:bird"]
+
+
+def _friend(c, calls, bird, t, down=()):
+    deps = _kick_deps(c, calls, bird, t)
+    deps.agents_check = lambda: list(down)
+    return deps
+
+
+def test_friend_watch_does_icloud_restart_without_probe_or_watchdog_and_alerts_once(env, monkeypatch):
+    """朋友的 Mac 沒有探針、沒有看門狗:簡易看門狗自己做定時重啟;bird 叫不回來寫進當日摘要的警示,同一則一天一次。"""
+    c = replace(env["cfg"], icloud_restart=True)
+    assert c.icloud_probe_dir is None
+    calls, t = Calls(), [T0]
+    bird = Bird()
+    alerts = []
+    for _ in range(2):
+        alerts += repair.friend_round(c, LABELS, _friend(c, calls, bird, t))
+        t[0] += 180
+    assert _kicks(bird) == [0] and bird.up and not alerts and not calls.mail
+    text = c.icloud_log_path.read_text(encoding="utf-8")
+    assert "探針" not in text and "重新起來" in text
+    bird.wakes = False
+    for _ in range(12):
+        alerts += repair.friend_round(c, LABELS, _friend(c, calls, bird, t))
+        t[0] += 180
+    assert len(bird.kills) == 3 and len(alerts) == 1 and "沒回來" in alerts[0] and not calls.mail
+
+
+LABELS = ("test.wa.collect", "test.wa.process")
+
+
+def test_friend_watch_reports_a_hung_round_once(env, monkeypatch):
+    """卡住的那輪寄不出摘要:只有另一個排程看得到。警示不可含每輪都變的字(卡了幾分鐘),否則每 3 分鐘報一次。"""
+    c = env["cfg"]
+    calls, bird, t = Calls(), Bird(), [T0]
+    lock = c.ingest_lock_path
+    with run_lock(lock):
+        _age(lock, c.ingest_timeout + 900 + 60)
+        a1 = repair.friend_round(c, LABELS, _friend(c, calls, bird, t))
+        _age(lock, 600)
+        a2 = repair.friend_round(c, LABELS, _friend(c, calls, bird, t))
+    assert len(a1) == 1 and "攝入那一輪卡住了" in a1[0] and a2 == []
+    assert bird.kills == []                                       # icloud_restart 沒打開:不動 bird
+
+
+def test_friend_watch_reports_unloaded_agents(env):
+    c = env["cfg"]
+    calls, bird, t = Calls(), Bird(), [T0]
+    alerts = repair.friend_round(c, LABELS, _friend(c, calls, bird, t, down=["test.wa.process"]))
+    assert len(alerts) == 1 and "排程沒有載入" in alerts[0] and "test.wa.process" in alerts[0]
+    assert repair.friend_round(c, LABELS, _friend(c, calls, bird, t, down=["test.wa.process"])) == []
+
+
+def test_friend_watch_skips_while_updating(env):
+    """更新(macsched update)握著 deploy.lock 的獨佔鎖時排程可能剛拿掉、程式正在換:這輪不查,免得誤報。"""
+    import fcntl
+    c = env["cfg"]
+    calls, bird, t = Calls(), Bird(), [T0]
+    c.deploy_lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(c.deploy_lock_path, "a+") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        assert repair.friend_round(c, LABELS, _friend(c, calls, bird, t, down=["test.wa.process"])) == []
+
+
+def test_friend_config_turns_icloud_restart_on_with_an_icloud_inbox(tmp_path, monkeypatch):
+    """朋友的設定檔有 iCloud 收件匣就預設打開(使用者 2026-10-23);[inbox] icloud_restart = false 關掉;Windows 不開。"""
+    from wiki_feeder.config import Config, ConfigError
+    base = '[wiki]\ndir = "{d}"\nraw = "{d}/raw"\n[tools]\ndoc2md = "/x/doc2md"\n[inbox]\n'.format(d=tmp_path)
+    path = tmp_path / "config.toml"
+
+    def load(extra, platform="darwin"):
+        monkeypatch.setattr("wiki_feeder.config.PLATFORM", platform)
+        path.write_text(base + extra, encoding="utf-8")
+        return Config.from_file(path, tmp_path / "state")
+    assert load('icloud = "/i"\n').icloud_restart is True
+    assert load('icloud = "/i"\nicloud_restart = false\n').icloud_restart is False
+    assert load('onedrive = "/o"\n').icloud_restart is False
+    assert load('icloud = "/i"\n', "win32").icloud_restart is False
+    with pytest.raises(ConfigError):
+        load('icloud = "/i"\nicloud_restart = "no"\n')
+
+
+def test_kick_bird_stops_waking_when_brctl_hangs(env, monkeypatch):
+    """朋友的 App 沒按過權限時 brctl 每次卡 60 秒:叫第一次沒回應就報,不要再卡 4 次。"""
+    c, _ = _icloud(env["cfg"], monkeypatch)
+    calls, bird, t = Calls(), Bird(wakes=False), [T0]
+    deps = _kick_deps(c, calls, bird, t)
+    tries = []
+    deps.brctl_status = lambda: tries.append(1) and None
+    msg, back = repair._kick_bird(c, deps)
+    assert not back and len(tries) == 1 and "brctl 沒有回應" in msg

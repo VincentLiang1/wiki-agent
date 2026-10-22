@@ -145,3 +145,18 @@ def test_list_dirs_tries_the_knowledge_base_and_originals_folder(cfg, capsys, tm
     assert lines[-2] == f"{wiki}\t可讀" and lines[-1].startswith(f"{tmp_path / 'gone'}\t錯誤:")
     assert main(["collect", "--list"], cfg=c) == 0
     assert len(capsys.readouterr().out.splitlines()) == 2                      # 沒帶 --dirs 照舊(launchd.py 比對它)
+
+
+def test_list_dirs_reads_icloud_sync_status_when_restart_is_on(cfg, capsys, monkeypatch):
+    """App 版第一次讀 brctl status 時系統跳視窗等人按(2026-10-23 實測):安裝時的背景試讀就要讀一次,讀到才算過。"""
+    from wiki_feeder import watchdog
+
+    c = replace(cfg, icloud_restart=True)
+    for status, want in (("x last-sync:2026-10-23 04:01:35 y", "\t可讀"), (None, "\t錯誤:等了 240 秒"),
+                         ("self-check failed Access denied", "\t錯誤:self-check")):
+        monkeypatch.setattr(watchdog, "brctl_status", lambda timeout=60, s=status: s)
+        assert main(["collect", "--list", "--dirs"], cfg=c) == 0
+        last = capsys.readouterr().out.splitlines()[-1]
+        assert last.startswith("iCloud 同步狀態") and want in last
+    assert main(["collect", "--list", "--dirs"], cfg=cfg) == 0                 # 沒打開就不讀
+    assert "iCloud 同步狀態" not in capsys.readouterr().out

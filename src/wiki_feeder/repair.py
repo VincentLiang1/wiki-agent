@@ -33,12 +33,13 @@ from .collect import mark_net_down, run_lock
 from .config import Config
 from .ingest import _API_DOWN, STOP_LEFTOVER, IngestError, unverified_commits
 from .ingest import git as repo_git
+from .i18n import L
 from .ledger import Ledger
 from .proc import run_net
 from .notify import send
 from .watchdog import (BIRD, Problem, _descendants, bird_running, brctl_status, deploying, detect, icloud_kick,
-                       icloud_log, icloud_synced, inbox_placeholders, mark_kicked, probe_path, processes, running,
-                       write_probe)
+                       icloud_log, icloud_synced, idle_of, inbox_placeholders, mark_kicked, probe_path, processes,
+                       running, write_probe)
 
 log = logging.getLogger(__name__)
 
@@ -211,13 +212,13 @@ def _restart_bird(procs: list[dict] | None = None) -> str:
     procs = processes() if procs is None else procs
     pids = [p["pid"] for p in procs if p["comm"] == BIRD]
     if not pids:
-        return f"找不到 iCloud 雲碟的 bird({BIRD}),沒有砍任何行程"
+        return L("找不到 iCloud 雲碟的 bird({path}),沒有砍任何行程", path=BIRD)
     for pid in pids:
         try:
             os.kill(pid, signal.SIGTERM)
         except OSError:   # 剛好自己結束了
             pass
-    return "已結束 iCloud 雲碟的 bird(pid " + "、".join(map(str, pids)) + ")"
+    return L("已結束 iCloud 雲碟的 bird(pid {pids})", pids="、".join(map(str, pids)))
 
 
 def _vp_kick(label: str) -> str:
@@ -260,44 +261,94 @@ def _kick_bird(cfg: Config, deps: Deps) -> tuple[str, bool]:
     try:
         mark_kicked(cfg, deps.now())
     except OSError as e:
-        log.error("記不下重啟 bird 的時間:%s", e)
-        msg += f"(記不下重啟時間:{e})"
+        log.error(L("記不下重啟 bird 的時間:%s"), e)
+        msg += L("(記不下重啟時間:{e})", e=e)
     if deps.brctl_status is None or deps.bird_running is None:
         return msg, True
     for _ in range(5):
         deps.sleep(2)
-        deps.brctl_status()   # 叫醒 bird 的就是這一下
+        st = deps.brctl_status()   # 叫醒 bird 的就是這一下
         if deps.bird_running():
-            return msg + ";bird 已重新起來", True
-    return msg + ";叫了 5 次 bird 都沒回來", False
+            return msg + L(";bird 已重新起來"), True
+        if st is None:
+            # brctl 自己卡住(朋友的 App 沒按過權限時是等人按視窗):再叫 4 次就是再卡 4 分鐘,不如直接報
+            return msg + L(";brctl 沒有回應,叫不醒 bird"), False
+    return msg + L(";叫了 5 次 bird 都沒回來"), False
 
 
-def _kick_icloud(cfg: Config, deps: Deps, now: float) -> None:
+def _kick_icloud(cfg: Config, deps: Deps, now: float, alert: Callable[[str, str, str], None] | None = None) -> None:
     """iCloud 下載端:定時重啟 bird(判斷在 watchdog.icloud_kick)。是例行保養、不是修理:不寫 repair.jsonl、
     不寄修理信——算進次數的話,一天 3 次馬上用完,探針真的卡住時反而只能寄信找人。保養本身壞了(出錯、bird 叫不回來)
-    才寄找人的信(一天一封、不算次數),否則下載端沒人顧、使用者卻以為還在。
-    排在這一輪的修理之後:修理重啟過 bird 會記時間,這裡就不會同一輪再砍一次。"""
-    if cfg.icloud_probe_dir is None or deps.brctl_status is None:
+    才通知(alert(鍵, 標題, 內容);預設是看門狗的找人信,一天一封、不算次數;朋友版改成當日摘要的警示),
+    否則下載端沒人顧、使用者卻以為還在。
+    看門狗裡排在這一輪的修理之後:修理重啟過 bird 會記時間,這裡就不會同一輪再砍一次。"""
+    if not cfg.icloud_restart or deps.brctl_status is None:
         return
+    if alert is None:
+        def alert(key: str, subject: str, body: str) -> None:
+            _escalate(cfg, deps, now, key, subject, body + f"\n\n{ICLOUD_HUMAN}")
     try:
         due, line = icloud_kick(cfg, now, deps.brctl_status(), inbox_placeholders(cfg.icloud_inbox))
         if due and not deps.icloud_online():
             mark_net_down(cfg)   # 探針看這個:斷網期間沒傳上去不算卡住
-            line += ";連不上 iCloud,不重啟"
+            line += L(";連不上 iCloud,不重啟")
         elif due:
             msg, back = _kick_bird(cfg, deps)
-            line += ";重啟 bird:" + msg
-            log.info("iCloud 定時重啟 bird:%s", line)
+            line += L(";重啟 bird:") + msg
+            log.info(L("iCloud 定時重啟 bird:%s"), line)
             if not back:
-                _escalate(cfg, deps, now, "icloud:kick-bird", "iCloud 同步程式重啟後沒回來",
-                          f"定時重啟 iCloud 雲碟的同步程式(bird)之後,叫了 5 次它都沒有重新起來:\n{line}\n\n"
-                          f"iPhone 送出的檔這段期間到不了 Mac。\n\n{ICLOUD_HUMAN}")
+                alert("icloud:kick-bird", L("iCloud 同步程式重啟後沒回來"),
+                      L("定時重啟 iCloud 雲碟的同步程式(bird)之後,叫了 5 次它都沒有重新起來;"
+                        "iPhone 送出的檔這段期間到不了這台 Mac。重開機一次通常就會好。"))
         icloud_log(cfg, now, line)
-    except Exception as e:  # noqa: BLE001 —— 保養出錯不可擋住看門狗其他的檢查,但要讓人知道
-        log.exception("iCloud 定時重啟 bird 出錯")
-        _escalate(cfg, deps, now, "icloud:kick-error", "iCloud 定時重啟出錯",
-                  f"看門狗定時重啟 iCloud 同步程式(下載端卡住時唯一的救法)這一輪出錯,沒做完:\n"
-                  f"{type(e).__name__}: {e}\n\n詳細在 {cfg.log_path}")
+    except Exception as e:  # noqa: BLE001 —— 保養出錯不可擋住其他的事,但要讓人知道
+        log.exception(L("iCloud 定時重啟 bird 出錯"))
+        # 內容只放例外的種類:警示以全文去重,每輪都變的字會讓它每輪報一次
+        alert("icloud:kick-error", L("iCloud 定時重啟出錯"),
+              L("定時重啟 iCloud 同步程式(下載端卡住時唯一的救法)出錯,沒做完:{kind}。詳細在 {log}",
+                kind=type(e).__name__, log=cfg.log_path))
+
+
+def friend_round(cfg: Config, labels: tuple[str, ...], deps: Deps | None = None) -> list[str]:
+    """朋友版 Mac 的簡易看門狗(`wiki-feeder watch`,macsched 每 3 分鐘;使用者 2026-10-23)。朋友那台沒有看門狗與
+    自動修理,這裡只查「只有另一個排程才看得到」的兩件事——某一輪卡住(卡住的那輪寄不出摘要)、排程沒載入(根本沒在跑)——
+    再做 iCloud 定時重啟(icloud_restart 打開時)。只發警示(呼叫端發到當日摘要;同一則 24 小時一次,collect._alert),
+    不自動修。更新中(deploy.lock 被獨佔:排程可能剛拿掉、程式正在換)這輪不做。"""
+    from .collect import _alert, deploy_guard
+    from .watchdog import agents_not_loaded
+    if deps is None:
+        deps = default_deps()
+        deps.agents_check = lambda: agents_not_loaded(labels)
+    found: list[str] = []
+
+    def alert(key: str, subject: str, body: str) -> None:
+        # 內容不可含每輪都變的字(幾分鐘、pid):警示以全文去重
+        msg = f"{subject}:{body}"
+        if _alert(cfg, msg):
+            found.append(msg)
+    stage_names = {"收件": L("收件那一輪"), "轉寫": L("轉寫那一輪"), "攝入": L("攝入那一輪")}
+    with deploy_guard(cfg.deploy_lock_path) as ok:
+        if not ok:
+            return found
+        with run_lock(cfg.watch_lock_path) as got:
+            if not got:
+                return found
+            now = deps.now()
+            for r in running(cfg):
+                if idle_of(r, now) > r["limit"]:
+                    alert("hung", L("{stage}卡住了", stage=stage_names.get(r["stage"], r["stage"])),
+                          L("超過 {m} 分鐘沒有進度,之後的檔都在排隊。重開機一次通常就會好;還是一樣的話,"
+                            "打開終端機打 cd ~/wiki-agent && claude,把這則警示貼給 Claude",
+                            m=f"{r['limit'] / 60:.0f}"))
+            down = deps.agents_check()
+            if down:
+                alert("agents", L("排程沒有載入"),
+                      L("{labels} 沒有在跑,收件或攝入停了,檔案會一直留在收件匣。雙擊一次 wiki-agent 就會重新裝好"
+                        "(用終端機那一行裝的:打開終端機打 cd ~/wiki-agent && uv run python scripts/macsched.py install)",
+                        labels=L("、").join(down)))
+            _kick_icloud(cfg, deps, now, alert)
+    return found
+
 
 # -- 紀錄 --------------------------------------------------------------------------
 

@@ -1,6 +1,6 @@
 """Mac 朋友版的常駐(launchd ≈ Windows 的工作排程器)。使用者本人那台用的是 scripts/launchd.py(發佈副本、看門狗),不是這支。
 
-    uv run python scripts/macsched.py install      # 裝兩個 agent(收件、轉寫＋攝入,每 60 秒一輪)
+    uv run python scripts/macsched.py install      # 裝三個 agent(收件、轉寫＋攝入每 60 秒一輪;簡易看門狗每 3 分鐘)
     uv run python scripts/macsched.py uninstall    # 拿掉;設定檔、處理紀錄、知識庫都不動
     uv run python scripts/macsched.py status       # 看兩個 agent 在不在跑、上次結束碼
     uv run python scripts/macsched.py check        # 用 launchd 跑一次「只列收件匣與知識庫」:隱私權限只有在 launchd 底下才看得出來
@@ -38,7 +38,10 @@ from wiki_feeder.i18n import L  # noqa: E402
 PYTHON = REPO / ".venv" / "bin" / "python"
 PREFIX = "io.github.wiki-agent"
 INTERVAL = 60
-JOBS = {"collect": ["collect"], "process": ["process"]}
+JOBS = {"collect": ["collect"], "process": ["process"], "watch": ["watch"]}
+# 簡易看門狗(使用者 2026-10-23):朋友這台沒有看門狗,某一輪卡住、排程沒載入時沒人知道(卡住的那輪寄不出摘要);
+# 每 3 分鐘查一次、發警示,並做 iCloud 定時重啟(朋友的 Mac 也會碰到 bird 卡住)。使用者本人那台由看門狗做,不用這支
+INTERVALS = {"watch": 180}
 # 雙擊 App 安裝時,App 的 setup.zsh 把 App 的位置寫在這個檔(每次雙擊都重寫);沒有這個檔 = 用 install.sh clone 的
 APP_MARK = REPO / ".app-bundle"
 LAUNCHER = "Contents/MacOS/wiki-agent"         # App 裡的主執行檔(make_mac_app.EXE)
@@ -75,7 +78,7 @@ def plist_for(label: str, cmd: list[str], home: Path, watch: list[Path] | None =
         "ProgramArguments": [*program, *cmd],
         "WorkingDirectory": str(REPO),
         "EnvironmentVariables": {"PATH": env_path(home), "HOME": str(home), "LANG": "en_US.UTF-8"},
-        "StartInterval": INTERVAL,
+        "StartInterval": INTERVALS.get(label.rsplit(".", 1)[-1], INTERVAL),
         "RunAtLoad": True,
         # 程式自己的 log(feeder.log)有輪替;這個檔只收 log 設好之前就當掉的 traceback
         "StandardOutPath": str(log),
@@ -120,8 +123,10 @@ def install(home: Path, prefix: str = PREFIX, app: Path | None = None) -> bool:
     (state / "logs").mkdir(parents=True, exist_ok=True)
     ok = True
     for name, cmd in JOBS.items():
-        ok &= _load(f"{prefix}.{name}", plist_for(f"{prefix}.{name}", cmd, home,
-                                                  _inboxes(cfg) if name == "collect" else None, app), agents)
+        label = f"{prefix}.{name}"
+        if name == "watch":
+            cmd = [*cmd, "--prefix", prefix]   # 要查的是同一組標籤(實測時 --prefix 換一組)
+        ok &= _load(label, plist_for(label, cmd, home, _inboxes(cfg) if name == "collect" else None, app), agents)
     return ok
 
 
@@ -156,7 +161,8 @@ def _expected_inboxes() -> int:
     設定檔讀不了就只要求一個。"""
     try:
         cfg = Config.default()
-        return max(1, len(_inboxes(cfg)) + 2 * len(cfg.repos))
+        # iCloud 定時重啟打開的話,還要讀得到 iCloud 同步狀態(collect --list --dirs 多印一行)
+        return max(1, len(_inboxes(cfg)) + 2 * len(cfg.repos) + (1 if cfg.icloud_restart else 0))
     except Exception:  # noqa: BLE001 —— 讀不了設定檔不該讓檢查當掉
         return 1
 

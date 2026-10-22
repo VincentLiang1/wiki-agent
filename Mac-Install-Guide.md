@@ -80,13 +80,13 @@ Type `3` and press Enter (if your Mac is set to English, just press Enter). Afte
 | `[Summary email] …` then `Sending Gmail address` | Defaults to the Gmail you signed in to Claude with; type another address to use a different one; type `-` if you don't want emails |
 | `Gmail app password (16 characters, not shown as you type)` | Paste the 16 letters from step 4 (**nothing is shown while you type** — just paste and press Enter). A test email is sent; if it arrives on your phone, it worked |
 | `=== Can the inbox be read? (in Terminal) ===` | Automatic. `iCloud	readable` means it's fine |
-| `=== Installing the schedule (one round per minute) ===` | Automatic. You'll see two lines ending in `: installed` |
+| `=== Installing the schedule (one round per minute) ===` | Automatic. You'll see three lines ending in `: installed` (the third is a light watchdog every 3 minutes: it puts a stuck round or a schedule that isn't running into the summary email, and restarts iCloud when it gets stuck) |
 
 ### 5-3. Allow reading (required)
 
 The schedule runs in the background, and macOS asks you to allow it to read iCloud Drive. When Terminal says to press Enter when you're ready, press Enter:
 
-1. A window `“wiki-agent” would like to access files in …` appears — click **Allow**
+1. A window `“wiki-agent” would like to access files in iCloud Drive` appears — click **Allow**. This also lets wiki-agent read iCloud's sync status: every 15 minutes it restarts this Mac's iCloud sync process (a pause of a few seconds) — iCloud on a Mac sometimes gets stuck, the phone has uploaded a file but this Mac never downloads it, and only a restart fixes that
 2. If your knowledge base is in Documents or Desktop, it asks once more — click **Allow** again
 3. `✓ The inbox can be read under launchd` means you're done. If it can't read, turn the switch on as described under "It can't read the inbox" in *When something goes wrong*, then try again
 
@@ -115,7 +115,7 @@ Once set up, `上次同步` ("last synced") at the bottom of that column on the 
 
 ## Updating
 
-Repeat steps 1–3 of step 5: download the new zip, drag wiki-agent into Applications (click **Replace** if asked) and double-click it. Terminal puts the new program in place; when it asks whether to keep the current settings, press Enter. The schedule and the "Allow" don't need to be redone.
+Repeat steps 1–3 of step 5: download the new zip, drag wiki-agent into Applications (click **Replace** if asked) and double-click it. Terminal puts the new program in place; when it asks whether to keep the current settings, press Enter. The schedule is replaced automatically; if a new version needs one more permission, a window appears during the final test read — click **Allow**. Permissions you already allowed don't need to be redone.
 
 (If you installed with the Terminal command: in Finder, open the **wiki-agent** folder in your home folder → double-click **Update.command**. If it says Python changed version, add the new path it prints to Full Disk Access again.)
 
@@ -129,4 +129,5 @@ Repeat steps 1–3 of step 5: download the new zip, drag wiki-agent into Applica
 - **The email subject starts with `⚠️ Needs attention`**: open Terminal, type `cd ~/wiki-agent && claude`, paste the whole email into Claude and ask it to handle it according to wiki-agent's rules (you can write to Claude in English)
 - **The email says Claude Code is not signed in or the sign-in expired**: type `claude` in Terminal and sign in again; the next round picks up where it left off
 - **It can't read the inbox**: usually "Don't Allow" was clicked: Apple menu  → **System Settings** → **Privacy & Security** → **Files and Folders** → **wiki-agent**, turn on iCloud Drive (and Documents/Desktop), then double-click wiki-agent again to re-check (if you installed with the Terminal command, Full Disk Access is missing or switched off)
+- **You don't want wiki-agent to restart iCloud sync**: open `~/Library/Application Support/wiki-feeder/config.toml` in TextEdit, add the line `icloud_restart = false` under `[inbox]`, save, and double-click wiki-agent once. The log is `logs/icloud.log` in the same folder
 - **Don't run git in the knowledge base yourself** (including asking Claude to commit for you): the program only accepts versions it has verified itself; one extra commit makes it stop and wait for a person
