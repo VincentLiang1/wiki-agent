@@ -1,6 +1,6 @@
 # wiki-agent Installation Guide for Mac
 
-[繁體中文](Mac安裝說明.md) | [简体中文](Mac安装说明.md) | **English**
+[繁體中文](Mac-Install-Guide.zh-Hant.md) | [简体中文](Mac-Install-Guide.zh-Hans.md) | **English**
 
 Follow the steps in order; it takes about 30–40 minutes (mostly waiting for downloads). Each step says where to go, what to click and what you should see. If your screen looks different from what is described here, stop and send a photo of the screen to the person helping you install.
 

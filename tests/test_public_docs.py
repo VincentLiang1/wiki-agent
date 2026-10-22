@@ -12,8 +12,8 @@ ONE_LINER = "curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-age
 
 # 三種語言(spec §10):每一份都有繁中、簡中、英文版,頁首互相連結;README 各自連到同語言的安裝說明
 READMES = ("README.md", "README.zh-Hans.md", "README.en.md")
-GUIDES = {"mac": ("Mac安裝說明.md", "Mac安装说明.md", "Mac-Install-Guide.md"),
-          "win": ("Windows安裝說明.md", "Windows安装说明.md", "Windows-Install-Guide.md")}
+GUIDES = {"mac": ("Mac-Install-Guide.zh-Hant.md", "Mac-Install-Guide.zh-Hans.md", "Mac-Install-Guide.md"),
+          "win": ("Windows-Install-Guide.zh-Hant.md", "Windows-Install-Guide.zh-Hans.md", "Windows-Install-Guide.md")}
 
 
 def _head(name: str) -> str:
@@ -48,11 +48,20 @@ def test_each_guide_links_to_its_other_two_languages():
             assert all(f"]({other})" in _head(name) for other in trio if other != name), name
 
 
-def test_entry_files_have_english_names():
-    """朋友雙擊、執行的入口檔名一律英文(使用者 2026-10-22:多語系版本的安裝檔是中文檔名,
+def test_entry_files_and_guides_have_english_names():
+    """朋友雙擊、執行的入口與說明的檔名一律英文(使用者 2026-10-22:多語系版本的安裝檔是中文檔名,
     看不懂中文的朋友找不到要點哪一個;比照 meeting-scribe-native)。內容照樣三種語言。"""
     entries = [p.name for p in ROOT.iterdir() if p.suffix in (".bat", ".command", ".sh")]
     assert entries and all(n.isascii() for n in entries), entries
+    docs = [p.name for p in PUBLIC.glob("*.md")]
+    assert docs and all(n.isascii() for n in docs), docs
+
+
+def test_simplified_docs_link_to_simplified_guides():
+    """簡中 README 與說明的內文只連到簡中那份說明(頁首的語言切換列除外)。"""
+    for name in ("README.zh-Hans.md", GUIDES["mac"][1], GUIDES["win"][1]):
+        body = (PUBLIC / name).read_text(encoding="utf-8").split("\n", 3)[3]
+        assert ".zh-Hant.md" not in body, name
 
 
 def test_guides_name_the_files_that_really_exist():

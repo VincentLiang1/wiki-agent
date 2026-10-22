@@ -29,11 +29,11 @@ wiki-agent 是一支在你電腦上常駐的小程式,替你照 Andrej Karpathy 
 
 ## 安裝
 
-- **Mac**:看 [Mac安裝說明.md](Mac安裝說明.md)。打開「終端機」貼上一行:
+- **Mac**:看 [Mac-Install-Guide.zh-Hant.md](Mac-Install-Guide.zh-Hant.md)。打開「終端機」貼上一行:
   ```bash
   curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash
   ```
-- **Windows**:看 [Windows安裝說明.md](Windows安裝說明.md)。下載 `Install.bat`,雙擊
+- **Windows**:看 [Windows-Install-Guide.zh-Hant.md](Windows-Install-Guide.zh-Hant.md)。下載 `Install.bat`,雙擊
 
 安裝會一題一題問(每題都有預設答案,大多直接按 Enter),最後裝好每分鐘自動跑的排程。第一題選語言:繁體中文、簡體中文或 English,之後的問題、摘要信、警示與新建的知識庫都用那個語言。
 

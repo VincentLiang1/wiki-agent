@@ -1,6 +1,6 @@
 # wiki-agent Windows 安裝說明
 
-**繁體中文** | [简体中文](Windows安装说明.md) | [English](Windows-Install-Guide.md)
+**繁體中文** | [简体中文](Windows-Install-Guide.zh-Hans.md) | [English](Windows-Install-Guide.md)
 
 照順序做,大約 30～40 分鐘(大多是等下載)。畫面跟這裡寫的不一樣,就停下來把畫面拍給幫你裝的人看。
 
