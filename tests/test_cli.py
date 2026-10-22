@@ -131,3 +131,17 @@ def test_missing_config_is_reported_in_the_system_language(tmp_path, monkeypatch
     assert main(["ledger"]) == 2
     err = capsys.readouterr().err
     assert "wiki-feeder" in err and not re.search(_CJK, err)
+
+
+def test_list_dirs_tries_the_knowledge_base_and_originals_folder(cfg, capsys, tmp_path):
+    """macsched.py check 帶 --dirs:App 版要趁安裝時讓系統問「文件」「桌面」的權限;讀不到要印錯誤、不可安靜略過。"""
+    from wiki_feeder.config import RepoConfig
+
+    wiki = tmp_path / "W"
+    wiki.mkdir()
+    c = replace(cfg, repos=(RepoConfig("main", "知識庫", wiki, tmp_path / "gone", ""),))
+    assert main(["collect", "--list", "--dirs"], cfg=c) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-2] == f"{wiki}\t可讀" and lines[-1].startswith(f"{tmp_path / 'gone'}\t錯誤:")
+    assert main(["collect", "--list"], cfg=c) == 0
+    assert len(capsys.readouterr().out.splitlines()) == 2                      # 沒帶 --dirs 照舊(launchd.py 比對它)

@@ -198,3 +198,63 @@ def test_install_sh_has_three_languages_for_every_message():
     r = subprocess.run(["bash", "-c", 'source <(sed "/^main \\"\\$@\\"$/d" install.sh); WA_LANG=zh-Hans msg 甲 乙 C; '
                         'WA_LANG=en msg 甲 乙 C'], cwd=ROOT, capture_output=True, text=True)
     assert r.stdout.split() == ["乙", "C"]
+
+
+# -- 雙擊 App 安裝(scripts/make_mac_app.py):排程由 App 裡的啟動器跑 ---------------------------------------
+
+def test_app_install_runs_the_agents_through_the_launcher_inside_the_app(tmp_path, monkeypatch):
+    """讀取權限認的是 App:直接跑 python 的話系統不會問、背景永遠讀不到 iCloud 雲碟。"""
+    mark = tmp_path / ".app-bundle"
+    monkeypatch.setattr(ms, "APP_MARK", mark)
+    assert ms.app_bundle() is None                                          # install.sh clone 的
+    mark.write_text("/Applications/wiki-agent.app\n", encoding="utf-8")
+    app = ms.app_bundle()
+    assert app == Path("/Applications/wiki-agent.app")
+    d = ms.plist_for("io.github.wiki-agent.collect", ["collect"], tmp_path, None, app)
+    assert d["ProgramArguments"] == ["/Applications/wiki-agent.app/Contents/MacOS/wiki-agent", "collect"]
+    mark.write_text("", encoding="utf-8")
+    assert ms.app_bundle() is None
+
+
+def test_app_check_reads_the_knowledge_base_too_and_waits_for_the_permission_dialog(tmp_path, monkeypatch):
+    """知識庫在「文件」「桌面」是另一種權限:要趁安裝時讓系統問;等人按「允許」,不只等 60 秒。"""
+    loaded = []
+    monkeypatch.setattr(ms, "_load", lambda label, d, agents: loaded.append(d) or True)
+    monkeypatch.setattr(ms, "_launchctl", lambda *a: subprocess.CompletedProcess(a, 0, "state = running", ""))
+    monkeypatch.setattr(ms.time, "sleep", lambda s: None)
+    monkeypatch.setattr(ms, "_expected_inboxes", lambda: 1)
+    app = Path("/Applications/wiki-agent.app")
+    assert ms.check(tmp_path, "test.wa", app) == 1
+    assert loaded[0]["ProgramArguments"] == [str(app / ms.LAUNCHER), "collect", "--list", "--dirs"]
+    assert ms.CHECK_WAIT_APP >= 300 > ms.CHECK_WAIT
+
+
+def test_app_check_failure_points_at_files_and_folders_not_full_disk_access(tmp_path, monkeypatch, capsys):
+    _, state = ms.paths(tmp_path)
+    log = state / "logs" / "check.launchd.log"
+
+    def launchctl(*a):
+        if a[0] == "bootstrap":
+            log.write_text("iCloud\t錯誤:Operation not permitted\n", encoding="utf-8")
+        return subprocess.CompletedProcess(a, 0, "state = not running" if a[0] == "print" else "", "")
+    monkeypatch.setattr(ms, "_launchctl", launchctl)
+    monkeypatch.setattr(ms, "_expected_inboxes", lambda: 1)
+    assert ms.check(tmp_path, "test.wa", Path("/Applications/wiki-agent.app")) == 1
+    out = capsys.readouterr().out
+    assert "檔案與檔案夾" in out and "完整磁碟取用權限" not in out
+
+
+def test_expected_readable_counts_every_inbox_and_both_folders_of_each_knowledge_base(monkeypatch, tmp_path):
+    cfg = type("C", (), {"icloud_inbox": tmp_path, "onedrive_inbox": None, "repos": (object(),)})()
+    monkeypatch.setattr(ms.Config, "default", classmethod(lambda cls: cfg))
+    assert ms._expected_inboxes() == 3
+
+
+def test_app_update_does_not_git_pull(tmp_path, monkeypatch, capsys):
+    """App 版的 ~/wiki-agent 沒有 .git:更新是換新版 App 再雙擊。"""
+    mark = tmp_path / ".app-bundle"
+    mark.write_text("/Applications/wiki-agent.app", encoding="utf-8")
+    monkeypatch.setattr(ms, "APP_MARK", mark)
+    ran = []
+    assert ms.update(tmp_path, run=lambda cmd: ran.append(cmd)) == 0
+    assert ran == [] and "wiki-agent" in capsys.readouterr().out

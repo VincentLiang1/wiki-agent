@@ -3,11 +3,13 @@
     uv run python scripts/macsched.py install      # 裝兩個 agent(收件、轉寫＋攝入,每 60 秒一輪)
     uv run python scripts/macsched.py uninstall    # 拿掉;設定檔、處理紀錄、知識庫都不動
     uv run python scripts/macsched.py status       # 看兩個 agent 在不在跑、上次結束碼
-    uv run python scripts/macsched.py check        # 用 launchd 跑一次「只列收件匣」:隱私權限只有在 launchd 底下才看得出來
+    uv run python scripts/macsched.py check        # 用 launchd 跑一次「只列收件匣與知識庫」:隱私權限只有在 launchd 底下才看得出來
     uv run python scripts/macsched.py fda-path     # 要加進「完整磁碟取用權限」的那個執行檔
     uv run python scripts/macsched.py update       # 等正在跑的一輪做完 → git pull → uv sync(Update.command 叫)
 
 與 Windows 版(winsched.py)相同:直接跑 clone 下來的這份 `.venv`,沒有發佈副本、沒有看門狗。
+雙擊 App 安裝的(scripts/make_mac_app.py,2026-10-22 起)改由 App 裡的啟動器跑:macOS 的讀取權限認的是簽章過的
+App,系統跳視窗問一次、按「允許」就好,不必加「完整磁碟取用權限」;程式在 ~/wiki-agent,但沒有 .git、不 git pull。
 
 - 標籤是 `io.github.wiki-agent.*`,不與使用者本人的 `tw.vli.wiki-feeder.*` 撞名;實測時用 `--prefix` 換一組
 - 更新不卸載 agent:拿 deploy.lock 的獨佔鎖——每一輪全程握它的共享鎖(collect.deploy_guard),所以會等正在跑的
@@ -37,6 +39,20 @@ PYTHON = REPO / ".venv" / "bin" / "python"
 PREFIX = "io.github.wiki-agent"
 INTERVAL = 60
 JOBS = {"collect": ["collect"], "process": ["process"]}
+# 雙擊 App 安裝時,App 的 setup.zsh 把 App 的位置寫在這個檔(每次雙擊都重寫);沒有這個檔 = 用 install.sh clone 的
+APP_MARK = REPO / ".app-bundle"
+LAUNCHER = "Contents/MacOS/wiki-agent"         # App 裡的主執行檔(make_mac_app.EXE)
+CHECK_WAIT = 60
+CHECK_WAIT_APP = 300   # App 版第一次讀會跳系統視窗,等人按「允許」:opendir 在核心裡卡到有人按為止(2026-10-22 實測)
+
+
+def app_bundle() -> Path | None:
+    """用 App 安裝的話回傳 App 的位置;clone 下來的回 None。"""
+    try:
+        text = APP_MARK.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return Path(text) if text.endswith(".app") else None
 
 
 def paths(home: Path) -> tuple[Path, Path]:
@@ -48,12 +64,15 @@ def env_path(home: Path) -> str:
     return f"{home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 
-def plist_for(label: str, cmd: list[str], home: Path, watch: list[Path] | None = None) -> dict:
+def plist_for(label: str, cmd: list[str], home: Path, watch: list[Path] | None = None,
+              app: Path | None = None) -> dict:
     _, state = paths(home)
     log = state / "logs" / f"{label.rsplit('.', 1)[-1]}.launchd.log"
+    # App 版一定要由 App 裡的啟動器起:讀取權限認的是「負責的行程」的簽章,直接跑 python 就不是那個 App
+    program = [str(app / LAUNCHER)] if app else [str(PYTHON), "-m", "wiki_feeder"]
     d = {
         "Label": label,
-        "ProgramArguments": [str(PYTHON), "-m", "wiki_feeder", *cmd],
+        "ProgramArguments": [*program, *cmd],
         "WorkingDirectory": str(REPO),
         "EnvironmentVariables": {"PATH": env_path(home), "HOME": str(home), "LANG": "en_US.UTF-8"},
         "StartInterval": INTERVAL,
@@ -91,7 +110,7 @@ def _inboxes(cfg: Config) -> list[Path]:
     return [p for p in (cfg.icloud_inbox, cfg.onedrive_inbox) if p]
 
 
-def install(home: Path, prefix: str = PREFIX) -> bool:
+def install(home: Path, prefix: str = PREFIX, app: Path | None = None) -> bool:
     try:
         cfg = Config.default()
     except ConfigError as e:
@@ -102,7 +121,7 @@ def install(home: Path, prefix: str = PREFIX) -> bool:
     ok = True
     for name, cmd in JOBS.items():
         ok &= _load(f"{prefix}.{name}", plist_for(f"{prefix}.{name}", cmd, home,
-                                                  _inboxes(cfg) if name == "collect" else None), agents)
+                                                  _inboxes(cfg) if name == "collect" else None, app), agents)
     return ok
 
 
@@ -133,26 +152,30 @@ def fda_path() -> str:
 
 
 def _expected_inboxes() -> int:
-    """設定好的收件匣有幾個(至少 1):每一個都要讀得到才算過。設定檔讀不了就只要求一個。"""
+    """要讀得到幾個(至少 1):每個收件匣,加上每個知識庫與它的原件資料夾(`collect --list --dirs` 各印一行)。
+    設定檔讀不了就只要求一個。"""
     try:
-        return max(1, len(_inboxes(Config.default())))
+        cfg = Config.default()
+        return max(1, len(_inboxes(cfg)) + 2 * len(cfg.repos))
     except Exception:  # noqa: BLE001 —— 讀不了設定檔不該讓檢查當掉
         return 1
 
 
-def check(home: Path, prefix: str = PREFIX) -> int:
-    """用 launchd 跑一次 `collect --list`:在終端機手動跑會過、launchd 底下才會被隱私權限擋。"""
+def check(home: Path, prefix: str = PREFIX, app: Path | None = None) -> int:
+    """用 launchd 跑一次 `collect --list --dirs`:在終端機手動跑會過、launchd 底下才會被隱私權限擋。
+    知識庫也要讀:放在「文件」「桌面」底下是另一種權限,App 版第一次碰到時系統要跳視窗問——
+    要趁朋友還在電腦前問完,半夜第一次碰到就沒人按、那一輪卡著不動。"""
     agents, state = paths(home)
     label = f"{prefix}.check"
     out = state / "logs" / "check.launchd.log"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.unlink(missing_ok=True)
-    d = plist_for(label, ["collect", "--list"], home)
+    d = plist_for(label, ["collect", "--list", "--dirs"], home, app=app)
     d.pop("StartInterval")
     if not _load(label, d, agents):
         return 1
     try:
-        for _ in range(60):
+        for _ in range(CHECK_WAIT_APP if app else CHECK_WAIT):
             r = _launchctl("print", f"{domain()}/{label}")
             if "state = not running" in r.stdout and out.exists():
                 break
@@ -166,8 +189,12 @@ def check(home: Path, prefix: str = PREFIX) -> int:
     # (cli 讀不到時印的是「錯誤:…」,不是「讀不到」:以前比對「讀不到」從來沒有命中過)
     readable = sum(any(f"\t{v}" in ln for v in i18n.variants("可讀")) for ln in text.splitlines())
     if readable < _expected_inboxes():
-        print(L("\n✗ launchd 底下讀不到收件匣。請把這個執行檔加進「完整磁碟取用權限」(安裝說明第 5 步):\n   {path}",
-                path=fda_path()))
+        if app:
+            print(L("\n✗ 背景讀不到。系統問「wiki-agent」能不能取用檔案時要按「允許」;按成「不允許」的話:"
+                    "系統設定 → 隱私權與安全性 → 檔案與檔案夾 → wiki-agent,把開關打開"))
+        else:
+            print(L("\n✗ launchd 底下讀不到收件匣。請把這個執行檔加進「完整磁碟取用權限」(安裝說明第 5 步):\n   {path}",
+                    path=fda_path()))
         return 1
     print(L("✓ launchd 底下讀得到收件匣"))
     return 0
@@ -190,6 +217,10 @@ def hold_exclusive(lock: Path, say=print, poll: float = 2.0):
 
 
 def update(home: Path, run=subprocess.run) -> int:
+    if app_bundle():
+        # App 版沒有 .git:程式跟著 App 走,換新版 App 再雙擊一次,setup.zsh 會換掉 ~/wiki-agent 的程式
+        print(L("這份是雙擊 App 裝的:下載新版 wiki-agent,拖進「應用程式」取代舊的,再雙擊一次就更新好了"))
+        return 0
     _, state = paths(home)
     before = fda_path()
     f = hold_exclusive(state / "deploy.lock")
@@ -229,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--prefix", default=PREFIX, help=L("launchd 標籤的開頭(實測時換一組,不與真的撞名)"))
     a = ap.parse_args(argv)
     if a.cmd == "install":
-        return 0 if install(home, a.prefix) else 1
+        return 0 if install(home, a.prefix, app_bundle()) else 1
     if a.cmd == "uninstall":
         uninstall(home, a.prefix)
     elif a.cmd == "status":
@@ -237,7 +268,7 @@ def main(argv: list[str] | None = None) -> int:
     elif a.cmd == "fda-path":
         print(fda_path())
     elif a.cmd == "check":
-        return check(home, a.prefix)
+        return check(home, a.prefix, app_bundle())
     else:
         return update(home)
     return 0

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from dataclasses import replace
 from logging.handlers import RotatingFileHandler
@@ -92,6 +93,7 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     c = sub.add_parser("collect", help=L("從三個收件匣取件到 Raw_Sources/_待處理/"))
     c.add_argument("--only", help=L("只跑部分入口,逗號分隔:icloud,onedrive,futures"))
     c.add_argument("--list", action="store_true", help=L("只列出雲端收件匣的候選檔,不搬、不碰 FUTURES"))
+    c.add_argument("--dirs", action="store_true", help=L("與 --list 一起用:每個知識庫與原件資料夾也各試讀一次"))
     sub.add_parser("convert", help=L("把 _待處理/ 裡取到的檔轉寫／OCR 成 md"))
     sub.add_parser("ingest", help=L("把轉好的檔攝入公事庫(FWIKI)、推送、發當日摘要"))
     sub.add_parser("process", help=L("轉寫＋攝入:convert → ingest(launchd 與收件分開跑,長錄音轉寫時收件不被擋)"))
@@ -323,6 +325,14 @@ def _work(args, cfg: Config) -> int:
                     print(f"{inbox.name}\t" + " + ".join(c.rel for c in g))
             except Exception as e:  # noqa: BLE001
                 print(f"{inbox.name}\t{L('錯誤:')}{e}")
+        # macsched.py check 在 launchd 底下跑:知識庫放在「文件」「桌面」底下的話,App 版要趁安裝時讓系統問過權限
+        for repo in cfg.repos if args.dirs else ():
+            for d in (repo.repo_dir, repo.raw_root):
+                try:
+                    os.listdir(d)
+                    print(f"{d}\t{L('可讀')}")
+                except OSError as e:
+                    print(f"{d}\t{L('錯誤:')}{e}")
         return 0
 
     _setup_logging(cfg)

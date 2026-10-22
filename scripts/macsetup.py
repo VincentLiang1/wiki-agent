@@ -1,5 +1,6 @@
 """第一次安裝的問答(Mac 朋友版):問收件匣、知識庫、doc2md、寄信,寫 config.toml、存寄信密碼(鑰匙圈)、
-跑一輪只列收件匣、裝排程、教怎麼加「完整磁碟取用權限」。由 install.sh 在 `uv sync` 之後叫:
+跑一輪只列收件匣、裝排程、教怎麼加「完整磁碟取用權限」。由 install.sh 在 `uv sync` 之後叫
+(雙擊 App 安裝的由 App 的 setup.zsh 叫,不必加權限:背景第一次讀的時候系統跳視窗,按「允許」):
 
     uv run python scripts/macsetup.py [--no-schedule] [--prefix 標籤開頭]
 
@@ -190,9 +191,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     ms = _script("macsched")
     prefix = args.prefix or ms.PREFIX
+    app = ms.app_bundle()
     say(L("\n=== 裝排程(每分鐘一輪) ==="))
-    if not ms.install(home, prefix):
+    if not ms.install(home, prefix, app):
         return 1
+    if app:
+        return _app_permission(home, prefix, app, state)
     say(L("\n=== 完整磁碟取用權限 ==="))
     say(L("排程在背景跑,要另外允許它讀 iCloud 雲碟。請照安裝說明第 5 步:"))
     say(L("  系統設定 → 隱私權與安全性 → 完整磁碟取用權限 → 左下角「+」→ 按 ⌘⇧G、貼上下面這一行 → 打開 → 確認開關是開的"))
@@ -208,6 +212,25 @@ def main(argv: list[str] | None = None) -> int:
             break
     say(L("\n✓ 安裝完成。一分鐘後程式就開始自己跑;往 _WikiBox 丟一個檔,幾分鐘後知識庫裡會多一頁。"))
     say(L("  看紀錄:{log};停掉排程:雙擊 Remove-Schedule.command;更新程式:雙擊 Update.command", log=state / "logs" / "feeder.log"))
+    return 0
+
+
+def _app_permission(home: Path, prefix: str, app: Path, state: Path) -> int:
+    """App 版:在背景試讀一次,讓系統趁現在跳視窗問權限(收件匣在 iCloud 雲碟,知識庫可能在「文件」「桌面」)。"""
+    ms = _script("macsched")
+    say(L("\n=== 讀取權限 ==="))
+    say(L("等一下系統會跳出「“wiki-agent”想要取用……的檔案」的視窗(iCloud 雲碟;知識庫放在「文件」「桌面」的話,"
+          "那邊也會再問一次),每一個都按「允許」。"))
+    while True:
+        input(L("  準備好了按 Enter,我在背景試讀一次(最多等 5 分鐘)…"))
+        if ms.check(home, prefix, app) == 0:
+            break
+        if not yes(L("  還是讀不到,要再試一次嗎?")):
+            say(L("  先不管:排程照樣在跑,只是讀不到;之後打開權限就會自己恢復"))
+            break
+    say(L("\n✓ 安裝完成。一分鐘後程式就開始自己跑;往 _WikiBox 丟一個檔,幾分鐘後知識庫裡會多一頁。"))
+    say(L("  看紀錄:{log};停掉排程:雙擊 ~/wiki-agent 裡的 Remove-Schedule.command;"
+          "更新程式:下載新版 wiki-agent 取代舊的,再雙擊一次", log=state / "logs" / "feeder.log"))
     return 0
 
 
