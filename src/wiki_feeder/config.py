@@ -150,6 +150,11 @@ class Config:
     icloud_probe_every: float = 900     # 隔多久寫一次探針(秒,不含系統睡眠)
     icloud_sync_timeout: float = 600    # 寫了之後多久還沒傳上去算 iCloud 卡住
     icloud_restart_checks: int = 12     # 重啟 bird 之後最多查幾次(每 15 秒一次)
+    # 下載端(使用者 2026-10-22):探針只測得到上傳,手機傳上去、Mac 下載不下來時查不出來,只能定時重啟 bird。
+    # icloud_probe_dir 有設才做(只有使用者本人的 Mac)。閒著時大約每 15～18 分鐘重啟一次,iCloud 停約 10 秒
+    icloud_kick_every: float = 900      # 距上次重啟多久才再重啟(秒,牆上時間)
+    icloud_busy_bytes: int = 120_000    # cloudd 一輪(3 分鐘)傳超過這麼多算傳輸中、不重啟;閒著的心跳只有幾 KB
+    icloud_log_keep_days: float = 10    # icloud.log 留幾天
     # 聲紋同步橋樑(scribe2md-ios 的 voiceprint_bridge.py)每輪寫的狀態檔;None = 不查。
     # 使用者 2026-10-14:讀不到雲端檔先自己修、修完寄信講經過,修不好才寄信找人
     vp_bridge_status: Path | None = None
@@ -242,6 +247,14 @@ class Config:
     @property
     def icloud_probe_state_path(self) -> Path:
         return self.state_dir / "icloud_probe.json"
+
+    @property
+    def icloud_kick_state_path(self) -> Path:
+        return self.state_dir / "icloud_kick.json"      # 上次重啟 bird 的時間、cloudd 的累計位元組
+
+    @property
+    def icloud_log_path(self) -> Path:
+        return self.state_dir / "logs" / "icloud.log"   # 下載端每輪一行
 
     @property
     def tool_gaps_path(self) -> Path:

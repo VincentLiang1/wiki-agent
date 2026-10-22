@@ -3,6 +3,7 @@
 使用者 2026-10-05 定案:直接開放自動修;STOP 只在「原因明確、內容無害」時自動解除;一天最多 3 次;
 同一個問題修過一次又出現就不再自己修,改寄信找人;CPU／記憶體被佔用只查原因、寄信。
 iCloud 沒在同步(使用者 2026-10-09 要求)不叫 claude:程式自己重啟 bird、再寫一次探針確認,次數規矩相同。
+iCloud 下載端(使用者 2026-10-22):沒有訊號可查,定時重啟 bird(_kick_icloud);不算次數、不寄信。
 
 分工(都是踩過才定的):
 - **發佈與 resume 由這裡做,修理的 claude 不做**:deploy 可能要等一小時的鎖,claude 的 Bash 最多 10 分鐘;
@@ -35,8 +36,8 @@ from .ingest import git as repo_git
 from .ledger import Ledger
 from .proc import run_net
 from .notify import send
-from .watchdog import (Problem, _descendants, deploying, detect, icloud_synced, probe_path, processes, running,
-                       write_probe)
+from .watchdog import (Problem, _descendants, brctl_status, cloudd_bytes, deploying, detect, icloud_kick, icloud_log,
+                       icloud_synced, mark_kicked, probe_path, processes, running, write_probe)
 
 log = logging.getLogger(__name__)
 
@@ -133,6 +134,8 @@ class Deps:
     restart_bird: Callable[[], str] = None
     vp_kick: Callable[[str], str] = None        # 立刻重跑一次聲紋橋樑(launchctl kickstart -k)
     vp_download: Callable[[Path], str] = None   # 要求 iCloud 把佔位檔載下來(brctl download)
+    brctl_status: Callable[[], str | None] = None   # None = 不做定時重啟 bird(測試、非 Mac)
+    cloudd_bytes: Callable[[], int | None] = None
     now: Callable[[], float] = time.time
     sleep: Callable[[float], None] = time.sleep
     extra: dict = field(default_factory=dict)
@@ -236,7 +239,28 @@ def _vp_download(path: Path) -> str:
 def default_deps() -> Deps:
     from .watchdog import agents_not_loaded
     return Deps(online=_online, deploy=_deploy, resume=_resume, mail=_mail, agents_check=agents_not_loaded,
-                icloud_synced=icloud_synced, restart_bird=_restart_bird, vp_kick=_vp_kick, vp_download=_vp_download)
+                icloud_synced=icloud_synced, restart_bird=_restart_bird, vp_kick=_vp_kick, vp_download=_vp_download,
+                **({"brctl_status": brctl_status, "cloudd_bytes": cloudd_bytes} if sys.platform == "darwin" else {}))
+
+
+def _kick_icloud(cfg: Config, deps: Deps, now: float) -> None:
+    """iCloud 下載端:定時重啟 bird(判斷在 watchdog.icloud_kick)。是例行保養、不是修理:不寫 repair.jsonl、不寄信——
+    算進次數的話,一天 3 次馬上用完,探針真的卡住時反而只能寄信找人。"""
+    if cfg.icloud_probe_dir is None or deps.brctl_status is None or deps.cloudd_bytes is None:
+        return
+    try:
+        if not deps.online():
+            mark_net_down(cfg)
+            icloud_log(cfg, now, "連不上網路,略過")
+            return
+        kick, line = icloud_kick(cfg, now, deps.brctl_status(), deps.cloudd_bytes())
+        if kick:
+            line += ":" + deps.restart_bird()
+            mark_kicked(cfg, now)
+            log.info("iCloud 定時重啟 bird:%s", line)
+        icloud_log(cfg, now, line)
+    except Exception:  # noqa: BLE001 —— 保養出錯不可擋住看門狗其他的檢查
+        log.exception("iCloud 定時重啟 bird 出錯")
 
 
 # -- 紀錄 --------------------------------------------------------------------------
@@ -454,6 +478,10 @@ def _tick(cfg: Config, deps: Deps) -> str:
             return "正在發佈新版,這輪不查"
         now = deps.now()
         problems = detect(cfg, now, deps.agents_check, deps.sample, icloud_check=deps.icloud_synced)
+        # 在 detect 之後:先重啟的話,同一輪的探針檢查會碰上剛重開的 bird(brctl 沒回應)誤判成卡住、再重啟一次。
+        # 探針已經卡住時交給 _fix_icloud,這裡不動
+        if not any(p.kind == "icloud" or p.key.startswith("icloud") for p in problems):
+            _kick_icloud(cfg, deps, now)
         if not problems:
             # 上一次等過的要清掉:留著的話下次讀不到時次數檔一定比它新,第一輪就算「收件又跑過一輪」(2026-10-20 實例)
             _inbox_wait_path(cfg).unlink(missing_ok=True)
@@ -558,6 +586,7 @@ def _fix_icloud(cfg: Config, deps: Deps, now: float, problems: list[Problem]) ->
     actions, ok, detail = [], False, ""
     try:
         actions.append(deps.restart_bird())
+        mark_kicked(cfg, deps.now())   # 定時重啟從這裡重新計時
         deps.sleep(15)
         written = deps.now()
         write_probe(cfg, written)
@@ -632,6 +661,7 @@ def _fix_vp_bridge(cfg: Config, deps: Deps, now: float, problems: list[Problem])
         ok = attempt()
         if not ok and any("/Mobile Documents/" in str(f.get("path", "")) for f in left.values()):
             actions.append(deps.restart_bird())
+            mark_kicked(cfg, deps.now())
             deps.sleep(15)
             ok = attempt()
     except Exception as e:  # noqa: BLE001 —— 重跑不了、讀不到狀態:一樣寄信

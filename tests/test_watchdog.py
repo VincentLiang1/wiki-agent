@@ -1244,3 +1244,115 @@ def test_vp_bridge_stuck_again_within_a_week_only_mails(env, dev, tmp_path):
     _vp(env, tmp_path, {"journal-phone.jsonl": (ICLOUD_J, 40 * 60)})    # 又卡住
     repair.tick(c, d)
     assert len(kicks) == 1 and [s[:1] for s, _ in calls.mail] == ["✅", "🛑"] and "到 Mac 前面" in calls.mail[1][1]
+
+
+# -- iCloud 下載端:定時重啟 bird(2026-10-22) -------------------------------------
+
+BRCTL = "<c{1}m.a{3}e.C{7}s[1] foreground {client:idle sync:has-synced-down last-sync:2026-10-22 16:35:54, caught-up}>"
+
+
+def _kick_deps(c, calls, restarts, cloudd, clock_now, online=True):
+    """cloudd:每輪 nettop 讀到的累計位元組;clock_now:[牆上時間],測試自己往前推。"""
+    deps = _deps(c, calls, online=online)
+    it = iter(cloudd)
+    deps.brctl_status = lambda: BRCTL
+    deps.cloudd_bytes = lambda: next(it)
+    deps.restart_bird = lambda: restarts.append(clock_now[0]) or "已結束 iCloud 雲碟的 bird(pid 1)"
+    deps.icloud_synced = _no_real_icloud      # 探針還沒到時限,不可以去查
+    deps.now = lambda: clock_now[0]
+    return deps
+
+
+def _ticks(c, deps, clock_now, n, step=180):
+    for _ in range(n):
+        repair.tick(c, deps)
+        clock_now[0] += step
+
+
+def test_icloud_kick_restarts_bird_on_schedule_without_counting_or_mail(env, monkeypatch):
+    """手機傳上去、Mac 下載不下來時探針查不出來(2026-10-22 實例):距上次重啟 15 分鐘以上、cloudd 閒著就重啟。
+    是例行保養:不寫 repair.jsonl(否則一天 3 次馬上用完)、不寄信。"""
+    c, _ = _icloud(env["cfg"], monkeypatch)
+    calls, restarts, t = Calls(), [], [1_800_000_000.0]
+    deps = _kick_deps(c, calls, restarts, [1000 * i for i in range(20)], t)
+    _ticks(c, deps, t, 10)          # 0 分:第一次記 cloudd;3 分:重啟;之後 15 分鐘內不再重啟
+    assert [r - 1_800_000_000 for r in restarts] == [180, 180 + 180 * 5]
+    assert not calls.mail and not c.repair_log_path.exists()
+    text = c.icloud_log_path.read_text(encoding="utf-8")
+    assert "last-sync 距今" in text and "cloudd 這輪傳了 1000 bytes" in text and "重啟 bird" in text
+    assert len(text.splitlines()) == 10                         # 每輪一行
+
+
+def test_icloud_kick_waits_while_cloudd_is_transferring(env, monkeypatch):
+    """大檔傳超過 15 分鐘時,傳輸中也重啟的話每到期就被打斷一次,永遠傳不完。"""
+    c, _ = _icloud(env["cfg"], monkeypatch)
+    calls, restarts, t = Calls(), [], [1_800_000_000.0]
+    _ticks(c, _kick_deps(c, calls, restarts, [0, 5_000_000, 10_000_000], t), t, 3)
+    assert restarts == [] and "傳輸中" in c.icloud_log_path.read_text(encoding="utf-8")
+
+
+def test_icloud_kick_counts_from_zero_after_cloudd_restarted(env, monkeypatch):
+    """nettop 給的是 cloudd 開起來之後的累計:數字變小 = cloudd 重開過,這輪傳的量是新的累計值,不是負數。"""
+    c, _ = _icloud(env["cfg"], monkeypatch)
+    calls, restarts, t = Calls(), [], [1_800_000_000.0]
+    _ticks(c, _kick_deps(c, calls, restarts, [10_000_000, 5_000_000], t), t, 2)
+    assert restarts == [] and "cloudd 重開過" in c.icloud_log_path.read_text(encoding="utf-8")
+
+
+def test_icloud_kick_skips_when_offline(env, monkeypatch):
+    c, _ = _icloud(env["cfg"], monkeypatch)
+    calls, restarts, t = Calls(), [], [1_800_000_000.0]
+    _ticks(c, _kick_deps(c, calls, restarts, [0, 0, 0], t, online=False), t, 3)
+    assert restarts == [] and "連不上網路" in c.icloud_log_path.read_text(encoding="utf-8")
+    assert c.state_dir.joinpath("net_down.json").exists()      # 探針看這個:斷網期間沒傳上去不算卡住
+
+
+def test_icloud_kick_needs_a_readable_traffic_count(env, monkeypatch):
+    """nettop 讀不到(launchd 底下被擋之類)不可當成閒著:那等於傳輸中也照樣重啟。"""
+    c, _ = _icloud(env["cfg"], monkeypatch)
+    calls, restarts, t = Calls(), [], [1_800_000_000.0]
+    _ticks(c, _kick_deps(c, calls, restarts, [None] * 3, t), t, 3)
+    assert restarts == [] and "傳輸量讀不到" in c.icloud_log_path.read_text(encoding="utf-8")
+
+
+def test_icloud_stall_fix_and_kick_share_one_restart_clock(env, dev, monkeypatch):
+    """探針卡住那輪只由修理重啟一次(定時重啟不跟著再砍);修理重啟過,下一輪的定時重啟也從那時重新計時。"""
+    c, clock = _icloud(replace(env["cfg"], repair_repo=dev), monkeypatch)
+    c.state_dir.mkdir(parents=True, exist_ok=True)
+    c.icloud_kick_state_path.write_text(json.dumps({"cloudd": 0}))
+    _stall(c, clock)
+    calls, restarts, t = Calls(), [], [1_800_000_000.0]
+    deps = _kick_deps(c, calls, restarts, [100, 200, 300], t)
+    deps.icloud_synced = _synced([(False, ""), (True, "已上傳")])
+    repair.tick(c, deps)
+    assert len(restarts) == 1 and calls.mail[0][0].startswith("✅")
+    t[0] += 180
+    repair.tick(c, deps)
+    assert len(restarts) == 1
+
+
+def test_icloud_kick_is_off_without_probe_dir(env):
+    """只有使用者本人的 Mac 設了探針資料夾;朋友那台、Windows 不重啟 bird。"""
+    calls, restarts, t = Calls(), [], [1_800_000_000.0]
+    c = env["cfg"]
+    assert c.icloud_probe_dir is None
+    _ticks(c, _kick_deps(c, calls, restarts, [0, 0, 0], t), t, 3)
+    assert restarts == [] and not c.icloud_log_path.exists()
+
+
+def test_icloud_log_keeps_only_recent_days(cfg):
+    from wiki_feeder.watchdog import icloud_log
+    day = 86400
+    t0 = 1_800_000_000.0
+    for i in range(14):
+        icloud_log(cfg, t0 + i * day, f"第 {i} 天")
+    lines = cfg.icloud_log_path.read_text(encoding="utf-8").splitlines()
+    assert lines[0].endswith("第 3 天") and lines[-1].endswith("第 13 天")
+
+
+def test_parse_nettop():
+    from wiki_feeder.watchdog import parse_nettop
+    assert parse_nettop(",bytes_in,bytes_out,\ncloudd.718,14974,17658,\n") == 32632
+    assert parse_nettop(",bytes_in,bytes_out,\n") == 0                  # 沒有 cloudd 行程:閒著
+    assert parse_nettop("") is None and parse_nettop("nettop: permission denied") is None
+    assert parse_nettop(",bytes_in,bytes_out,\ncloudd.1,x,1,\n") is None

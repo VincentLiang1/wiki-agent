@@ -12,6 +12,7 @@
     inbox     收件匣連續讀不到達警示門檻
     resource  CPU／記憶體被佔著不放(使用者 2026-10-05 要求):只查原因、寄信,不砍別人的行程
     icloud    iCloud 沒在同步(使用者 2026-10-09 要求):探針檔寫了太久沒傳上去;程式自己重啟 bird,不叫 claude
+另外 icloud_kick 判斷要不要「定時重啟 bird」(下載端,使用者 2026-10-22;不是問題、不寄信,動手的是 repair.py)。
 """
 from __future__ import annotations
 
@@ -308,6 +309,7 @@ def resources(cfg: Config, procs: list[dict], free_pct: float | None, total: int
 # -- iCloud 同步 -------------------------------------------------------------------
 
 PROBE_NAME = "心跳.txt"
+LAST_SYNC = re.compile(r"last-sync:(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)")   # brctl status 的整個 iCloud 雲碟最後同步
 # 檔案本身有沒有傳上去(NSURLUbiquitousItemIsUploadedKey);印 true／false
 _UPLOADED_JS = """ObjC.import('Foundation');
 function run(argv) {
@@ -341,7 +343,7 @@ def icloud_synced(path: Path, since: float) -> tuple[bool | None, str]:
     up = js.stdout.strip()
     if up not in ("true", "false"):
         return None, f"查不了探針檔的上傳狀態:{(js.stderr or js.stdout).strip()[:300]}"
-    m = re.search(r"last-sync:(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)", st.stdout)
+    m = LAST_SYNC.search(st.stdout)
     if not m and "last-sync:never" not in st.stdout:
         return None, f"brctl status 看不懂:{(st.stderr or st.stdout).strip()[:300]}"
     last = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S").timestamp() if m else None
@@ -398,6 +400,125 @@ def icloud_probe(cfg: Config, now: float, synced=icloud_synced) -> list[Problem]
     return [Problem("icloud", "icloud:stalled", "iCloud 沒在同步",
                     f"探針檔 {probe_path(cfg)} 寫進去 {age / 60:.0f} 分鐘還沒傳上 iCloud(上限 "
                     f"{cfg.icloud_sync_timeout / 60:.0f} 分鐘)。{detail}")]
+
+
+# -- iCloud 下載端:定時重啟 bird ---------------------------------------------------
+# 探針只測得到「上傳」:2026-10-22 手機 16:32 送出的檔 Mac 一直沒下載,探針 16:35:50 寫入、16:35:54 照樣傳上去
+# (last-sync 就是被它刷新的),所以探針看來一切正常;16:46 手動重啟 bird,10 秒內檔就到了。Mac 看不到還沒下載的檔,
+# 下載端卡住沒有訊號可查,last-sync 又被探針自己的上傳刷新,也不能拿來判斷。能做的只有定時重啟:
+# 距上次重啟 icloud_kick_every 以上、cloudd 這輪沒在傳大量資料 → 重啟。last-sync 只記進紀錄、不當條件。
+
+def last_sync(text: str | None) -> float | None:
+    m = LAST_SYNC.search(text or "")
+    return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S").timestamp() if m else None
+
+
+def brctl_status() -> str | None:
+    """brctl status 的輸出(含錯誤訊息);60 秒沒回應回 None。要在有「完整磁碟取用權限」的 python 底下跑:
+    launchd 直接跑 brctl 會被擋(self-check failed ... Access denied,2026-10-22 實測)。"""
+    try:
+        r = subprocess.run(["brctl", "status", "com.apple.CloudDocs"], capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        return None
+    except OSError as e:
+        return f"brctl 跑不起來:{e}"
+    return r.stdout + r.stderr
+
+
+def parse_nettop(out: str) -> int | None:
+    """`nettop -P -L 1 -x -J bytes_in,bytes_out -p cloudd` 的 cloudd 累計位元組(進＋出);看不懂回 None。"""
+    lines = out.splitlines()
+    if not lines or "bytes_in" not in lines[0]:
+        return None
+    total = 0
+    for ln in lines[1:]:
+        cells = ln.split(",")
+        if cells[0].startswith("cloudd") and len(cells) >= 3:
+            try:
+                total += int(cells[1]) + int(cells[2])
+            except ValueError:
+                return None
+    return total
+
+
+def cloudd_bytes() -> int | None:
+    """cloudd(iCloud 檔案內容實際上下傳的行程)開起來之後的累計位元組;讀不到回 None。沒有 cloudd 行程算 0。"""
+    try:
+        r = subprocess.run(["nettop", "-P", "-L", "1", "-x", "-J", "bytes_in,bytes_out", "-p", "cloudd"],
+                           capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return parse_nettop(r.stdout) if r.returncode == 0 else None
+
+
+def _kick_state(cfg: Config) -> dict:
+    try:
+        st = json.loads(cfg.icloud_kick_state_path.read_text(encoding="utf-8"))
+        return st if isinstance(st, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_kick_state(cfg: Config, st: dict) -> None:
+    cfg.icloud_kick_state_path.parent.mkdir(parents=True, exist_ok=True)
+    cfg.icloud_kick_state_path.write_text(json.dumps(st), encoding="utf-8")
+
+
+def mark_kicked(cfg: Config, now: float) -> None:
+    """記下重啟 bird 的時間(牆上時間)。探針卡住、聲紋橋樑的修理重啟 bird 也記這裡:定時重啟從那時重新計時,
+    不會剛修完又被定時重啟一次。睡醒後第一輪多半就到期,照樣重啟——睡醒的 bird 常常沒接上。"""
+    st = _kick_state(cfg)
+    st["kicked"] = now
+    _save_kick_state(cfg, st)
+
+
+def icloud_kick(cfg: Config, now: float, status: str | None, cur: int | None) -> tuple[bool, str]:
+    """這一輪要不要重啟 bird,以及寫進 icloud.log 的那一行。順手記下 cloudd 的累計位元組給下一輪比。"""
+    st = _kick_state(cfg)
+    prev, kicked = st.get("cloudd"), st.get("kicked")
+    last = last_sync(status)
+    if last is not None:
+        parts = [f"last-sync 距今 {now - last:.0f} 秒"]
+    elif status is None:
+        parts = ["brctl status 60 秒沒回應"]
+    else:
+        parts = ["讀不到 last-sync:" + " ".join(status.split())[:200]]
+    moved = None
+    if cur is None:
+        parts.append("cloudd 傳輸量讀不到")
+    elif not isinstance(prev, int):
+        parts.append(f"cloudd 累計 {cur} bytes(第一次記,下一輪才比得出傳輸量)")
+    else:
+        moved = cur - prev if cur >= prev else cur   # 變小 = cloudd 重開過,從 0 算起
+        parts.append(f"cloudd 這輪傳了 {moved} bytes" + ("(cloudd 重開過,從 0 算)" if cur < prev else ""))
+    if cur is not None:
+        st["cloudd"] = cur
+        _save_kick_state(cfg, st)
+    since = now - kicked if isinstance(kicked, (int, float)) else None
+    if since is not None and 0 <= since < cfg.icloud_kick_every:
+        return False, "、".join(parts) + f";距上次重啟 {since / 60:.0f} 分鐘,不重啟"
+    if moved is None:
+        return False, "、".join(parts) + ";傳輸量不確定,這輪不重啟"
+    if moved > cfg.icloud_busy_bytes:
+        # 大檔可能傳超過 icloud_kick_every:傳輸中也重啟的話,每到期就被打斷一次,永遠傳不完
+        return False, "、".join(parts) + ";cloudd 傳輸中,不重啟"
+    return True, "、".join(parts) + ";重啟 bird"
+
+
+def icloud_log(cfg: Config, now: float, line: str) -> None:
+    """每輪一行(使用者 2026-10-22 要求看得到 last-sync 距今幾秒、傳輸量、有沒有重啟);只留 icloud_log_keep_days 天。
+    不寫進 feeder.log:每 3 分鐘一行會把那邊的輪替洗掉(重啟另外記一行在 feeder.log)。"""
+    path = cfg.icloud_log_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fmt = "%Y-%m-%d %H:%M:%S"
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(f"{datetime.fromtimestamp(now).strftime(fmt)} {line}\n")
+    cutoff = datetime.fromtimestamp(now - cfg.icloud_log_keep_days * 86400).strftime(fmt)
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    if lines and lines[0][:19] < cutoff:
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text("".join(ln for ln in lines if ln[:19] >= cutoff), encoding="utf-8")
+        os.replace(tmp, path)
 
 
 # -- 聲紋同步橋樑 -------------------------------------------------------------------
