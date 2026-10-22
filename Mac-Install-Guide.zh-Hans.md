@@ -23,7 +23,7 @@
 2. 再打 `claude` 按 Enter。第一次会问主题颜色(按 Enter 就好),接着选登录方式——选 **Claude 账号(订阅)** 那一项,浏览器会自动打开 Claude 的登录页,登录你自己的账号、按**授权**
 3. 回到终端,看到可以打字的提示就是登录好了。打 `/exit` 按 Enter 离开
 
-## 3. 装 scribe2md(把录音、文文件转成文字)
+## 3. 装 scribe2md(把录音、文档转成文字)
 
 1. 用浏览器打开 <https://github.com/VincentLiang1/scribe2md/releases/latest>,在页面下方 **Assets** 点 **scribe2md-mac.zip** 下载
 2. 打开「下载项目」文件夹,双击 zip 解压缩,把解出来的 App **拖进「应用程序」文件夹**
@@ -31,7 +31,7 @@
 
 ## 4. (可以先跳过)准备 Gmail 的应用专用密码
 
-摘要信要用 Gmail 寄。不想收信可以跳过,之后重跑第 5 步的那一行再设。
+摘要信要用 Gmail 寄。不想收信可以跳过,之后再双击一次 wiki-agent 就能补设。
 
 1. 浏览器打开 <https://myaccount.google.com/security>,确认**两步骤验证**是开的
 2. 打开 <https://myaccount.google.com/apppasswords>,名称打 `wiki-agent`,按**创建**
@@ -39,11 +39,12 @@
 
 ## 5. 安装 wiki-agent
 
-在终端粘贴这一行,按 Enter:
+1. 浏览器打开 <https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip>,会下载 **wiki-agent-mac.zip**
+2. 打开「下载项目」文件夹,双击 zip 解压缩,把解出来的 **wiki-agent** **拖进「应用程序」文件夹**。⚠️ 一定要先拖进去:直接在「下载项目」里双击,它会请你先搬过去
+3. 打开「应用程序」,**双击 wiki-agent**。第一次会问「“wiki-agent”是从互联网下载的 App,确定要打开吗?」,按**打开**
+4. 会自动打开一个终端窗口,接着照下面做
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash
-```
+(备用方式:在终端粘贴 `curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash` 也能装,问答一样;但这样装的要另外把一个可执行文件加进「完全磁盘访问权限」,终端画面会教你怎么做。)
 
 ### 5-1. 命令行开发工具(第一次才会有)
 
@@ -52,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/insta
 - 按 **安装**(不要按「取得 Xcode」)→ 授权合约按 **同意** → 等进度条跑完(约 5～15 分钟)→ 按 **完成**
 - 终端会自己接着做,不用再贴一次
 
-接着它会自己装 uv、下载程序到家目录的 `wiki-agent` 文件夹、准备 Python 环境(第一次要几分钟)。
+接着它会自己装 uv、把程序放到家目录的 `wiki-agent` 文件夹、准备 Python 环境(第一次要几分钟)。
 
 ### 5-2. 回答问题
 
@@ -79,15 +80,13 @@ curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/insta
 | 读得到收件箱吗 | 自动。看到 `iCloud	可读` 就对了 |
 | 装定时任务 | 自动。看到两行 `…:已装好` |
 
-### 5-3. 完全磁盘访问权限(一定要做)
+### 5-3. 允许读取(一定要做)
 
-定时任务在背景跑,macOS 要你另外允许它读 iCloud 云盘。安装程序会自动打开 **系统设置 → 隐私与安全性 → 完全磁盘访问权限**,终端上会印一行很长的路径(结尾是 `python3.12` 之类):
+定时任务在背景跑,macOS 要你允许它读 iCloud 云盘。终端说「准备好了按 Enter」时按 Enter:
 
-1. 先在终端**选取那一行路径、⌘C 拷贝**
-2. 到系统设置那一页,按清单下方的 **+**(会要你输入 Mac 密码或按 Touch ID)
-3. 跳出选文件的窗口后,按 **⌘ + Shift + G**,⌘V 粘贴刚刚的路径,按 Enter,再按 **打开**
-4. 清单里多了一个 `python3.12`(或类似的名字),**确认它右边的开关是开的**
-5. 回到终端按 Enter——它会在背景试读一次收件箱,看到 `✓ launchd 底下读得到收件箱` 就完成了;说读不到就重做一次 1～4
+1. 画面会跳出「“wiki-agent”想要取用……的文件」的窗口,按**允许**
+2. 知识库放在「文档」或「桌面」底下的话,会再跳一次,一样按**允许**
+3. 看到 `✓ launchd 底下读得到收件箱` 就完成了;说读不到的话,照「出状况时」的「读不到收件箱」打开开关,再试一次
 
 最后看到 `✓ 安装完成` 就可以关掉终端。
 
@@ -114,18 +113,18 @@ curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/insta
 
 ## 更新
 
-Finder 打开家目录的 **wiki-agent** 文件夹 → 双击 **Update.command**(第一次问「确定要打开吗?」按 **打开**)。终端会说「等正在跑的一轮做完」(如果刚好在处理文件),接着下载新版,看到 `✓ 更新好了` 按 Enter 关闭。定时任务不用重装。
+照第 5 步的 1～3 再做一次:下载新的 zip、把 wiki-agent 拖进「应用程序」(问要不要取代就按**取代**)、双击。终端会换上新程序,问「沿用这份(不重填)?」时按 Enter。定时任务与「允许」都不必重来。
 
-画面说「Python 换了版本:要重新把这个可执行文件加进完全磁盘访问权限」的话,照第 5-3 步再加一次它印的新路径。
+(用终端那一行装的:Finder 打开家目录的 **wiki-agent** 文件夹 → 双击 **Update.command**。画面说「Python 换了版本」的话,照它印的新路径重加完全磁盘访问权限。)
 
 ## 移除
 
-- **只停掉自动处理**:双击 wiki-agent 文件夹里的 **Remove-Schedule.command**。设置、记录、知识库都不动;要再开,重贴第 5 步那一行
-- **整个拿掉**:先做上面那步,再把家目录的 `wiki-agent` 文件夹,和 `~/Library/Application Support/wiki-feeder`(⌘⇧G 粘贴这个路径)丢到垃圾桶。**你的知识库(`WIKI`、`Raw_Sources`)不在这两个地方,不会被删**;系统设置里完全磁盘访问权限那一项可以按 **−** 拿掉
+- **只停掉自动处理**:Finder 打开家目录的 **wiki-agent** 文件夹,双击 **Remove-Schedule.command**。设置、记录、知识库都不动;要再开,双击「应用程序」里的 wiki-agent
+- **整个拿掉**:先做上面那步,再把「应用程序」里的 wiki-agent、家目录的 `wiki-agent` 文件夹,和 `~/Library/Application Support/wiki-feeder`(⌘⇧G 粘贴这个路径)丢到垃圾桶。**你的知识库(`WIKI`、`Raw_Sources`)不在这些地方,不会被删**
 
 ## 出状况时
 
 - **信的主旨开头是「⚠️ 需要处理」**:打开终端,打 `cd ~/wiki-agent && claude`,把那封信整封贴给 Claude,请它照 wiki-agent 的规则处理
 - **「Claude Code 没登录或登录过期」**:终端打 `claude` 重新登录,下一轮就会自己接着做
-- **读不到收件箱**:多半是完全磁盘访问权限没加或被关掉,照第 5-3 步检查;也可以在 wiki-agent 文件夹里跑 `.venv/bin/python scripts/macsched.py check` 试读
+- **读不到收件箱**:多半是当初按了「不允许」:左上角  → **系统设置** → **隐私与安全性** → **文件和文件夹** → 找到 **wiki-agent**,把 iCloud 云盘(与「文档」「桌面」)的开关打开,再双击一次 wiki-agent 重新检查(用终端那一行装的,是完全磁盘访问权限没加或被关掉)
 - **不要自己在知识库里运行 git**(包括请 Claude 帮你 commit):程序只接受它自己验证过的版本,多一笔就会停下来等人

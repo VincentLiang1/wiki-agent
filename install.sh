@@ -1,5 +1,6 @@
 #!/bin/bash
 # wiki-agent 的 Mac 安裝(第一次安裝、重填設定都用這一行)。在「終端機」貼上:
+# (2026-10-22 起主要的裝法是 Release 的 wiki-agent-mac.zip:雙擊 App、權限按「允許」就好;這一行留著當備用)
 #
 #   curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash
 #

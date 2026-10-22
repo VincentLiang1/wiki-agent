@@ -138,3 +138,13 @@ def test_config_language(tmp_path):
         assert Config.from_file(_cfg_text(tmp_path, f'[general]\nlanguage = "{lang}"'), tmp_path).lang == lang
     with pytest.raises(ConfigError):
         Config.from_file(_cfg_text(tmp_path, '[general]\nlanguage = "fr"'), tmp_path)
+
+
+def test_simplified_texts_have_no_doubled_wen():
+    """OpenCC 把「文件」轉成「文档」,ZH_HANS_FIX 的「档 → 文件」又把它改成「文文件」(2026-10-22 在簡中說明裡發現,
+    已發佈好幾次):l10n_sync.py 在最後補「文文件 → 文档」。簡中的說明、譯文檔、.bat 都不可以出現。"""
+    public = ROOT / "public" if (ROOT / "public").is_dir() else ROOT
+    texts = [p.read_text(encoding="utf-8") for p in public.glob("*zh-Hans*.md")]
+    texts.append((ROOT / "src" / "wiki_feeder" / "locales" / "zh-Hans.json").read_text(encoding="utf-8"))
+    texts += [p.read_bytes().decode("utf-8") for p in ROOT.glob("*.bat")]
+    assert texts and not [t for t in texts if "文文件" in t]

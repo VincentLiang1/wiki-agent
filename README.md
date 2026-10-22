@@ -29,7 +29,7 @@ wiki-agent 是一支在你電腦上常駐的小程式,替你照 Andrej Karpathy 
 
 ## 安裝
 
-- **Mac**:看 [Mac-Install-Guide.zh-Hant.md](Mac-Install-Guide.zh-Hant.md)。打開「終端機」貼上一行:
+- **Mac**:看 [Mac-Install-Guide.zh-Hant.md](Mac-Install-Guide.zh-Hant.md)。下載 [wiki-agent-mac.zip](https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip)、解開,把 wiki-agent 拖進「應用程式」再雙擊(已簽章公證)。備用:打開「終端機」貼上一行:
   ```bash
   curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash
   ```

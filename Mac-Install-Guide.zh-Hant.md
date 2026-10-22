@@ -31,7 +31,7 @@
 
 ## 4. (可以先跳過)準備 Gmail 的應用程式密碼
 
-摘要信要用 Gmail 寄。不想收信可以跳過,之後重跑第 5 步的那一行再設。
+摘要信要用 Gmail 寄。不想收信可以跳過,之後再雙擊一次 wiki-agent 就能補設。
 
 1. 瀏覽器打開 <https://myaccount.google.com/security>,確認**兩步驟驗證**是開的
 2. 打開 <https://myaccount.google.com/apppasswords>,名稱打 `wiki-agent`,按**建立**
@@ -39,11 +39,12 @@
 
 ## 5. 安裝 wiki-agent
 
-在終端機貼上這一行,按 Enter:
+1. 瀏覽器打開 <https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip>,會下載 **wiki-agent-mac.zip**
+2. 打開「下載項目」資料夾,雙擊 zip 解壓縮,把解出來的 **wiki-agent** **拖進「應用程式」資料夾**。⚠️ 一定要先拖進去:直接在「下載項目」裡雙擊,它會請你先搬過去
+3. 打開「應用程式」,**雙擊 wiki-agent**。第一次會問「“wiki-agent”是從網際網路下載的 App,確定要打開嗎?」,按**打開**
+4. 會自動打開一個終端機視窗,接著照下面做
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash
-```
+(備用方式:在終端機貼上 `curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash` 也能裝,問答一樣;但這樣裝的要另外把一個執行檔加進「完整磁碟取用權限」,終端機畫面會教你怎麼做。)
 
 ### 5-1. 命令列開發工具(第一次才會有)
 
@@ -52,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/insta
 - 按 **安裝**(不要按「取得 Xcode」)→ 授權合約按 **同意** → 等進度條跑完(約 5～15 分鐘)→ 按 **完成**
 - 終端機會自己接著做,不用再貼一次
 
-接著它會自己裝 uv、下載程式到家目錄的 `wiki-agent` 資料夾、準備 Python 環境(第一次要幾分鐘)。
+接著它會自己裝 uv、把程式放到家目錄的 `wiki-agent` 資料夾、準備 Python 環境(第一次要幾分鐘)。
 
 ### 5-2. 回答問題
 
@@ -79,15 +80,13 @@ curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/insta
 | 讀得到收件匣嗎 | 自動。看到 `iCloud	可讀` 就對了 |
 | 裝排程 | 自動。看到兩行 `…:已裝好` |
 
-### 5-3. 完整磁碟取用權限(一定要做)
+### 5-3. 允許讀取(一定要做)
 
-排程在背景跑,macOS 要你另外允許它讀 iCloud 雲碟。安裝程式會自動打開 **系統設定 → 隱私權與安全性 → 完整磁碟取用權限**,終端機上會印一行很長的路徑(結尾是 `python3.12` 之類):
+排程在背景跑,macOS 要你允許它讀 iCloud 雲碟。終端機說「準備好了按 Enter」時按 Enter:
 
-1. 先在終端機**選取那一行路徑、⌘C 複製**
-2. 到系統設定那一頁,按清單下方的 **+**(會要你輸入 Mac 密碼或按 Touch ID)
-3. 跳出選檔案的視窗後,按 **⌘ + Shift + G**,⌘V 貼上剛剛的路徑,按 Enter,再按 **打開**
-4. 清單裡多了一個 `python3.12`(或類似的名字),**確認它右邊的開關是開的**
-5. 回到終端機按 Enter——它會在背景試讀一次收件匣,看到 `✓ launchd 底下讀得到收件匣` 就完成了;說讀不到就重做一次 1～4
+1. 畫面會跳出「“wiki-agent”想要取用……的檔案」的視窗,按**允許**
+2. 知識庫放在「文件」或「桌面」底下的話,會再跳一次,一樣按**允許**
+3. 看到 `✓ launchd 底下讀得到收件匣` 就完成了;說讀不到的話,照「出狀況時」的「讀不到收件匣」打開開關,再試一次
 
 最後看到 `✓ 安裝完成` 就可以關掉終端機。
 
@@ -114,18 +113,18 @@ curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/insta
 
 ## 更新
 
-Finder 打開家目錄的 **wiki-agent** 資料夾 → 雙擊 **Update.command**(第一次問「確定要打開嗎?」按 **打開**)。終端機會說「等正在跑的一輪做完」(如果剛好在處理檔案),接著下載新版,看到 `✓ 更新好了` 按 Enter 關閉。排程不用重裝。
+照第 5 步的 1～3 再做一次:下載新的 zip、把 wiki-agent 拖進「應用程式」(問要不要取代就按**取代**)、雙擊。終端機會換上新程式,問「沿用這份(不重填)?」時按 Enter。排程與「允許」都不必重來。
 
-畫面說「Python 換了版本:要重新把這個執行檔加進完整磁碟取用權限」的話,照第 5-3 步再加一次它印的新路徑。
+(用終端機那一行裝的:Finder 打開家目錄的 **wiki-agent** 資料夾 → 雙擊 **Update.command**。畫面說「Python 換了版本」的話,照它印的新路徑重加完整磁碟取用權限。)
 
 ## 移除
 
-- **只停掉自動處理**:雙擊 wiki-agent 資料夾裡的 **Remove-Schedule.command**。設定、紀錄、知識庫都不動;要再開,重貼第 5 步那一行
-- **整個拿掉**:先做上面那步,再把家目錄的 `wiki-agent` 資料夾,和 `~/Library/Application Support/wiki-feeder`(⌘⇧G 貼上這個路徑)丟到垃圾桶。**你的知識庫(`WIKI`、`Raw_Sources`)不在這兩個地方,不會被刪**;系統設定裡完整磁碟取用權限那一項可以按 **−** 拿掉
+- **只停掉自動處理**:Finder 打開家目錄的 **wiki-agent** 資料夾,雙擊 **Remove-Schedule.command**。設定、紀錄、知識庫都不動;要再開,雙擊「應用程式」裡的 wiki-agent
+- **整個拿掉**:先做上面那步,再把「應用程式」裡的 wiki-agent、家目錄的 `wiki-agent` 資料夾,和 `~/Library/Application Support/wiki-feeder`(⌘⇧G 貼上這個路徑)丟到垃圾桶。**你的知識庫(`WIKI`、`Raw_Sources`)不在這些地方,不會被刪**
 
 ## 出狀況時
 
 - **信的主旨開頭是「⚠️ 需要處理」**:打開終端機,打 `cd ~/wiki-agent && claude`,把那封信整封貼給 Claude,請它照 wiki-agent 的規則處理
 - **「Claude Code 沒登入或登入過期」**:終端機打 `claude` 重新登入,下一輪就會自己接著做
-- **讀不到收件匣**:多半是完整磁碟取用權限沒加或被關掉,照第 5-3 步檢查;也可以在 wiki-agent 資料夾裡跑 `.venv/bin/python scripts/macsched.py check` 試讀
+- **讀不到收件匣**:多半是當初按了「不允許」:左上角  → **系統設定** → **隱私權與安全性** → **檔案與檔案夾** → 找到 **wiki-agent**,把 iCloud 雲碟(與「文件」「桌面」)的開關打開,再雙擊一次 wiki-agent 重新檢查(用終端機那一行裝的,是完整磁碟取用權限沒加或被關掉)
 - **不要自己在知識庫裡執行 git**(包括請 Claude 幫你 commit):程式只接受它自己驗證過的版本,多一筆就會停下來等人

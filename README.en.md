@@ -39,12 +39,13 @@ Full step-by-step guides: **[Mac-Install-Guide.md](Mac-Install-Guide.md)** and *
 2. Install Claude Code and sign in with your Claude account: in Terminal run `curl -fsSL https://claude.ai/install.sh | bash`, then `claude`
 3. Download `scribe2md-mac.zip` from the [scribe2md releases](https://github.com/VincentLiang1/scribe2md/releases/latest), drag the app into Applications and open it once so it can set itself up
 4. (Optional) Create a Gmail app password at <https://myaccount.google.com/apppasswords> for the summary email
-5. Paste this line into Terminal:
+5. Download [wiki-agent-mac.zip](https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip) (signed and notarized), unzip it, drag wiki-agent into Applications and double-click it there. A Terminal window opens: if macOS offers to install the command line developer tools, click **Install** (not "Get Xcode"). The installer then sets up uv, puts the program in `~/wiki-agent` and asks a series of questions — each has a default, so you can mostly just press Enter
+6. **Allow reading (required)**: at the end it test-reads in the background and macOS asks whether “wiki-agent” may access files in iCloud Drive (and in Documents/Desktop if your knowledge base is there) — click **Allow**
+
+Alternative to steps 5–6: paste this line into Terminal (then you add an executable to Full Disk Access instead; Terminal shows you how):
    ```bash
    curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash
    ```
-   If macOS offers to install the command line developer tools, click **Install** (not "Get Xcode"). The installer then sets up uv, downloads the program into `~/wiki-agent` and asks a series of questions — each has a default, so you can mostly just press Enter
-6. **Full Disk Access (required)**: the scheduled job runs in the background, and macOS must allow it to read iCloud Drive. The installer opens System Settings → Privacy & Security → Full Disk Access and prints a long path (ending in something like `python3.12`). Click **+**, press ⌘⇧G, paste the path, click **Open**, make sure the switch is on, then press Enter in Terminal so it can test-read the inbox
 
 **Windows**
 

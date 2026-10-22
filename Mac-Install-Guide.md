@@ -33,7 +33,7 @@ You'll need it for several steps: press **⌘ + Space** (Spotlight), type `Termi
 
 ## 4. (Optional, can be done later) Create a Gmail app password
 
-The daily summary is sent through Gmail. If you don't want the email you can skip this and set it up later by running the one-line command in step 5 again.
+The daily summary is sent through Gmail. If you don't want the email you can skip this and set it up later by double-clicking wiki-agent again.
 
 1. In your browser, open <https://myaccount.google.com/security> and make sure **2-Step Verification** is on
 2. Open <https://myaccount.google.com/apppasswords>, type `wiki-agent` as the name and click **Create**
@@ -41,11 +41,12 @@ The daily summary is sent through Gmail. If you don't want the email you can ski
 
 ## 5. Install wiki-agent
 
-Paste this line into Terminal and press Enter:
+1. In your browser, open <https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip>; it downloads **wiki-agent-mac.zip**
+2. Open your Downloads folder, double-click the zip to unpack it, and **drag the unpacked wiki-agent into the Applications folder**. ⚠️ Move it first: if you double-click it inside Downloads, it asks you to move it
+3. Open Applications and **double-click wiki-agent**. The first time macOS asks whether you're sure you want to open an app downloaded from the internet — click **Open**
+4. A Terminal window opens on its own; continue below
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash
-```
+(Alternative: pasting `curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash` into Terminal installs the same thing with the same questions, but then you also have to add an executable to Full Disk Access; Terminal shows you how.)
 
 ### 5-1. Command line developer tools (first time only)
 
@@ -81,15 +82,13 @@ Type `3` and press Enter (if your Mac is set to English, just press Enter). Afte
 | `=== Can the inbox be read? (in Terminal) ===` | Automatic. `iCloud	readable` means it's fine |
 | `=== Installing the schedule (one round per minute) ===` | Automatic. You'll see two lines ending in `: installed` |
 
-### 5-3. Full Disk Access (required)
+### 5-3. Allow reading (required)
 
-Under `=== Full Disk Access ===` it says: `The schedule runs in the background and needs separate permission to read iCloud Drive.` The installer automatically opens **System Settings → Privacy & Security → Full Disk Access**, and Terminal prints a long path (ending in something like `python3.12`):
+The schedule runs in the background, and macOS asks you to allow it to read iCloud Drive. When Terminal says to press Enter when you're ready, press Enter:
 
-1. In Terminal, **select that path and copy it with ⌘C**
-2. In System Settings, click **+** below the list (you'll be asked for your Mac password or Touch ID)
-3. When the file picker opens, press **⌘ + Shift + G**, paste the path with ⌘V, press Enter, then click **Open**
-4. A new entry `python3.12` (or similar) appears in the list — **make sure its switch on the right is on**
-5. Go back to Terminal, where it says `Once it's added, press Enter and I'll try reading the inbox once in the background…`, and press Enter. `✓ The inbox can be read under launchd` means you're done. If it says `Still can't read it. Try again?`, repeat 1–4
+1. A window `“wiki-agent” would like to access files in …` appears — click **Allow**
+2. If your knowledge base is in Documents or Desktop, it asks once more — click **Allow** again
+3. `✓ The inbox can be read under launchd` means you're done. If it can't read, turn the switch on as described under "It can't read the inbox" in *When something goes wrong*, then try again
 
 When you see `✓ Installation complete.` you can close Terminal.
 
@@ -116,18 +115,18 @@ Once set up, `上次同步` ("last synced") at the bottom of that column on the 
 
 ## Updating
 
-In Finder, open the **wiki-agent** folder in your home folder → double-click **Update.command** (the first time macOS asks whether you're sure you want to open it — click **Open**). If a file is being processed, Terminal says `The current round hasn't finished yet … waiting for it to finish before updating`; then it downloads the new version. When you see `✓ Update done; the next round uses the new program`, press Enter to close. You don't need to reinstall the schedule.
+Repeat steps 1–3 of step 5: download the new zip, drag wiki-agent into Applications (click **Replace** if asked) and double-click it. Terminal puts the new program in place; when it asks whether to keep the current settings, press Enter. The schedule and the "Allow" don't need to be redone.
 
-If it says `⚠ Python changed version: add this executable to Full Disk Access again`, repeat step 5-3 with the new path it prints.
+(If you installed with the Terminal command: in Finder, open the **wiki-agent** folder in your home folder → double-click **Update.command**. If it says Python changed version, add the new path it prints to Full Disk Access again.)
 
 ## Uninstalling
 
-- **Stop automatic processing only**: double-click **Remove-Schedule.command** in the wiki-agent folder. Settings, logs and your knowledge base are untouched; to turn it back on, paste the line from step 5 again
-- **Remove everything**: do the step above, then move the `wiki-agent` folder in your home folder and `~/Library/Application Support/wiki-feeder` (⌘⇧G, paste this path) to the Trash. **Your knowledge base (`WIKI`, `Raw_Sources`) is in neither place and will not be deleted.** You can also remove the Full Disk Access entry in System Settings with **−**
+- **Stop automatic processing only**: in Finder, open the **wiki-agent** folder in your home folder and double-click **Remove-Schedule.command**. Settings, logs and your knowledge base are untouched; to turn it back on, double-click wiki-agent in Applications
+- **Remove everything**: do the step above, then move wiki-agent in Applications, the `wiki-agent` folder in your home folder and `~/Library/Application Support/wiki-feeder` (⌘⇧G, paste this path) to the Trash. **Your knowledge base (`WIKI`, `Raw_Sources`) is in none of these places and will not be deleted.**
 
 ## When something goes wrong
 
 - **The email subject starts with `⚠️ Needs attention`**: open Terminal, type `cd ~/wiki-agent && claude`, paste the whole email into Claude and ask it to handle it according to wiki-agent's rules (you can write to Claude in English)
 - **The email says Claude Code is not signed in or the sign-in expired**: type `claude` in Terminal and sign in again; the next round picks up where it left off
-- **It can't read the inbox**: usually Full Disk Access is missing or switched off — check step 5-3. You can also run `.venv/bin/python scripts/macsched.py check` in the wiki-agent folder to test-read it
+- **It can't read the inbox**: usually "Don't Allow" was clicked: Apple menu  → **System Settings** → **Privacy & Security** → **Files and Folders** → **wiki-agent**, turn on iCloud Drive (and Documents/Desktop), then double-click wiki-agent again to re-check (if you installed with the Terminal command, Full Disk Access is missing or switched off)
 - **Don't run git in the knowledge base yourself** (including asking Claude to commit for you): the program only accepts versions it has verified itself; one extra commit makes it stop and wait for a person

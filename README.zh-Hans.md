@@ -7,7 +7,7 @@
 wiki-agent 是一支在你电脑上常驻的小程序,替你照 Andrej Karpathy 的「LLM Wiki」做法维护个人知识库:
 
 1. 你在 iPhone 上把录音、白板照片、扫描件、Office 文件丢进 iCloud 云盘的 `_WikiBox` 文件夹
-2. 电脑上的 wiki-agent 每分钟看一次:把文件收进原件文件夹 `Raw_Sources`,录音与文文件先转成文字(用 [scribe2md](https://github.com/VincentLiang1/scribe2md))
+2. 电脑上的 wiki-agent 每分钟看一次:把文件收进原件文件夹 `Raw_Sources`,录音与文档先转成文字(用 [scribe2md](https://github.com/VincentLiang1/scribe2md))
 3. 用你自己的 Claude Code,照你知识库里的 `CLAUDE.md` 规则把它编进 `WIKI/Wiki_Pages/`:新建页面或补进既有的页、更新目录 `index.md`
 4. 程序检查过才记成一个版本(git,由程序代管,你不用学)。每天寄一封摘要信告诉你处理了什么
 
@@ -29,7 +29,7 @@ wiki-agent 是一支在你电脑上常驻的小程序,替你照 Andrej Karpathy 
 
 ## 安装
 
-- **Mac**:看 [Mac-Install-Guide.zh-Hans.md](Mac-Install-Guide.zh-Hans.md)。打开「终端」粘贴一行:
+- **Mac**:看 [Mac-Install-Guide.zh-Hans.md](Mac-Install-Guide.zh-Hans.md)。下载 [wiki-agent-mac.zip](https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip)、解开,把 wiki-agent 拖进「应用程序」再双击(已签章公证)。备用:打开「终端」粘贴一行:
   ```bash
   curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash
   ```
