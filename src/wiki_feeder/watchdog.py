@@ -28,6 +28,7 @@ from pathlib import Path
 from .collect import build_inboxes, last_net_down, run_file, uptime
 from .config import Config
 from .ledger import Ledger
+from .osplat import is_placeholder
 
 AGENT_LABELS = ("tw.vli.wiki-feeder.collect", "tw.vli.wiki-feeder.process")
 
@@ -267,7 +268,7 @@ def _exempt(cfg: Config, procs: list[dict], now: float) -> set[int]:
 
 def resources(cfg: Config, procs: list[dict], free_pct: float | None, total: int,
               exclude: set[int] = frozenset()) -> list[Problem]:
-    """連續幾次檢查都超標才算(一次高峰不算);計數記在 resource_watch.json,換了 pid 重新算。"""
+    """連續幾次檢查都超標才算(一次高峰不算);計數記在 resource_watch.json,換了 pid 重新算(bird 除外:照執行檔算)。"""
     try:
         state = json.loads(cfg.resource_state_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -280,7 +281,7 @@ def resources(cfg: Config, procs: list[dict], free_pct: float | None, total: int
     for p in procs:
         if p["pid"] in exclude:
             continue
-        k = str(p["pid"])
+        k = BIRD if p["comm"] == BIRD else str(p["pid"])   # 定時重啟每 15 分鐘換掉 bird 的 pid
         if p["cpu"] >= cfg.resource_cpu_pct:
             cpu[k] = prev_cpu.get(k, 0) + 1
             if cpu[k] >= cfg.resource_cpu_ticks:
@@ -405,8 +406,13 @@ def icloud_probe(cfg: Config, now: float, synced=icloud_synced) -> list[Problem]
 # -- iCloud 下載端:定時重啟 bird ---------------------------------------------------
 # 探針只測得到「上傳」:2026-10-22 手機 16:32 送出的檔 Mac 一直沒下載,探針 16:35:50 寫入、16:35:54 照樣傳上去
 # (last-sync 就是被它刷新的),所以探針看來一切正常;16:46 手動重啟 bird,10 秒內檔就到了。Mac 看不到還沒下載的檔,
-# 下載端卡住沒有訊號可查,last-sync 又被探針自己的上傳刷新,也不能拿來判斷。能做的只有定時重啟:
-# 距上次重啟 icloud_kick_every 以上、cloudd 這輪沒在傳大量資料 → 重啟。last-sync 只記進紀錄、不當條件。
+# 下載端卡住沒有訊號可查,last-sync 又被探針自己的上傳刷新,也不能拿來判斷。能做的只有定時重啟(repair._kick_icloud)。
+# 「傳輸中不重啟」看收件匣的佔位檔(還在下載的檔就是佔位檔),不看流量:nettop 的 cloudd 位元組是「當下開著的連線」
+# 的加總、cloudd 又是整台所有 CloudKit App 共用的(照片、鑰匙圈…),量不出 iCloud 雲碟在不在傳(2026-10-22 審查);
+# brctl status 在 80 MB 上傳全程都是 client:idle(同日實測),也不能用。
+
+BIRD = "/System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird"
+
 
 def last_sync(text: str | None) -> float | None:
     m = LAST_SYNC.search(text or "")
@@ -415,7 +421,9 @@ def last_sync(text: str | None) -> float | None:
 
 def brctl_status() -> str | None:
     """brctl status 的輸出(含錯誤訊息);60 秒沒回應回 None。要在有「完整磁碟取用權限」的 python 底下跑:
-    launchd 直接跑 brctl 會被擋(self-check failed ... Access denied,2026-10-22 實測)。"""
+    launchd 直接跑 brctl 會被擋(self-check failed ... Access denied,2026-10-22 實測)。
+    ⚠️ 這也是叫醒 bird 的呼叫:bird 不是 KeepAlive,砍掉後要有人用 IPC 找它才會被叫起來(2026-10-22 審查:
+    沒人找的話空窗到下一輪看門狗、約 3 分鐘)。"""
     try:
         r = subprocess.run(["brctl", "status", "com.apple.CloudDocs"], capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
@@ -425,30 +433,30 @@ def brctl_status() -> str | None:
     return r.stdout + r.stderr
 
 
-def parse_nettop(out: str) -> int | None:
-    """`nettop -P -L 1 -x -J bytes_in,bytes_out -p cloudd` 的 cloudd 累計位元組(進＋出);看不懂回 None。"""
-    lines = out.splitlines()
-    if not lines or "bytes_in" not in lines[0]:
+def bird_running() -> bool:
+    return any(p["comm"] == BIRD for p in processes())
+
+
+def inbox_placeholders(folder: Path | None) -> list[str] | None:
+    """收件匣裡內容還在雲端的檔(相對路徑);讀不到回 None。舊式 `.名稱.icloud` 記成原名。"""
+    if folder is None:
         return None
-    total = 0
-    for ln in lines[1:]:
-        cells = ln.split(",")
-        if cells[0].startswith("cloudd") and len(cells) >= 3:
-            try:
-                total += int(cells[1]) + int(cells[2])
-            except ValueError:
-                return None
-    return total
-
-
-def cloudd_bytes() -> int | None:
-    """cloudd(iCloud 檔案內容實際上下傳的行程)開起來之後的累計位元組;讀不到回 None。沒有 cloudd 行程算 0。"""
+    found = []
     try:
-        r = subprocess.run(["nettop", "-P", "-L", "1", "-x", "-J", "bytes_in,bytes_out", "-p", "cloudd"],
-                           capture_output=True, text=True, timeout=30)
-    except (OSError, subprocess.TimeoutExpired):
+        for root, _dirs, files in os.walk(folder, onerror=_raise):
+            for fn in files:
+                rel = os.path.relpath(os.path.join(root, fn), folder)
+                if fn.startswith(".") and fn.endswith(".icloud"):
+                    found.append(os.path.join(os.path.dirname(rel), fn[1:-len(".icloud")]))
+                elif is_placeholder(os.stat(os.path.join(root, fn), follow_symlinks=False)):
+                    found.append(rel)
+    except OSError:
         return None
-    return parse_nettop(r.stdout) if r.returncode == 0 else None
+    return sorted(found)
+
+
+def _raise(e: OSError) -> None:
+    raise e
 
 
 def _kick_state(cfg: Config) -> dict:
@@ -461,7 +469,7 @@ def _kick_state(cfg: Config) -> dict:
 
 def _save_kick_state(cfg: Config, st: dict) -> None:
     cfg.icloud_kick_state_path.parent.mkdir(parents=True, exist_ok=True)
-    cfg.icloud_kick_state_path.write_text(json.dumps(st), encoding="utf-8")
+    cfg.icloud_kick_state_path.write_text(json.dumps(st, ensure_ascii=False), encoding="utf-8")
 
 
 def mark_kicked(cfg: Config, now: float) -> None:
@@ -472,10 +480,27 @@ def mark_kicked(cfg: Config, now: float) -> None:
     _save_kick_state(cfg, st)
 
 
-def icloud_kick(cfg: Config, now: float, status: str | None, cur: int | None) -> tuple[bool, str]:
-    """這一輪要不要重啟 bird,以及寫進 icloud.log 的那一行。順手記下 cloudd 的累計位元組給下一輪比。"""
+def _probe_note(cfg: Config) -> tuple[str, bool]:
+    """探針的狀態(寫進紀錄:定時重啟順手修好的上傳卡住,事後至少看得出來)與「剛寫入、還在等上傳」。"""
+    try:
+        st = json.loads(cfg.icloud_probe_state_path.read_text(encoding="utf-8"))
+        age = uptime() - st["up"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return "探針沒有狀態", False
+    if not st.get("pending"):
+        return "探針已確認傳上去", False
+    return f"探針寫入 {age / 60:.0f} 分鐘、等確認", 0 <= age < KICK_PROBE_GRACE
+
+
+KICK_PROBE_GRACE = 180   # 探針寫入後這麼久內不重啟(看門狗一輪):重啟會打斷它的上傳,修理時又被誤判成卡住
+
+
+def icloud_kick(cfg: Config, now: float, status: str | None, pending: list[str] | None) -> tuple[bool, str]:
+    """這一輪該不該重啟 bird,以及寫進 icloud.log 的那一行(網路由呼叫端在要重啟時才查)。
+    pending:收件匣的佔位檔(None = 讀不到);每個佔位檔記下第一次看到的時間,icloud_busy_max 內算「下載中」、
+    不重啟;超過的就是下載卡住了,照樣重啟。"""
     st = _kick_state(cfg)
-    prev, kicked = st.get("cloudd"), st.get("kicked")
+    kicked = st.get("kicked")
     last = last_sync(status)
     if last is not None:
         parts = [f"last-sync 距今 {now - last:.0f} 秒"]
@@ -483,42 +508,52 @@ def icloud_kick(cfg: Config, now: float, status: str | None, cur: int | None) ->
         parts = ["brctl status 60 秒沒回應"]
     else:
         parts = ["讀不到 last-sync:" + " ".join(status.split())[:200]]
-    moved = None
-    if cur is None:
-        parts.append("cloudd 傳輸量讀不到")
-    elif not isinstance(prev, int):
-        parts.append(f"cloudd 累計 {cur} bytes(第一次記,下一輪才比得出傳輸量)")
+    probe, probe_fresh = _probe_note(cfg)
+    parts.append(probe)
+    downloading = None
+    if pending is None:
+        parts.append("收件匣讀不到")
     else:
-        moved = cur - prev if cur >= prev else cur   # 變小 = cloudd 重開過,從 0 算起
-        parts.append(f"cloudd 這輪傳了 {moved} bytes" + ("(cloudd 重開過,從 0 算)" if cur < prev else ""))
-    if cur is not None:
-        st["cloudd"] = cur
-        _save_kick_state(cfg, st)
+        old = st.get("placeholders") if isinstance(st.get("placeholders"), dict) else {}
+        seen = {n: old.get(n, now) for n in pending}
+        if seen != old:
+            st["placeholders"] = seen
+            _save_kick_state(cfg, st)
+        downloading = [n for n, t in seen.items() if now - t < cfg.icloud_busy_max]
+        stuck = len(seen) - len(downloading)
+        parts.append(f"收件匣佔位檔 {len(seen)} 個(下載中 {len(downloading)}、超過 {cfg.icloud_busy_max / 60:.0f} 分鐘 {stuck})"
+                     if seen else "收件匣沒有佔位檔")
     since = now - kicked if isinstance(kicked, (int, float)) else None
     if since is not None and 0 <= since < cfg.icloud_kick_every:
         return False, "、".join(parts) + f";距上次重啟 {since / 60:.0f} 分鐘,不重啟"
-    if moved is None:
-        return False, "、".join(parts) + ";傳輸量不確定,這輪不重啟"
-    if moved > cfg.icloud_busy_bytes:
-        # 大檔可能傳超過 icloud_kick_every:傳輸中也重啟的話,每到期就被打斷一次,永遠傳不完
-        return False, "、".join(parts) + ";cloudd 傳輸中,不重啟"
-    return True, "、".join(parts) + ";重啟 bird"
+    if downloading is None:
+        return False, "、".join(parts) + ";看不到收件匣有沒有檔在下載,這輪不重啟"
+    if downloading:
+        # 重啟會打斷下載(檔維持佔位、重開後重載);大檔下載超過 icloud_kick_every 的話每到期就被打斷一次
+        return False, "、".join(parts) + ";收件匣有檔在下載,不重啟"
+    if probe_fresh:
+        return False, "、".join(parts) + ";探針剛寫入,下一輪再重啟"
+    return True, "、".join(parts)
 
 
 def icloud_log(cfg: Config, now: float, line: str) -> None:
-    """每輪一行(使用者 2026-10-22 要求看得到 last-sync 距今幾秒、傳輸量、有沒有重啟);只留 icloud_log_keep_days 天。
-    不寫進 feeder.log:每 3 分鐘一行會把那邊的輪替洗掉(重啟另外記一行在 feeder.log)。"""
+    """每輪一行(使用者 2026-10-22 要求看得到 last-sync 距今幾秒、有沒有重啟);只留 icloud_log_keep_days 天。
+    不寫進 feeder.log:每 3 分鐘一行會把那邊的輪替洗掉(重啟另外記一行在 feeder.log)。
+    第一行比保留天數再舊一天才整份重寫:每輪都剛好有一行過期,照「過期就重寫」會變成每 3 分鐘重寫 0.5 MB。"""
     path = cfg.icloud_log_path
     path.parent.mkdir(parents=True, exist_ok=True)
     fmt = "%Y-%m-%d %H:%M:%S"
     with open(path, "a", encoding="utf-8") as f:
         f.write(f"{datetime.fromtimestamp(now).strftime(fmt)} {line}\n")
+    with open(path, encoding="utf-8", errors="replace") as f:
+        first = f.readline()
+    if first[:19] >= datetime.fromtimestamp(now - (cfg.icloud_log_keep_days + 1) * 86400).strftime(fmt):
+        return
     cutoff = datetime.fromtimestamp(now - cfg.icloud_log_keep_days * 86400).strftime(fmt)
-    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-    if lines and lines[0][:19] < cutoff:
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text("".join(ln for ln in lines if ln[:19] >= cutoff), encoding="utf-8")
-        os.replace(tmp, path)
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text("".join(ln for ln in lines if ln[:19] >= cutoff), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 # -- 聲紋同步橋樑 -------------------------------------------------------------------

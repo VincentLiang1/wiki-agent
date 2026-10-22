@@ -36,8 +36,9 @@ from .ingest import git as repo_git
 from .ledger import Ledger
 from .proc import run_net
 from .notify import send
-from .watchdog import (Problem, _descendants, brctl_status, cloudd_bytes, deploying, detect, icloud_kick, icloud_log,
-                       icloud_synced, mark_kicked, probe_path, processes, running, write_probe)
+from .watchdog import (BIRD, Problem, _descendants, bird_running, brctl_status, deploying, detect, icloud_kick,
+                       icloud_log, icloud_synced, inbox_placeholders, mark_kicked, probe_path, processes, running,
+                       write_probe)
 
 log = logging.getLogger(__name__)
 
@@ -134,8 +135,9 @@ class Deps:
     restart_bird: Callable[[], str] = None
     vp_kick: Callable[[str], str] = None        # 立刻重跑一次聲紋橋樑(launchctl kickstart -k)
     vp_download: Callable[[Path], str] = None   # 要求 iCloud 把佔位檔載下來(brctl download)
-    brctl_status: Callable[[], str | None] = None   # None = 不做定時重啟 bird(測試、非 Mac)
-    cloudd_bytes: Callable[[], int | None] = None
+    brctl_status: Callable[[], str | None] = None   # None = 不做定時重啟、重啟後也不叫醒 bird(測試、非 Mac)
+    bird_running: Callable[[], bool] = None
+    icloud_online: Callable[[], bool] = None        # 連得上 iCloud(www.icloud.com:443)
     now: Callable[[], float] = time.time
     sleep: Callable[[float], None] = time.sleep
     extra: dict = field(default_factory=dict)
@@ -200,9 +202,6 @@ def _mail(cfg: Config, subject: str, body: str) -> None:
     log.info("已寄信:%s", subject)
 
 
-BIRD = "/System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird"
-
-
 def _restart_bird(procs: list[dict] | None = None) -> str:
     """bird 是 iCloud 雲碟的同步程式(≈ Windows 的 OneDrive.exe)。launchctl kickstart 被 SIP 擋(2026-10-09 實測),
     只能結束它;它不是 KeepAlive,但有人要用 iCloud 就會被 launchd 叫起來(實測砍掉後一秒內就有新的)。
@@ -240,28 +239,65 @@ def default_deps() -> Deps:
     from .watchdog import agents_not_loaded
     return Deps(online=_online, deploy=_deploy, resume=_resume, mail=_mail, agents_check=agents_not_loaded,
                 icloud_synced=icloud_synced, restart_bird=_restart_bird, vp_kick=_vp_kick, vp_download=_vp_download,
-                **({"brctl_status": brctl_status, "cloudd_bytes": cloudd_bytes} if sys.platform == "darwin" else {}))
+                icloud_online=_icloud_online,
+                **({"brctl_status": brctl_status, "bird_running": bird_running} if sys.platform == "darwin" else {}))
+
+
+
+def _icloud_online() -> bool:
+    try:
+        socket.create_connection(("www.icloud.com", 443), timeout=8).close()
+        return True
+    except OSError:
+        return False
+
+
+def _kick_bird(cfg: Config, deps: Deps) -> tuple[str, bool]:
+    """重啟 bird、記下時間、叫它回來(定時重啟、探針卡住、聲紋橋樑三處共用)。回傳 (經過, bird 有沒有回來)。
+    bird 不是 KeepAlive:只砍不叫的話,要等下一個用 IPC 找它的程式才會起來,實測空窗最長 3 分鐘(2026-10-22 審查)。
+    記時間失敗不可擋住修理:探針的修理還要重寫探針、確認,寫不進 icloud_kick.json 不代表 iCloud 修不好。"""
+    msg = deps.restart_bird()
+    try:
+        mark_kicked(cfg, deps.now())
+    except OSError as e:
+        log.error("記不下重啟 bird 的時間:%s", e)
+        msg += f"(記不下重啟時間:{e})"
+    if deps.brctl_status is None or deps.bird_running is None:
+        return msg, True
+    for _ in range(5):
+        deps.sleep(2)
+        deps.brctl_status()   # 叫醒 bird 的就是這一下
+        if deps.bird_running():
+            return msg + ";bird 已重新起來", True
+    return msg + ";叫了 5 次 bird 都沒回來", False
 
 
 def _kick_icloud(cfg: Config, deps: Deps, now: float) -> None:
-    """iCloud 下載端:定時重啟 bird(判斷在 watchdog.icloud_kick)。是例行保養、不是修理:不寫 repair.jsonl、不寄信——
-    算進次數的話,一天 3 次馬上用完,探針真的卡住時反而只能寄信找人。"""
-    if cfg.icloud_probe_dir is None or deps.brctl_status is None or deps.cloudd_bytes is None:
+    """iCloud 下載端:定時重啟 bird(判斷在 watchdog.icloud_kick)。是例行保養、不是修理:不寫 repair.jsonl、
+    不寄修理信——算進次數的話,一天 3 次馬上用完,探針真的卡住時反而只能寄信找人。保養本身壞了(出錯、bird 叫不回來)
+    才寄找人的信(一天一封、不算次數),否則下載端沒人顧、使用者卻以為還在。
+    排在這一輪的修理之後:修理重啟過 bird 會記時間,這裡就不會同一輪再砍一次。"""
+    if cfg.icloud_probe_dir is None or deps.brctl_status is None:
         return
     try:
-        if not deps.online():
-            mark_net_down(cfg)
-            icloud_log(cfg, now, "連不上網路,略過")
-            return
-        kick, line = icloud_kick(cfg, now, deps.brctl_status(), deps.cloudd_bytes())
-        if kick:
-            line += ":" + deps.restart_bird()
-            mark_kicked(cfg, now)
+        due, line = icloud_kick(cfg, now, deps.brctl_status(), inbox_placeholders(cfg.icloud_inbox))
+        if due and not deps.icloud_online():
+            mark_net_down(cfg)   # 探針看這個:斷網期間沒傳上去不算卡住
+            line += ";連不上 iCloud,不重啟"
+        elif due:
+            msg, back = _kick_bird(cfg, deps)
+            line += ";重啟 bird:" + msg
             log.info("iCloud 定時重啟 bird:%s", line)
+            if not back:
+                _escalate(cfg, deps, now, "icloud:kick-bird", "iCloud 同步程式重啟後沒回來",
+                          f"定時重啟 iCloud 雲碟的同步程式(bird)之後,叫了 5 次它都沒有重新起來:\n{line}\n\n"
+                          f"iPhone 送出的檔這段期間到不了 Mac。\n\n{ICLOUD_HUMAN}")
         icloud_log(cfg, now, line)
-    except Exception:  # noqa: BLE001 —— 保養出錯不可擋住看門狗其他的檢查
+    except Exception as e:  # noqa: BLE001 —— 保養出錯不可擋住看門狗其他的檢查,但要讓人知道
         log.exception("iCloud 定時重啟 bird 出錯")
-
+        _escalate(cfg, deps, now, "icloud:kick-error", "iCloud 定時重啟出錯",
+                  f"看門狗定時重啟 iCloud 同步程式(下載端卡住時唯一的救法)這一輪出錯,沒做完:\n"
+                  f"{type(e).__name__}: {e}\n\n詳細在 {cfg.log_path}")
 
 # -- 紀錄 --------------------------------------------------------------------------
 
@@ -477,99 +513,104 @@ def _tick(cfg: Config, deps: Deps) -> str:
             # 發佈副本正在換版、跑測試(看門狗不在 JOBS 裡,deploy 不會停它):這一輪跑的可能是還沒測過的程式,不動手
             return "正在發佈新版,這輪不查"
         now = deps.now()
-        problems = detect(cfg, now, deps.agents_check, deps.sample, icloud_check=deps.icloud_synced)
-        # 在 detect 之後:先重啟的話,同一輪的探針檢查會碰上剛重開的 bird(brctl 沒回應)誤判成卡住、再重啟一次。
-        # 探針已經卡住時交給 _fix_icloud,這裡不動
-        if not any(p.kind == "icloud" or p.key.startswith("icloud") for p in problems):
-            _kick_icloud(cfg, deps, now)
-        if not problems:
-            # 上一次等過的要清掉:留著的話下次讀不到時次數檔一定比它新,第一輪就算「收件又跑過一輪」(2026-10-20 實例)
-            _inbox_wait_path(cfg).unlink(missing_ok=True)
-            return "沒有問題"
-        if not deps.online():
-            # 斷網:修理的 claude 跑不起來、信也寄不出去;不算次數,網路恢復後下一輪再來
-            _inbox_wait_path(cfg).unlink(missing_ok=True)
-            mark_net_down(cfg)   # iCloud 探針看這個:斷網期間沒傳上去不算卡住(沒有 FUTURES 的機器只靠這裡記)
-            return "發現問題但連不上網路,下一輪再試:" + "、".join(p.title for p in problems)
-        problems = _settled_inboxes(cfg, now, problems)
-        if not problems:
-            return "收件匣讀不到的次數是連得上網路之前累積的,等收件再跑一輪"
-
-        hist = _history(cfg)
-        void = {h["time"] for h in hist if h.get("void")}   # claude 連不上 API 的那幾次:不算修過、不算次數
-        tried = {h["key"]: h for h in hist
-                 if h.get("type") == "repair" and h["time"] > now - SAME_PROBLEM_DAYS * DAY and h["time"] not in void}
-        repeat = [p for p in problems if p.key in tried]
-        fresh = [p for p in problems if p.key not in tried]
-        for p in repeat:
-            h = tried[p.key]
-            _escalate(cfg, deps, now, p.key, p.title,
-                      f"{p.title}\n\n{p.detail}\n\n這個問題 {_day(h['time'])} 已經自動處理過一次"
-                      f"({h.get('summary', '')}),這次又發生,不再自動修,需要你看一下。"
-                      + (f"\n\n{ICLOUD_HUMAN}" if p.kind == "icloud" else "")
-                      + (f"\n\n{VP_BRIDGE_HUMAN}" if p.kind == "vpbridge" else ""))
-        if not fresh:
-            return "都是修過又再發生的問題,已寄信找人"
-
-        # 一次修理會寫好幾行(每個問題各一行、修理中與結果各一行):以開始時間算次數
-        today = {h["time"] for h in hist if h.get("type") == "repair" and h.get("day") == _day(now)
-                 and h["time"] not in void}
-        if len(today) >= cfg.repair_max_per_day:
-            # 鍵含這批問題:只用 "cap" 的話,當天第一封之後新冒出來的問題(例如下午的卡住)整天都不會再寄
-            _escalate(cfg, deps, now, "cap:" + _keys(fresh), "今天的自動修理次數用完了",
-                      f"今天已經自動修理 {len(today)} 次(上限 {cfg.repair_max_per_day}),這些問題要你看:\n\n"
-                      + _problems_text(fresh))
-            return "今天的修理次數用完,已寄信找人"
-
-        # iCloud 不叫 claude(它沒辦法重啟 bird,kill／killall 在 DISALLOWED),所以也不看開發目錄乾不乾淨
-        mine = [p for p in fresh if p.kind == "icloud"]
-        if mine:
-            msg = _fix_icloud(cfg, deps, now, mine)
-            fresh = [p for p in fresh if p.kind != "icloud"]
-            if not fresh:
-                return msg
-        # 聲紋橋樑也不叫 claude:它的程式在另一個 repo(scribe2md-ios),能做的就是要求下載、重跑、重啟 bird
-        mine = [p for p in fresh if p.kind == "vpbridge"]
-        if mine:
-            msg = _fix_vp_bridge(cfg, deps, now, mine)
-            fresh = [p for p in fresh if p.kind != "vpbridge"]
-            if not fresh:
-                return msg
-
-        why = dev_ready(cfg)
-        if why:
-            _escalate(cfg, deps, now, "dev:" + _keys(fresh), "沒辦法自動修",
-                      f"{why},這次不自動修。發現的問題:\n\n" + _problems_text(fresh))
-            return "開發目錄不能修:" + why
-
-        # 先記次數再修:修到一半當掉也算一次,不會無限重來
-        base = {"type": "repair", "day": _day(now), "time": now, "keys": [p.key for p in fresh]}
-        for p in fresh:
-            _record(cfg, {**base, "key": p.key, "summary": "(修理中)"})
-        head0 = _git(cfg.repair_repo, "rev-parse", "HEAD")
-        res: dict = {}
         try:
-            res = run_agent(cfg, fresh)
-            if res.get("api_down") and _git(cfg.repair_repo, "rev-parse", "HEAD") == head0:
-                # 跟斷網一樣:不修、不算次數(否則這個問題 7 天內都只會寄信找人)、不寄信,下一輪再試
-                res["void"] = True
-                return "修理的 claude 連不上 API,下一輪再試:" + str(res.get("error", ""))[:200]
-            return _finish(cfg, deps, fresh, res, head0)
-        except Exception as e:  # noqa: BLE001 —— 修到一半出錯也要寄信:修理可能已經推了程式、補完了 STOP
-            log.exception("修理流程出錯")
-            res = {**res, "error": f"修理流程出錯:{type(e).__name__}: {e}"}
-            subject = "🛑 wiki-feeder 修理流程出錯、需要你｜" + "、".join(p.title for p in fresh)[:80]
-            head1 = _git(cfg.repair_repo, "rev-parse", "HEAD", check=False) or head0
-            try:
-                deps.mail(cfg, subject, _mail_body(cfg, fresh, res, [], head0, head1, fresh)
-                          + f"\n\n## 修理流程出錯\n{type(e).__name__}: {e}\n發佈、解除 STOP 可能沒做完;詳細在 {cfg.log_path}")
-            except Exception as e2:  # noqa: BLE001
-                log.error("修理結果寄不出去:%s", e2)
-            return subject
+            return _round(cfg, deps, now)
         finally:
-            for p in fresh:
-                _record(cfg, {**base, "key": p.key, "summary": res.get("summary") or res.get("error", "")[:200],
-                              **({"void": True} if res.get("void") else {})})
+            # 修理之後才定時重啟 bird:修理(探針卡住、聲紋橋樑)重啟過會記時間,這裡就不會同一輪再砍一次;
+            # 也不會在 detect 之前砍,讓同一輪的探針檢查碰上剛重開的 bird
+            _kick_icloud(cfg, deps, deps.now())
+
+
+def _round(cfg: Config, deps: Deps, now: float) -> str:
+    problems = detect(cfg, now, deps.agents_check, deps.sample, icloud_check=deps.icloud_synced)
+    if not problems:
+        # 上一次等過的要清掉:留著的話下次讀不到時次數檔一定比它新,第一輪就算「收件又跑過一輪」(2026-10-20 實例)
+        _inbox_wait_path(cfg).unlink(missing_ok=True)
+        return "沒有問題"
+    if not deps.online():
+        # 斷網:修理的 claude 跑不起來、信也寄不出去;不算次數,網路恢復後下一輪再來
+        _inbox_wait_path(cfg).unlink(missing_ok=True)
+        mark_net_down(cfg)   # iCloud 探針看這個:斷網期間沒傳上去不算卡住(沒有 FUTURES 的機器只靠這裡記)
+        return "發現問題但連不上網路,下一輪再試:" + "、".join(p.title for p in problems)
+    problems = _settled_inboxes(cfg, now, problems)
+    if not problems:
+        return "收件匣讀不到的次數是連得上網路之前累積的,等收件再跑一輪"
+
+    hist = _history(cfg)
+    void = {h["time"] for h in hist if h.get("void")}   # claude 連不上 API 的那幾次:不算修過、不算次數
+    tried = {h["key"]: h for h in hist
+             if h.get("type") == "repair" and h["time"] > now - SAME_PROBLEM_DAYS * DAY and h["time"] not in void}
+    repeat = [p for p in problems if p.key in tried]
+    fresh = [p for p in problems if p.key not in tried]
+    for p in repeat:
+        h = tried[p.key]
+        _escalate(cfg, deps, now, p.key, p.title,
+                  f"{p.title}\n\n{p.detail}\n\n這個問題 {_day(h['time'])} 已經自動處理過一次"
+                  f"({h.get('summary', '')}),這次又發生,不再自動修,需要你看一下。"
+                  + (f"\n\n{ICLOUD_HUMAN}" if p.kind == "icloud" else "")
+                  + (f"\n\n{VP_BRIDGE_HUMAN}" if p.kind == "vpbridge" else ""))
+    if not fresh:
+        return "都是修過又再發生的問題,已寄信找人"
+
+    # 一次修理會寫好幾行(每個問題各一行、修理中與結果各一行):以開始時間算次數
+    today = {h["time"] for h in hist if h.get("type") == "repair" and h.get("day") == _day(now)
+             and h["time"] not in void}
+    if len(today) >= cfg.repair_max_per_day:
+        # 鍵含這批問題:只用 "cap" 的話,當天第一封之後新冒出來的問題(例如下午的卡住)整天都不會再寄
+        _escalate(cfg, deps, now, "cap:" + _keys(fresh), "今天的自動修理次數用完了",
+                  f"今天已經自動修理 {len(today)} 次(上限 {cfg.repair_max_per_day}),這些問題要你看:\n\n"
+                  + _problems_text(fresh))
+        return "今天的修理次數用完,已寄信找人"
+
+    # iCloud 不叫 claude(它沒辦法重啟 bird,kill／killall 在 DISALLOWED),所以也不看開發目錄乾不乾淨
+    mine = [p for p in fresh if p.kind == "icloud"]
+    if mine:
+        msg = _fix_icloud(cfg, deps, now, mine)
+        fresh = [p for p in fresh if p.kind != "icloud"]
+        if not fresh:
+            return msg
+    # 聲紋橋樑也不叫 claude:它的程式在另一個 repo(scribe2md-ios),能做的就是要求下載、重跑、重啟 bird
+    mine = [p for p in fresh if p.kind == "vpbridge"]
+    if mine:
+        msg = _fix_vp_bridge(cfg, deps, now, mine)
+        fresh = [p for p in fresh if p.kind != "vpbridge"]
+        if not fresh:
+            return msg
+
+    why = dev_ready(cfg)
+    if why:
+        _escalate(cfg, deps, now, "dev:" + _keys(fresh), "沒辦法自動修",
+                  f"{why},這次不自動修。發現的問題:\n\n" + _problems_text(fresh))
+        return "開發目錄不能修:" + why
+
+    # 先記次數再修:修到一半當掉也算一次,不會無限重來
+    base = {"type": "repair", "day": _day(now), "time": now, "keys": [p.key for p in fresh]}
+    for p in fresh:
+        _record(cfg, {**base, "key": p.key, "summary": "(修理中)"})
+    head0 = _git(cfg.repair_repo, "rev-parse", "HEAD")
+    res: dict = {}
+    try:
+        res = run_agent(cfg, fresh)
+        if res.get("api_down") and _git(cfg.repair_repo, "rev-parse", "HEAD") == head0:
+            # 跟斷網一樣:不修、不算次數(否則這個問題 7 天內都只會寄信找人)、不寄信,下一輪再試
+            res["void"] = True
+            return "修理的 claude 連不上 API,下一輪再試:" + str(res.get("error", ""))[:200]
+        return _finish(cfg, deps, fresh, res, head0)
+    except Exception as e:  # noqa: BLE001 —— 修到一半出錯也要寄信:修理可能已經推了程式、補完了 STOP
+        log.exception("修理流程出錯")
+        res = {**res, "error": f"修理流程出錯:{type(e).__name__}: {e}"}
+        subject = "🛑 wiki-feeder 修理流程出錯、需要你｜" + "、".join(p.title for p in fresh)[:80]
+        head1 = _git(cfg.repair_repo, "rev-parse", "HEAD", check=False) or head0
+        try:
+            deps.mail(cfg, subject, _mail_body(cfg, fresh, res, [], head0, head1, fresh)
+                      + f"\n\n## 修理流程出錯\n{type(e).__name__}: {e}\n發佈、解除 STOP 可能沒做完;詳細在 {cfg.log_path}")
+        except Exception as e2:  # noqa: BLE001
+            log.error("修理結果寄不出去:%s", e2)
+        return subject
+    finally:
+        for p in fresh:
+            _record(cfg, {**base, "key": p.key, "summary": res.get("summary") or res.get("error", "")[:200],
+                          **({"void": True} if res.get("void") else {})})
 
 
 ICLOUD_HUMAN = ("""到 Mac 前面(或用 VNC 螢幕共享)看:
@@ -585,8 +626,7 @@ def _fix_icloud(cfg: Config, deps: Deps, now: float, problems: list[Problem]) ->
         _record(cfg, {**base, "key": p.key, "summary": "(重啟 bird 中)"})
     actions, ok, detail = [], False, ""
     try:
-        actions.append(deps.restart_bird())
-        mark_kicked(cfg, deps.now())   # 定時重啟從這裡重新計時
+        actions.append(_kick_bird(cfg, deps)[0])   # 定時重啟從這裡重新計時
         deps.sleep(15)
         written = deps.now()
         write_probe(cfg, written)
@@ -660,8 +700,7 @@ def _fix_vp_bridge(cfg: Config, deps: Deps, now: float, problems: list[Problem])
             actions.append(deps.vp_download(p))
         ok = attempt()
         if not ok and any("/Mobile Documents/" in str(f.get("path", "")) for f in left.values()):
-            actions.append(deps.restart_bird())
-            mark_kicked(cfg, deps.now())
+            actions.append(_kick_bird(cfg, deps)[0])
             deps.sleep(15)
             ok = attempt()
     except Exception as e:  # noqa: BLE001 —— 重跑不了、讀不到狀態:一樣寄信
