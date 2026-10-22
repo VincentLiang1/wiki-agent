@@ -130,4 +130,4 @@ def test_missing_config_is_reported_in_the_system_language(tmp_path, monkeypatch
     monkeypatch.setattr(cli, "detect", lambda: "en")
     assert main(["ledger"]) == 2
     err = capsys.readouterr().err
-    assert "wiki-feeder" in err and not re.search(_CJK, err.replace("安裝.bat", ""))
+    assert "wiki-feeder" in err and not re.search(_CJK, err)

@@ -1,5 +1,5 @@
 """第一次安裝的問答(Windows,給朋友用):問收件匣、知識庫、doc2md、寄信,寫 config.toml、存寄信密碼、
-跑一輪只列收件匣、裝排程。由 `安裝.bat` 在 `uv sync` 之後叫:
+跑一輪只列收件匣、裝排程。由 `Install.bat` 在 `uv sync` 之後叫:
 
     uv run python -X utf8 scripts\\winsetup.py [--no-schedule]
 
@@ -31,7 +31,7 @@ from wiki_feeder.config import CONFIG_FILE, Config, ConfigError, state_dir_for  
 from wiki_feeder.i18n import L, N_  # noqa: E402
 
 SMTP_SERVICE = "wiki-feeder-smtp"
-HEADER = N_("# wiki-feeder 設定檔(安裝.bat 問答產生;要改就用記事本改,改完下一分鐘生效)")
+HEADER = N_("# wiki-feeder 設定檔(Install.bat 問答產生;要改就用記事本改,改完下一分鐘生效)")
 
 
 # -- 設定檔(純函式,測試在 Mac 也跑) --------------------------------------------------
@@ -433,7 +433,7 @@ def ask_doc2md(home: Path) -> str:
             if exe is None:
                 exe = Path(pick(L("doc2md.exe 在 meeting-scribe 資料夾的 .venv\\Scripts 底下"), False) or ".")
         else:
-            say(L("【轉寫】找不到 meeting-scribe。請先照它的說明解壓縮、跑它的 安裝.bat。"))
+            say(L("【轉寫】找不到 meeting-scribe。請先照它的說明解壓縮、跑它的 Install.bat。"))
             exe = Path(pick(L("doc2md.exe(在 meeting-scribe 資料夾的 .venv\\Scripts 底下)"), False) or ".")
         say(L("  試轉一個小檔(最多幾十秒)…"))
         ok, msg = check_doc2md(exe)
@@ -448,7 +448,7 @@ def ask_mail(default: str = "") -> tuple[str, str]:
     if frm == "-":
         frm = ""
     if not frm:
-        say(L("  先不寄信:之後要寄,重跑 安裝.bat 就好"))
+        say(L("  先不寄信:之後要寄,重跑 Install.bat 就好"))
         return "", ""
     to = ask(L("  收件信箱"), frm)
     return frm, to
@@ -500,11 +500,11 @@ def main(argv: list[str] | None = None) -> int:
     say(L("=== 檢查 Claude Code ==="))
     claude = find_claude(home)
     if not claude:
-        say(L("✗ 找不到 claude。請先裝 Claude Code(官方安裝程式),裝好後再跑一次 安裝.bat"))
+        say(L("✗ 找不到 claude。請先裝 Claude Code(官方安裝程式),裝好後再跑一次 Install.bat"))
         return 1
     status = claude_status(claude)
     if not status.get("loggedIn"):
-        say(L("✗ Claude Code 還沒登入。請開一個新的命令視窗打 claude 登入你自己的帳號,再跑一次 安裝.bat"))
+        say(L("✗ Claude Code 還沒登入。請開一個新的命令視窗打 claude 登入你自己的帳號,再跑一次 Install.bat"))
         return 1
     say(L("✓ {path}(已登入)", path=claude))
 
@@ -550,7 +550,7 @@ def main(argv: list[str] | None = None) -> int:
     spec.loader.exec_module(ws)
     ws.install(state)
     say(L("\n✓ 安裝完成。一分鐘後程式就開始自己跑;往 _WikiBox 丟一個檔,幾分鐘後知識庫裡會多一頁。"))
-    say(L("  看紀錄:%LOCALAPPDATA%\\wiki-feeder\\logs\\feeder.log;停掉排程:移除排程.bat;更新程式:更新.bat"))
+    say(L("  看紀錄:%LOCALAPPDATA%\\wiki-feeder\\logs\\feeder.log;停掉排程:Remove-Schedule.bat;更新程式:Update.bat"))
     return 0
 
 

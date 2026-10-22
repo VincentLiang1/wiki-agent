@@ -114,13 +114,13 @@ curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/insta
 
 ## 更新
 
-Finder 打開家目錄的 **wiki-agent** 資料夾 → 雙擊 **更新.command**(第一次問「確定要打開嗎?」按 **打開**)。終端機會說「等正在跑的一輪做完」(如果剛好在處理檔案),接著下載新版,看到 `✓ 更新好了` 按 Enter 關閉。排程不用重裝。
+Finder 打開家目錄的 **wiki-agent** 資料夾 → 雙擊 **Update.command**(第一次問「確定要打開嗎?」按 **打開**)。終端機會說「等正在跑的一輪做完」(如果剛好在處理檔案),接著下載新版,看到 `✓ 更新好了` 按 Enter 關閉。排程不用重裝。
 
 畫面說「Python 換了版本:要重新把這個執行檔加進完整磁碟取用權限」的話,照第 5-3 步再加一次它印的新路徑。
 
 ## 移除
 
-- **只停掉自動處理**:雙擊 wiki-agent 資料夾裡的 **移除排程.command**。設定、紀錄、知識庫都不動;要再開,重貼第 5 步那一行
+- **只停掉自動處理**:雙擊 wiki-agent 資料夾裡的 **Remove-Schedule.command**。設定、紀錄、知識庫都不動;要再開,重貼第 5 步那一行
 - **整個拿掉**:先做上面那步,再把家目錄的 `wiki-agent` 資料夾,和 `~/Library/Application Support/wiki-feeder`(⌘⇧G 貼上這個路徑)丟到垃圾桶。**你的知識庫(`WIKI`、`Raw_Sources`)不在這兩個地方,不會被刪**;系統設定裡完整磁碟取用權限那一項可以按 **−** 拿掉
 
 ## 出狀況時

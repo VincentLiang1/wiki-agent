@@ -191,9 +191,33 @@ def _mark_offline(cfg: Config, name: str, down: bool) -> None:
     names = [n for n in data if n != name] if isinstance(data, list) else []
     if down:
         names.append(name)
+        mark_net_down(cfg)
     if names != data:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(sorted(names), ensure_ascii=False), encoding="utf-8")
+
+
+def net_down_path(cfg: Config) -> Path:
+    return cfg.state_dir / "net_down.json"
+
+
+def mark_net_down(cfg: Config) -> None:
+    """記下最近一次看到連不上網路的牆上時間(`net_down.json`)。
+
+    看門狗的 iCloud 探針看這個:寫入之後斷過網,沒傳上去是網路的事、不是 iCloud 卡住(§7.7)。
+    2026-10-22 拔掉電源帶出門,探針在斷網前一刻寫入,接上手機熱點 4 分鐘時看門狗查到「12 分鐘沒傳上去」就寄了 🛑。"""
+    path = net_down_path(cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"at": time.time()}), encoding="utf-8")
+
+
+def last_net_down(cfg: Config) -> float:
+    """最近一次看到連不上網路的牆上時間;沒有紀錄回 0。"""
+    try:
+        at = json.loads(net_down_path(cfg).read_text(encoding="utf-8")).get("at")
+    except (OSError, ValueError, AttributeError):
+        return 0.0
+    return float(at) if isinstance(at, (int, float)) else 0.0
 
 
 def _unavailable(cfg: Config, inbox, e: InboxUnavailable, report: Report) -> None:
@@ -332,6 +356,7 @@ def _alert(cfg: Config, msg: str) -> bool:
     連不上網路的不算警示(`network_down`):只寫 log,回傳 False。
     """
     if network_down(msg):
+        mark_net_down(cfg)
         log.info(L("連不上網路,不列進摘要:%s"), msg.splitlines()[0] if msg else msg)
         return False
     cfg.alerts_path.parent.mkdir(parents=True, exist_ok=True)

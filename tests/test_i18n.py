@@ -20,9 +20,7 @@ KEYS = sync.extract()
 EN = json.loads((i18n.LOCALES / "en.json").read_text(encoding="utf-8"))
 HANS = json.loads((i18n.LOCALES / "zh-Hans.json").read_text(encoding="utf-8"))
 # 英文譯文裡可以留的中文:程式寫死的資料夾名、doc2md 印的字、scribe2md 的 App 名與畫面字(它還沒有英文版)
-CJK_ALLOWED = ("_待處理", "_捨棄候選", "_收件區", "執行記錄", "_聲紋同步", "AI 文件.MD 轉換器",
-               # 朋友雙擊的真實檔名(英文說明也照這個名字找)
-               "安裝.bat", "更新.bat", "移除排程.bat", "更新.command", "移除排程.command")
+CJK_ALLOWED = ("_待處理", "_捨棄候選", "_收件區", "執行記錄", "_聲紋同步", "AI 文件.MD 轉換器")
 CJK = re.compile(r"[㐀-鿿！-｠　-〿]")
 
 

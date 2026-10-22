@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import _lf  # noqa: F401 —— Windows 上 write_text 寫 LF
@@ -19,6 +20,23 @@ from wiki_feeder.config import Config, FuturesConfig
 # (pytest 帶 -X utf8 不會傳給子行程;2026-10-20 環境裡沒有 PYTHONUTF8 時 84 個紅)。
 # 在這裡設、不用 monkeypatch:有些測試中途 monkeypatch.undo() 會連 fixture 設的一起撤掉
 os.environ["PYTHONUTF8"] = "1"
+
+
+def pytest_configure(config):
+    """Windows 上測試行程本身沒有 UTF-8 模式(`uv run pytest`、環境裡沒有 PYTHONUTF8)就帶 -X utf8 重跑一次。
+
+    CLI 在測試行程裡查 sys.flags.utf8_mode、沒有就拒絕執行(2026-10-22 這樣跑一大片紅);
+    上面設的 PYTHONUTF8 只管得到子行程。不用 monkeypatch 繞過檢查:正式環境一律 UTF-8 模式,測試要照同樣的條件跑。"""
+    if sys.platform != "win32" or sys.flags.utf8_mode:
+        return
+    capman = config.pluginmanager.getplugin("capturemanager")
+    if capman is not None:
+        capman.suspend_global_capture(in_=True)   # 子行程直接寫到主控台,不被 pytest 的擷取吃掉
+    p = config.invocation_params
+    rc = subprocess.run([sys.executable, "-X", "utf8", "-m", "pytest", *p.args], cwd=p.dir).returncode
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(rc)
 
 
 @pytest.fixture(autouse=True)

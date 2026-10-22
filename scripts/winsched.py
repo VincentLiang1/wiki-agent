@@ -6,10 +6,10 @@
     uv run python -X utf8 scripts\\winsched.py status      兩個任務的狀態與上次結果
     uv run python -X utf8 scripts\\winsched.py check       跑一次 `collect --list`,確認讀得到收件匣
     uv run python -X utf8 scripts\\winsched.py xml         只印出任務定義(不動工作排程器)
-    uv run python -X utf8 scripts\\winsched.py disable     停用兩個任務、等正在跑的一輪做完(更新.bat 用)
+    uv run python -X utf8 scripts\\winsched.py disable     停用兩個任務、等正在跑的一輪做完(Update.bat 用)
     uv run python -X utf8 scripts\\winsched.py enable      重新啟用
 
-朋友那台用 repo 根目錄的 安裝.bat／更新.bat／移除排程.bat,不必打這些指令。
+朋友那台用 repo 根目錄的 Install.bat／Update.bat／Remove-Schedule.bat,不必打這些指令。
 
 對照 Mac 的 scripts/launchd.py(≈ 工作排程器 ≈ launchd):
 - 兩個任務,每分鐘一輪(使用者 2026-10-04 定案的節奏,Mac 一樣):收件、轉寫＋攝入分開,長錄音不擋收件

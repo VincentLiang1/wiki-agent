@@ -9,7 +9,7 @@ import pytest
 from wiki_feeder.config import CONFIG_FILE, ConfigError
 
 ROOT = Path(__file__).parents[1]
-BATS = ["安裝.bat", "更新.bat", "移除排程.bat"]
+BATS = ["Install.bat", "Update.bat", "Remove-Schedule.bat"]
 
 
 def _mod():
@@ -97,7 +97,7 @@ def test_bat_chinese_appears_only_in_message_arguments(name):
 @pytest.mark.parametrize("name", BATS)
 def test_bat_line_before_every_label_is_ascii(name):
     """65001 底下標籤的前一行有中文,cmd 跳過去(call :msg、goto)會落在前一行中間,先執行半截垃圾
-    (2026-10-21 真的 安裝.bat:每印一行訊息前面都多一個「'��一行' is not recognized」)。註解寫在標籤之後。"""
+    (2026-10-21 真的 Install.bat:每印一行訊息前面都多一個「'��一行' is not recognized」)。註解寫在標籤之後。"""
     lines = _bat(name).splitlines()
     for i, ln in enumerate(lines):
         if ln.startswith(":") and i:
@@ -117,9 +117,9 @@ def test_bat_messages_are_safe_for_cmd_and_complete(name):
         for s in (hant, hans, en):
             assert s.strip() and not set(s) & set("&|<>^!()"), s
             assert "%" not in s.replace("%FAIL%", ""), s
-        assert not set(hans.replace("安裝.bat", "")) & hant_only, f"簡中沒轉:{hans}"
+        assert not set(hans) & hant_only, f"簡中沒轉:{hans}"
         assert "纪录" not in hans and "帐号" not in hans
-        assert en.replace("安裝.bat", "").isascii(), en
+        assert en.isascii(), en
 
 
 def test_bats_share_one_copy_of_the_language_helpers():
@@ -127,7 +127,7 @@ def test_bats_share_one_copy_of_the_language_helpers():
     mark = "rem ==== same in all three .bat files from here to the end"
     tails = {name: _bat(name).split(mark, 1)[1] for name in BATS}
     assert len(set(tails.values())) == 1
-    tail = tails["安裝.bat"]
+    tail = tails["Install.bat"]
     assert all(f":{label}\r\n" in tail for label in ("lang", "msg", "pick", "pause"))
     for name in BATS:
         code = [ln.strip() for ln in _bat(name).split(mark, 1)[0].splitlines()
@@ -144,12 +144,12 @@ def test_bat_language_rule_matches_i18n_detect():
     import re
 
     from wiki_feeder import i18n
-    lang = next(ln for ln in _bat("安裝.bat").splitlines() if ln.startswith("for /f") and "powershell" in ln)
+    lang = next(ln for ln in _bat("Install.bat").splitlines() if ln.startswith("for /f") and "powershell" in ln)
     hexes = lambda s: {int(h, 16) for h in re.findall(r"0x[0-9A-Fa-f]+", s)}   # noqa: E731
     assert hexes(lang) == {0x3FF, 0x804, 0x1004} <= hexes(inspect.getsource(i18n.detect))
     assert "-eq 4" in lang and "== 0x04" in inspect.getsource(i18n.detect)
     assert "GetUserDefaultUILanguage" in lang and "Get-UICulture" not in lang
-    assert "wiki-feeder\\config.toml" in lang and 'if not defined WL set "WL=zh-Hant"' in _bat("安裝.bat")
+    assert "wiki-feeder\\config.toml" in lang and 'if not defined WL set "WL=zh-Hant"' in _bat("Install.bat")
 
 
 @pytest.mark.skipif(not __import__("sys").platform == "win32", reason="要 Windows 的 PowerShell 與 kernel32")
@@ -160,7 +160,7 @@ def test_bat_language_detection_really_runs(tmp_path):
     import subprocess
 
     from wiki_feeder import i18n
-    line = next(ln for ln in _bat("安裝.bat").splitlines() if ln.startswith("for /f") and "powershell" in ln)
+    line = next(ln for ln in _bat("Install.bat").splitlines() if ln.startswith("for /f") and "powershell" in ln)
     ps = re.search(r'-Command "(.*)"`\)', line)[1]
     cfg = tmp_path / "wiki-feeder" / "config.toml"
     cfg.parent.mkdir()
@@ -191,14 +191,14 @@ def test_l10n_sync_rewrites_only_the_hans_column_of_bats():
 
 def test_install_bat_elevates_only_the_long_path_step():
     """整個 bat 用管理員跑,設定檔與排程會裝到管理員帳號底下:只有寫 HKLM 那一行提升權限。"""
-    text = _bat("安裝.bat")
+    text = _bat("Install.bat")
     assert text.count("-Verb RunAs") == 1
     assert "LongPathsEnabled','/t'" in text
 
 
 def test_update_bat_waits_for_the_running_round_and_always_reenables():
     """更新不砍正在跑的一輪(攝入做到一半被砍會 STOP),pull／sync 失敗也要重新啟用排程。"""
-    lines = _bat("更新.bat").splitlines()
+    lines = _bat("Update.bat").splitlines()
     i_disable = next(i for i, ln in enumerate(lines) if "winsched.py disable" in ln)
     i_pull = next(i for i, ln in enumerate(lines) if ln.strip() == "git pull")
     i_enable = next(i for i, ln in enumerate(lines) if "winsched.py enable" in ln)

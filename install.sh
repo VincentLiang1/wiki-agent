@@ -9,7 +9,7 @@
 # ⚠️ 整支包在 main 裡、最後一行才執行:curl 下載到一半斷線時,bash 不會只跑了前半段。
 # ⚠️ 問答要從 /dev/tty 讀鍵盤:`curl … | bash` 的標準輸入是這支腳本本身,直接讀會把腳本吃掉。
 # 不用從網頁下載的 .command 當入口:下載的檔帶著隔離標記、失去執行權限,雙擊打不開;git clone 下來的
-# 更新.command／移除排程.command 沒有這個問題。
+# Update.command／Remove-Schedule.command 沒有這個問題。
 # 訊息照系統語言(Python 還沒裝好,不能用 i18n.py):繁中、簡中、其他一律英文;問答開始後再讓朋友自己選。
 
 # `defaults read -g AppleLanguages` 的輸出 → zh-Hant／zh-Hans／en(第一個語言就是系統介面語言)
@@ -39,7 +39,7 @@ main() {
     local dest="${WIKI_AGENT_DIR:-$HOME/wiki-agent}"
 
     if [ "$(uname)" != "Darwin" ]; then
-        msg "✗ 這一行只給 Mac 用;Windows 請下載 安裝.bat" "✗ 这一行只给 Mac 用;Windows 请下载 安裝.bat" "✗ This command is for Mac only; on Windows, download 安裝.bat"
+        msg "✗ 這一行只給 Mac 用;Windows 請下載 Install.bat" "✗ 这一行只给 Mac 用;Windows 请下载 Install.bat" "✗ This command is for Mac only; on Windows, download Install.bat"
         return 1
     fi
 

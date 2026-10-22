@@ -5,7 +5,7 @@
     uv run python scripts/macsched.py status       # 看兩個 agent 在不在跑、上次結束碼
     uv run python scripts/macsched.py check        # 用 launchd 跑一次「只列收件匣」:隱私權限只有在 launchd 底下才看得出來
     uv run python scripts/macsched.py fda-path     # 要加進「完整磁碟取用權限」的那個執行檔
-    uv run python scripts/macsched.py update       # 等正在跑的一輪做完 → git pull → uv sync(更新.command 叫)
+    uv run python scripts/macsched.py update       # 等正在跑的一輪做完 → git pull → uv sync(Update.command 叫)
 
 與 Windows 版(winsched.py)相同:直接跑 clone 下來的這份 `.venv`,沒有發佈副本、沒有看門狗。
 

@@ -125,7 +125,7 @@ def test_install_sh_runs_only_when_fully_downloaded_and_reads_the_keyboard():
     assert os.access(p, os.X_OK)
 
 
-@pytest.mark.parametrize("name", ["更新.command", "移除排程.command"])
+@pytest.mark.parametrize("name", ["Update.command", "Remove-Schedule.command"])
 def test_command_files_are_executable_zsh_and_exit_zero(name):
     """git clone 下來的 .command 才能雙擊(從網頁下載的帶隔離標記);要有執行權限、結尾明寫 exit 0。"""
     p = ROOT / name

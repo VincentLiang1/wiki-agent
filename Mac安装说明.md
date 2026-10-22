@@ -114,13 +114,13 @@ curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/insta
 
 ## 更新
 
-Finder 打开家目录的 **wiki-agent** 文件夹 → 双击 **更新.command**(第一次问「确定要打开吗?」按 **打开**)。终端会说「等正在跑的一轮做完」(如果刚好在处理文件),接着下载新版,看到 `✓ 更新好了` 按 Enter 关闭。定时任务不用重装。
+Finder 打开家目录的 **wiki-agent** 文件夹 → 双击 **Update.command**(第一次问「确定要打开吗?」按 **打开**)。终端会说「等正在跑的一轮做完」(如果刚好在处理文件),接着下载新版,看到 `✓ 更新好了` 按 Enter 关闭。定时任务不用重装。
 
 画面说「Python 换了版本:要重新把这个可执行文件加进完全磁盘访问权限」的话,照第 5-3 步再加一次它印的新路径。
 
 ## 移除
 
-- **只停掉自动处理**:双击 wiki-agent 文件夹里的 **移除排程.command**。设置、记录、知识库都不动;要再开,重贴第 5 步那一行
+- **只停掉自动处理**:双击 wiki-agent 文件夹里的 **Remove-Schedule.command**。设置、记录、知识库都不动;要再开,重贴第 5 步那一行
 - **整个拿掉**:先做上面那步,再把家目录的 `wiki-agent` 文件夹,和 `~/Library/Application Support/wiki-feeder`(⌘⇧G 粘贴这个路径)丢到垃圾桶。**你的知识库(`WIKI`、`Raw_Sources`)不在这两个地方,不会被删**;系统设置里完全磁盘访问权限那一项可以按 **−** 拿掉
 
 ## 出状况时

@@ -10,7 +10,7 @@ cd /d "%~dp0"
 if not exist pyproject.toml goto notrepo
 set "PYTHONUTF8=1"
 call :msg "這會移除每分鐘自動執行的排程，程式就不再自己收檔、攝入。" "这会移除每分钟自动运行的定时任务，程序就不再自己收文件、摄入。" "This removes the schedule that runs every minute; the program will stop collecting and ingesting files on its own."
-call :msg "設定檔與處理紀錄都會留著，之後跑 安裝.bat 可以裝回來。" "设置文件与处理记录都会留着，之后跑 安裝.bat 可以装回来。" "Your settings and processing records are kept; run 安裝.bat later to set it up again."
+call :msg "設定檔與處理紀錄都會留著，之後跑 Install.bat 可以裝回來。" "设置文件与处理记录都会留着，之后跑 Install.bat 可以装回来。" "Your settings and processing records are kept; run Install.bat later to set it up again."
 echo.
 call :pause
 ".venv\Scripts\python.exe" -X utf8 scripts\winsched.py uninstall

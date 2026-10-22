@@ -48,14 +48,21 @@ def test_each_guide_links_to_its_other_two_languages():
             assert all(f"]({other})" in _head(name) for other in trio if other != name), name
 
 
+def test_entry_files_have_english_names():
+    """朋友雙擊、執行的入口檔名一律英文(使用者 2026-10-22:多語系版本的安裝檔是中文檔名,
+    看不懂中文的朋友找不到要點哪一個;比照 meeting-scribe-native)。內容照樣三種語言。"""
+    entries = [p.name for p in ROOT.iterdir() if p.suffix in (".bat", ".command", ".sh")]
+    assert entries and all(n.isascii() for n in entries), entries
+
+
 def test_guides_name_the_files_that_really_exist():
     for zh_or_en in GUIDES["mac"]:
         mac = (PUBLIC / zh_or_en).read_text(encoding="utf-8")
-        for name in ("更新.command", "移除排程.command"):
+        for name in ("Update.command", "Remove-Schedule.command"):
             assert name in mac and (ROOT / name).is_file()
         assert "scribe2md-mac.zip" in mac
     for zh_or_en in GUIDES["win"]:
         win = (PUBLIC / zh_or_en).read_text(encoding="utf-8")
-        for name in ("安裝.bat", "更新.bat", "移除排程.bat"):
+        for name in ("Install.bat", "Update.bat", "Remove-Schedule.bat"):
             assert name in win and (ROOT / name).is_file()
         assert "scribe2md-win.zip" in win

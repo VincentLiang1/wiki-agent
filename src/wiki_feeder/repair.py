@@ -28,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from .collect import run_lock
+from .collect import mark_net_down, run_lock
 from .config import Config
 from .ingest import _API_DOWN, STOP_LEFTOVER, IngestError, unverified_commits
 from .ingest import git as repo_git
@@ -461,6 +461,7 @@ def _tick(cfg: Config, deps: Deps) -> str:
         if not deps.online():
             # 斷網:修理的 claude 跑不起來、信也寄不出去;不算次數,網路恢復後下一輪再來
             _inbox_wait_path(cfg).unlink(missing_ok=True)
+            mark_net_down(cfg)   # iCloud 探針看這個:斷網期間沒傳上去不算卡住(沒有 FUTURES 的機器只靠這裡記)
             return "發現問題但連不上網路,下一輪再試:" + "、".join(p.title for p in problems)
         problems = _settled_inboxes(cfg, now, problems)
         if not problems:

@@ -207,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
             say(L("  先不管:排程照樣在跑,只是收件匣讀不到;之後加好權限就會自己恢復"))
             break
     say(L("\n✓ 安裝完成。一分鐘後程式就開始自己跑;往 _WikiBox 丟一個檔,幾分鐘後知識庫裡會多一頁。"))
-    say(L("  看紀錄:{log};停掉排程:雙擊 移除排程.command;更新程式:雙擊 更新.command", log=state / "logs" / "feeder.log"))
+    say(L("  看紀錄:{log};停掉排程:雙擊 Remove-Schedule.command;更新程式:雙擊 Update.command", log=state / "logs" / "feeder.log"))
     return 0
 
 

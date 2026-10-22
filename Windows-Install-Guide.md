@@ -4,7 +4,7 @@
 
 Follow the steps in order; it takes about 30–40 minutes (mostly waiting for downloads). If your screen looks different from what is described here, stop and send a photo of the screen to the person helping you install.
 
-> **About the language**: the setup questions, the summary emails and the alerts come in English, Traditional Chinese or Simplified Chinese — the first question asks which one. The screens of `安裝.bat` before that question follow your Windows display language (English unless Windows is set to Chinese). The file names `安裝.bat` ("install"), `更新.bat` ("update") and `移除排程.bat` ("remove schedule") stay in Chinese. scribe2md, the transcription app, is still in Chinese (English and Traditional Chinese editions are planned); for its screens this guide quotes the Chinese text and gives the English meaning in parentheses.
+> **About the language**: the setup questions, the summary emails and the alerts come in English, Traditional Chinese or Simplified Chinese — the first question asks which one. The screens of `Install.bat` before that question follow your Windows display language (English unless Windows is set to Chinese). scribe2md, the transcription app, is still in Chinese (English and Traditional Chinese editions are planned); for its screens this guide quotes the Chinese text and gives the English meaning in parentheses.
 
 ## 1. Install iCloud for Windows
 
@@ -26,11 +26,11 @@ Follow the steps in order; it takes about 30–40 minutes (mostly waiting for do
 
 1. In your browser, open <https://github.com/VincentLiang1/scribe2md/releases/latest>. Under **Assets** near the bottom of the page, click **scribe2md-win.zip** to download it
 2. In your Downloads folder, right-click the zip → **Extract All**, and extract it somewhere easy to remember (for example `C:\scribe2md`)
-3. Open the extracted folder (it contains one more `scribe2md` folder inside) and, as its README says, double-click **安裝.bat** ("install"), then wait for it to finish. **Remember where this folder is**: in step 5 the installer searches two levels deep under `C:\`, Downloads, Desktop and Documents; if you put it deeper, it won't be found and you'll have to paste the path yourself
+3. Open the extracted folder (it contains one more `scribe2md` folder inside) and, as its README says, double-click **Install.bat**, then wait for it to finish. **Remember where this folder is**: in step 5 the installer searches two levels deep under `C:\`, Downloads, Desktop and Documents; if you put it deeper, it won't be found and you'll have to paste the path yourself
 
 ## 4. (Optional, can be done later) Create a Gmail app password
 
-The daily summary is sent through Gmail. If you don't want the email you can skip this and set it up later by running `安裝.bat` again.
+The daily summary is sent through Gmail. If you don't want the email you can skip this and set it up later by running `Install.bat` again.
 
 1. In your browser, open <https://myaccount.google.com/security> and make sure **2-Step Verification** is on
 2. Open <https://myaccount.google.com/apppasswords>, type `wiki-agent` as the name and click **Create**
@@ -38,8 +38,8 @@ The daily summary is sent through Gmail. If you don't want the email you can ski
 
 ## 5. Install wiki-agent
 
-1. In your browser, open <https://github.com/VincentLiang1/wiki-agent>, click **安裝.bat** ("install") in the file list, then click the **Download raw file** icon at the top right and save it to your Downloads folder. If the browser warns that this kind of file may be harmful, choose **Keep**
-2. Double-click the downloaded **安裝.bat**. If a blue security warning appears ("Windows protected your PC" or similar), click **More info** → **Run anyway**
+1. In your browser, open <https://github.com/VincentLiang1/wiki-agent>, click **Install.bat** in the file list, then click the **Download raw file** icon at the top right and save it to your Downloads folder. If the browser warns that this kind of file may be harmful, choose **Keep**
+2. Double-click the downloaded **Install.bat**. If a blue security warning appears ("Windows protected your PC" or similar), click **More info** → **Run anyway**
 3. The black window first lists `Before you start, please do these three things:` (steps 1–3 above); press any key to continue
 4. If Git or uv is missing, it installs them (you may be asked "Do you want to allow this app to make changes?" — click **Yes**)
 5. When asked `Which folder should the program go in?`, just press Enter (`C:\wiki-feeder`). It downloads the program from GitHub and installs what it needs; **no GitHub account is required**
@@ -72,7 +72,7 @@ Type `3` and press Enter (if Windows is set to English, just press Enter). After
 | `=== Can the inbox be read? ===` | Automatic. `iCloud	readable` means it's fine |
 | `=== Installing the schedule (one round per minute) ===` | Automatic |
 
-If you run `安裝.bat` again later (for example, to set up the summary email), it asks the language again, shows the current settings and asks `Keep this one (don't fill it in again)?`: type `n` if you want to change them.
+If you run `Install.bat` again later (for example, to set up the summary email), it asks the language again, shows the current settings and asks `Keep this one (don't fill it in again)?`: type `n` if you want to change them.
 
 When you see `✓ Installation complete.` you can close the window. From then on it runs in the background every minute and **never pops up a window**.
 
@@ -99,11 +99,11 @@ Once set up, `上次同步` ("last synced") at the bottom of that column on the 
 
 ## Updating
 
-Double-click **更新.bat** ("update") in `C:\wiki-feeder`. If a file is being processed, it waits for that round to finish before updating; it never cuts it off midway.
+Double-click **Update.bat** in `C:\wiki-feeder`. If a file is being processed, it waits for that round to finish before updating; it never cuts it off midway.
 
 ## Uninstalling
 
-- **Stop automatic processing only**: double-click **移除排程.bat** ("remove schedule") in `C:\wiki-feeder`. Settings, logs and your knowledge base are untouched; to turn it back on, run **安裝.bat** again
+- **Stop automatic processing only**: double-click **Remove-Schedule.bat** in `C:\wiki-feeder`. Settings, logs and your knowledge base are untouched; to turn it back on, run **Install.bat** again
 - **Remove everything**: do the step above, then delete `C:\wiki-feeder` and `%LOCALAPPDATA%\wiki-feeder`. **Your knowledge base (`WIKI`, `Raw_Sources`) is in neither place and will not be deleted**
 
 ## When something goes wrong

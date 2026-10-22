@@ -1026,6 +1026,53 @@ def test_icloud_probe_written_before_sleep_is_not_overdue(cfg, monkeypatch):
     assert _detect(c, now=8 * 3600.0, icloud_check=_synced([])) == []
 
 
+def test_icloud_probe_not_overdue_when_network_dropped_after_writing(cfg, monkeypatch):
+    """2026-10-22:拔掉電源帶出門,探針在斷網前一刻寫入,接上手機熱點 4 分鐘時查到「12 分鐘沒傳上去」就寄了 🛑。
+    寫入之後斷過網:重寫探針、從現在重新計時;斷網在寫入之前的照常算卡住。"""
+    from wiki_feeder import collect as collect_mod
+
+    c, clock = _icloud(cfg, monkeypatch)
+    _detect(c, now=100.0)
+    clock.up += c.icloud_sync_timeout + 1
+    collect_mod.net_down_path(c).write_text(json.dumps({"at": 150.0}))
+    assert _detect(c, now=200.0, icloud_check=_synced([(False, "探針檔已上傳:false")])) == []
+    state = json.loads(c.icloud_probe_state_path.read_text())
+    assert state["written"] == 200.0 and state["pending"] and state["up"] == clock.up
+
+    clock.up += c.icloud_sync_timeout + 1      # 網路回來之後還是傳不上去:這才是 iCloud 卡住
+    (p,) = _detect(c, now=900.0, icloud_check=_synced([(False, "探針檔已上傳:false")]))
+    assert p.key == "icloud:stalled"
+
+
+def test_network_down_is_remembered_for_the_icloud_probe(env, dev, monkeypatch):
+    """斷網的時間三處都記:收件匣讀不到、警示被當成斷網吞掉、看門狗那輪連不上網路(沒有 FUTURES 的機器只有這裡)。"""
+    from wiki_feeder import collect as collect_mod
+    from wiki_feeder.inboxes import FolderInbox, InboxUnavailable
+
+    c = replace(env["cfg"], unavailable_alert_after=5)   # 還沒到警示門檻:只有 _mark_offline 會記
+    assert collect_mod.last_net_down(c) == 0.0
+
+    def down(self):
+        raise InboxUnavailable(f"{self.name} ssh: Could not resolve hostname github.com: nodename nor servname")
+    monkeypatch.setattr(FolderInbox, "prepare", down)
+    collect_mod.collect(c)
+    assert collect_mod.last_net_down(c) > 0
+    monkeypatch.undo()
+
+    collect_mod.net_down_path(c).unlink()
+    collect_mod._alert(c, "git pull 失敗:Could not resolve host: github.com")
+    assert collect_mod.last_net_down(c) > 0
+
+    collect_mod.net_down_path(c).unlink()
+    c, clock = _icloud(replace(c, repair_repo=dev), monkeypatch)
+    _stall(c, clock)
+    calls, restarts = Calls(), []
+    deps = _icloud_deps(c, calls, [(False, "")], restarts)
+    deps.online = lambda: False
+    repair.tick(c, deps)
+    assert collect_mod.last_net_down(c) > 0 and not calls.mail and not restarts
+
+
 def test_icloud_check_tool_failure_is_reported_not_taken_for_a_stall(cfg, monkeypatch):
     """osascript／brctl 跑不起來不是 iCloud 卡住:不重啟 bird,只查原因;否則檢查壞了就再也沒人知道。"""
     c, clock = _icloud(cfg, monkeypatch)

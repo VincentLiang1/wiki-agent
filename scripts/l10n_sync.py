@@ -54,8 +54,7 @@ ZH_HANS_FIX = {
     "档": "文件",
 }
 # 程式寫死、或朋友照著找的名字:簡中也一字不改(資料夾名轉成簡體,程式就找不到它)
-KEEP = ("_待處理", "_捨棄候選", "_收件區", "_聲紋同步", "執行記錄", "AI 文件.MD 轉換器",
-        "安裝.bat", "更新.bat", "移除排程.bat", "更新.command", "移除排程.command")
+KEEP = ("_待處理", "_捨棄候選", "_收件區", "_聲紋同步", "執行記錄", "AI 文件.MD 轉換器")
 
 
 def extract(files=EXTRACT) -> dict[str, str]:
@@ -95,7 +94,7 @@ def hans_doc(text: str, cc) -> str:
 
 # 三個 .bat(UTF-8、CRLF):`call :msg "繁中" "簡中" "English"`、`call :pick 變數 "繁中" "簡中" "English"`
 # 的簡中那一欄照繁中重轉(.bat 在 Python 之前跑,用不了譯文檔;docs/dev/Windows安裝.md)
-BATS = ("安裝.bat", "更新.bat", "移除排程.bat")
+BATS = ("Install.bat", "Update.bat", "Remove-Schedule.bat")
 BAT_MSG = re.compile(r'(call :(?:msg|pick \w+) )"([^"]*)" "([^"]*)" "([^"]*)"')
 
 

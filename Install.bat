@@ -17,7 +17,7 @@ echo.
 call :msg "開始之前請先做好這三件事：" "开始之前请先做好这三件事：" "Before you start, please do these three things:"
 call :msg "  1. 裝好 iCloud for Windows，打開「iCloud 雲碟」" "  1. 装好 iCloud for Windows，打开「iCloud 云盘」" "  1. Install iCloud for Windows and turn on iCloud Drive"
 call :msg "  2. 裝好 Claude Code，開一個命令視窗打 claude，登入你自己的帳號" "  2. 装好 Claude Code，开一个命令窗口打 claude，登录你自己的账号" "  2. Install Claude Code, open a Command Prompt, type claude and sign in with your own account"
-call :msg "  3. 照 meeting-scribe 的說明解壓縮、跑它的 安裝.bat" "  3. 照 meeting-scribe 的说明解压缩、跑它的 安裝.bat" "  3. Unzip meeting-scribe as its instructions say and run its 安裝.bat"
+call :msg "  3. 照 meeting-scribe 的說明解壓縮、跑它的 Install.bat" "  3. 照 meeting-scribe 的说明解压缩、跑它的 Install.bat" "  3. Unzip meeting-scribe as its instructions say and run its Install.bat"
 echo.
 call :pause
 
@@ -72,7 +72,7 @@ if errorlevel 1 (
   powershell -NoProfile -Command "Start-Process reg -Verb RunAs -Wait -ArgumentList 'add','HKLM\SYSTEM\CurrentControlSet\Control\FileSystem','/v','LongPathsEnabled','/t','REG_DWORD','/d','1','/f'"
 )
 reg query "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled 2>nul | findstr /c:"0x1" >nul
-if errorlevel 1 call :msg "注意：長路徑沒有開成，檔名很長的檔可能會處理失敗。之後可以再跑一次 安裝.bat" "注意：长路径没有开成，文件名很长的文件可能会处理失败。之后可以再跑一次 安裝.bat" "Note: long path support is not on, so files with very long names may fail. You can run 安裝.bat again later"
+if errorlevel 1 call :msg "注意：長路徑沒有開成，檔名很長的檔可能會處理失敗。之後可以再跑一次 Install.bat" "注意：长路径没有开成，文件名很长的文件可能会处理失败。之后可以再跑一次 Install.bat" "Note: long path support is not on, so files with very long names may fail. You can run Install.bat again later"
 git config --global core.longpaths true
 
 rem ---- questions, config, schedule ----
@@ -85,27 +85,27 @@ exit /b 0
 
 :nogit
 echo.
-call :msg "裝不起來 Git。請到 https://git-scm.com 下載安裝後，再跑一次 安裝.bat" "装不起来 Git。请到 https://git-scm.com 下载安装后，再跑一次 安裝.bat" "Could not install Git. Please download and install it from https://git-scm.com, then run 安裝.bat again"
+call :msg "裝不起來 Git。請到 https://git-scm.com 下載安裝後，再跑一次 Install.bat" "装不起来 Git。请到 https://git-scm.com 下载安装后，再跑一次 Install.bat" "Could not install Git. Please download and install it from https://git-scm.com, then run Install.bat again"
 call :pause
 exit /b 1
 :nouv
 echo.
-call :msg "裝不起來 uv。請到 https://docs.astral.sh/uv 照說明安裝後，再跑一次 安裝.bat" "装不起来 uv。请到 https://docs.astral.sh/uv 照说明安装后，再跑一次 安裝.bat" "Could not install uv. Please install it as https://docs.astral.sh/uv explains, then run 安裝.bat again"
+call :msg "裝不起來 uv。請到 https://docs.astral.sh/uv 照說明安裝後，再跑一次 Install.bat" "装不起来 uv。请到 https://docs.astral.sh/uv 照说明安装后，再跑一次 Install.bat" "Could not install uv. Please install it as https://docs.astral.sh/uv explains, then run Install.bat again"
 call :pause
 exit /b 1
 :noclone
 echo.
-call :msg "下載不了程式。請確認網路正常，再跑一次 安裝.bat。" "下载不了程序。请确认网络正常，再跑一次 安裝.bat。" "Could not download the program. Please check your network, then run 安裝.bat again."
+call :msg "下載不了程式。請確認網路正常，再跑一次 Install.bat。" "下载不了程序。请确认网络正常，再跑一次 Install.bat。" "Could not download the program. Please check your network, then run Install.bat again."
 call :pause
 exit /b 1
 :nosync
 echo.
-call :msg "套件裝不起來（上面有錯誤訊息）。請確認網路正常後再跑一次 安裝.bat" "套件装不起来（上面有错误消息）。请确认网络正常后再跑一次 安裝.bat" "Could not install the packages - the error is shown above. Please check your network, then run 安裝.bat again"
+call :msg "套件裝不起來（上面有錯誤訊息）。請確認網路正常後再跑一次 Install.bat" "套件装不起来（上面有错误消息）。请确认网络正常后再跑一次 Install.bat" "Could not install the packages - the error is shown above. Please check your network, then run Install.bat again"
 call :pause
 exit /b 1
 :setupfail
 echo.
-call :msg "安裝沒有完成（原因在上面）。處理好之後再跑一次 安裝.bat，已填好的設定可以沿用。" "安装没有完成（原因在上面）。处理好之后再跑一次 安裝.bat，已填好的设置可以沿用。" "Setup did not finish - the reason is shown above. Fix it and run 安裝.bat again; you can reuse the answers you already gave."
+call :msg "安裝沒有完成（原因在上面）。處理好之後再跑一次 Install.bat，已填好的設定可以沿用。" "安装没有完成（原因在上面）。处理好之后再跑一次 Install.bat，已填好的设置可以沿用。" "Setup did not finish - the reason is shown above. Fix it and run Install.bat again; you can reuse the answers you already gave."
 call :pause
 exit /b 1
 

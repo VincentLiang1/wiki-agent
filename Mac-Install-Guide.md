@@ -116,13 +116,13 @@ Once set up, `上次同步` ("last synced") at the bottom of that column on the 
 
 ## Updating
 
-In Finder, open the **wiki-agent** folder in your home folder → double-click **更新.command** ("update"; the first time macOS asks whether you're sure you want to open it — click **Open**). If a file is being processed, Terminal says `The current round hasn't finished yet … waiting for it to finish before updating`; then it downloads the new version. When you see `✓ Update done; the next round uses the new program`, press Enter to close. You don't need to reinstall the schedule.
+In Finder, open the **wiki-agent** folder in your home folder → double-click **Update.command** (the first time macOS asks whether you're sure you want to open it — click **Open**). If a file is being processed, Terminal says `The current round hasn't finished yet … waiting for it to finish before updating`; then it downloads the new version. When you see `✓ Update done; the next round uses the new program`, press Enter to close. You don't need to reinstall the schedule.
 
 If it says `⚠ Python changed version: add this executable to Full Disk Access again`, repeat step 5-3 with the new path it prints.
 
 ## Uninstalling
 
-- **Stop automatic processing only**: double-click **移除排程.command** ("remove schedule") in the wiki-agent folder. Settings, logs and your knowledge base are untouched; to turn it back on, paste the line from step 5 again
+- **Stop automatic processing only**: double-click **Remove-Schedule.command** in the wiki-agent folder. Settings, logs and your knowledge base are untouched; to turn it back on, paste the line from step 5 again
 - **Remove everything**: do the step above, then move the `wiki-agent` folder in your home folder and `~/Library/Application Support/wiki-feeder` (⌘⇧G, paste this path) to the Trash. **Your knowledge base (`WIKI`, `Raw_Sources`) is in neither place and will not be deleted.** You can also remove the Full Disk Access entry in System Settings with **−**
 
 ## When something goes wrong

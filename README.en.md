@@ -50,12 +50,12 @@ Full step-by-step guides: **[Mac-Install-Guide.md](Mac-Install-Guide.md)** and *
 
 1. Install iCloud for Windows, Claude Code (signed in) and the Windows version of scribe2md
 2. (Optional) Create a Gmail app password for the summary email
-3. Download `安裝.bat` (“install”) from this repository and double-click it. If Windows SmartScreen warns you, choose **More info → Run anyway**. It installs Git and uv if needed, puts the program in `C:\wiki-feeder` (no GitHub account needed) and asks the same questions (the screens before the questions follow your Windows display language)
+3. Download `Install.bat` from this repository and double-click it. If Windows SmartScreen warns you, choose **More info → Run anyway**. It installs Git and uv if needed, puts the program in `C:\wiki-feeder` (no GitHub account needed) and asks the same questions (the screens before the questions follow your Windows display language)
 
 Both installers finish by setting up a schedule that runs every minute. To check that it works, drop any file into `_WikiBox` from the iPhone's Files app; after a few minutes a new page appears under `WIKI/Wiki_Pages`, the original is filed into a topic folder under `Raw_Sources`, and (if configured) you receive a "wiki-feeder ingest summary" email.
 
-- **Update**: double-click `更新.command` (Mac, in `~/wiki-agent`) or `更新.bat` (Windows, in `C:\wiki-feeder`). If a round is in progress, it waits for it to finish
-- **Uninstall**: `移除排程.command` / `移除排程.bat` removes only the schedule; settings, logs and your knowledge base stay. To remove everything, also delete the program folder and the settings folder listed below — your `WIKI` and `Raw_Sources` are not in either and are never deleted
+- **Update**: double-click `Update.command` (Mac, in `~/wiki-agent`) or `Update.bat` (Windows, in `C:\wiki-feeder`). If a round is in progress, it waits for it to finish
+- **Uninstall**: `Remove-Schedule.command` / `Remove-Schedule.bat` removes only the schedule; settings, logs and your knowledge base stay. To remove everything, also delete the program folder and the settings folder listed below — your `WIKI` and `Raw_Sources` are not in either and are never deleted
 
 ## Things to know
 

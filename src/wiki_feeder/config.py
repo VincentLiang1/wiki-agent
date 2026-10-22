@@ -298,7 +298,7 @@ class Config:
             from . import owner_mac
             return owner_mac.config()
         raise ConfigError(L("找不到設定檔 {path}:先執行安裝(Windows 是 {bat}、Mac 是 install.sh),它會問完問題寫好這個檔",
-                            path=path, bat="安裝.bat"))   # 檔名是中文:英文譯文也照原樣
+                            path=path, bat="Install.bat"))
 
     @classmethod
     def from_file(cls, path: Path, state: Path) -> "Config":

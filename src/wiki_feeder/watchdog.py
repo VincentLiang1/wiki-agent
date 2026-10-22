@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from .collect import build_inboxes, run_file, uptime
+from .collect import build_inboxes, last_net_down, run_file, uptime
 from .config import Config
 from .ledger import Ledger
 
@@ -359,6 +359,15 @@ def write_probe(cfg: Config, now: float) -> None:
                                            encoding="utf-8")
 
 
+def _rewrite_probe(cfg: Config, now: float) -> list[Problem]:
+    try:
+        write_probe(cfg, now)
+    except OSError as e:
+        return [Problem("icloud", "icloud:stalled", "iCloud 沒在同步",
+                        f"探針檔寫不進 iCloud 雲碟({cfg.icloud_probe_dir}):{e}")]
+    return []
+
+
 def icloud_probe(cfg: Config, now: float, synced=icloud_synced) -> list[Problem]:
     """沒丟檔時 iCloud 本來就不同步,「最後同步時間」舊了分不出壞了還是沒事做,所以自己製造一點流量:
     每 icloud_probe_every 寫一次探針,寫了 icloud_sync_timeout 還沒傳上去才算卡住。
@@ -372,12 +381,7 @@ def icloud_probe(cfg: Config, now: float, synced=icloud_synced) -> list[Problem]
     up_w, written = state.get("up"), state.get("written")
     age = uptime() - up_w if isinstance(up_w, (int, float)) else -1
     if age < 0 or not isinstance(written, (int, float)) or (not state.get("pending") and age >= cfg.icloud_probe_every):
-        try:   # 沒寫過、重開機過(不含睡眠的時鐘歸零)、或該寫下一次了
-            write_probe(cfg, now)
-        except OSError as e:
-            return [Problem("icloud", "icloud:stalled", "iCloud 沒在同步",
-                            f"探針檔寫不進 iCloud 雲碟({cfg.icloud_probe_dir}):{e}")]
-        return []
+        return _rewrite_probe(cfg, now)   # 沒寫過、重開機過(不含睡眠的時鐘歸零)、或該寫下一次了
     if not state.get("pending") or age < cfg.icloud_sync_timeout:
         return []
     ok, detail = synced(probe_path(cfg), written)
@@ -385,6 +389,9 @@ def icloud_probe(cfg: Config, now: float, synced=icloud_synced) -> list[Problem]
         state["pending"] = False
         cfg.icloud_probe_state_path.write_text(json.dumps(state), encoding="utf-8")
         return []
+    if ok is False and last_net_down(cfg) >= written:
+        # 寫入之後斷過網(帶筆電出門、Wi-Fi 斷線):沒傳上去是網路的事,重寫探針、從現在重新計時(2026-10-22 實例)
+        return _rewrite_probe(cfg, now)
     if ok is None:
         return [Problem("resource", "icloud:check", "iCloud 同步檢查跑不起來",
                         f"查不了 iCloud 有沒有在同步(不是 iCloud 本身的問題,是檢查的工具):{detail}", report_only=True)]
