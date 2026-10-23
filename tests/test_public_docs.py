@@ -15,6 +15,8 @@ ONE_LINER = "curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-age
 READMES = ("README.zh-TW.md", "README.zh-CN.md", "README.md")
 GUIDES = {"mac": ("Mac-Install-Guide.zh-TW.md", "Mac-Install-Guide.zh-CN.md", "Mac-Install-Guide.md"),
           "win": ("Windows-Install-Guide.zh-TW.md", "Windows-Install-Guide.zh-CN.md", "Windows-Install-Guide.md")}
+# 〈什麼是 LLM Wiki〉:會議助手 App「送進知識庫」連到這三個檔名(使用者 2026-10-24),改名要一起改 App
+WHAT_IS = ("What-is-LLM-Wiki.zh-TW.md", "What-is-LLM-Wiki.zh-CN.md", "What-is-LLM-Wiki.md")
 
 
 def _head(name: str) -> str:
@@ -27,6 +29,7 @@ def test_readme_in_three_languages_links_to_its_guides_and_states_the_license():
         assert "All rights reserved" in text, name
         assert all(f"]({other})" in _head(name) for other in READMES if other != name), name
         assert GUIDES["mac"][i] in text and GUIDES["win"][i] in text, name
+        assert f"]({WHAT_IS[i]})" in text, name   # 「LLM Wiki」連到同語言的〈什麼是 LLM Wiki〉
 
 
 def test_the_one_line_install_matches_install_sh():
@@ -44,7 +47,7 @@ def test_every_public_md_links_resolve():
 
 
 def test_each_guide_links_to_its_other_two_languages():
-    for trio in GUIDES.values():
+    for trio in (*GUIDES.values(), WHAT_IS):
         for name in trio:
             assert all(f"]({other})" in _head(name) for other in trio if other != name), name
 
@@ -60,7 +63,7 @@ def test_entry_files_and_guides_have_english_names():
 
 def test_simplified_docs_link_to_simplified_guides():
     """簡中 README 與說明的內文只連到簡中那份說明(頁首的語言切換列除外)。"""
-    for name in ("README.zh-CN.md", GUIDES["mac"][1], GUIDES["win"][1]):
+    for name in ("README.zh-CN.md", GUIDES["mac"][1], GUIDES["win"][1], WHAT_IS[1]):
         body = (PUBLIC / name).read_text(encoding="utf-8").split("\n", 3)[3]
         assert ".zh-TW.md" not in body, name
 

@@ -6,7 +6,7 @@
 
 **Record on your iPhone — a new page appears in your knowledge base.**
 
-wiki-agent is a small background program on your computer that maintains a personal knowledge base for you, following Andrej Karpathy's "LLM Wiki" pattern:
+wiki-agent is a small background program on your computer that maintains a personal knowledge base for you, following Andrej Karpathy's "LLM Wiki" pattern (new to LLM Wiki? See [What is an LLM Wiki?](What-is-LLM-Wiki.md)):
 
 1. On your iPhone, drop a voice memo, whiteboard photo, scanned document or Office file into the `_WikiBox` folder on iCloud Drive
 2. Every minute, wiki-agent on your computer checks that folder: it moves the file into your originals folder `Raw_Sources`, and turns recordings and documents into text first (using [scribe2md](https://github.com/VincentLiang1/scribe2md))

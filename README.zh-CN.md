@@ -4,7 +4,7 @@
 
 **iPhone 按下记录,知识库自己长出一页。**
 
-wiki-agent 是一支在你电脑上常驻的小程序,替你照 Andrej Karpathy 的「LLM Wiki」做法维护个人知识库:
+wiki-agent 是一支在你电脑上常驻的小程序,替你照 Andrej Karpathy 的「LLM Wiki」做法维护个人知识库(没听过 LLM Wiki?看〈[什么是 LLM Wiki](What-is-LLM-Wiki.zh-CN.md)〉):
 
 1. 你在 iPhone 上把录音、白板照片、扫描件、Office 文件丢进 iCloud 云盘的 `_WikiBox` 文件夹
 2. 电脑上的 wiki-agent 每分钟看一次:把文件收进原件文件夹 `Raw_Sources`,录音与文档先转成文字(用 [scribe2md](https://github.com/VincentLiang1/scribe2md))

@@ -80,7 +80,8 @@ def extract(files=EXTRACT) -> dict[str, str]:
 # 公開 repo 的說明文件:繁中 → 簡中(與畫面文字同一套轉換,說明裡引用的畫面字才對得上)
 PUBLIC = REPO / "public"
 # 檔名與頁首比照 scribe2md(使用者 2026-10-23):X.md 英文、X.zh-TW.md 繁中、X.zh-CN.md 簡中;頁首 English | 繁體中文 | 简体中文
-DOCS = {"README.zh-TW.md": "README.zh-CN.md", "Mac-Install-Guide.zh-TW.md": "Mac-Install-Guide.zh-CN.md", "Windows-Install-Guide.zh-TW.md": "Windows-Install-Guide.zh-CN.md"}
+DOCS = {"README.zh-TW.md": "README.zh-CN.md", "Mac-Install-Guide.zh-TW.md": "Mac-Install-Guide.zh-CN.md", "Windows-Install-Guide.zh-TW.md": "Windows-Install-Guide.zh-CN.md",
+        "What-is-LLM-Wiki.zh-TW.md": "What-is-LLM-Wiki.zh-CN.md"}   # 〈什麼是 LLM Wiki〉:會議助手 App 連過來(使用者 2026-10-24);簡中手修過「资料／数据」,重轉後看 diff
 
 
 def hans_doc(text: str, cc) -> str:

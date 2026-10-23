@@ -1,5 +1,13 @@
 [
  {
+  "source": "b0267d9",
+  "date": "2026-10-24",
+  "needs_human": false,
+  "zh-Hant": "- 新增說明〈什麼是 LLM Wiki〉(What-is-LLM-Wiki.zh-TW.md),用白話講這套知識庫在做什麼;README 開頭連過去。程式沒有改變,不必做任何事",
+  "zh-Hans": "- 新增说明〈什么是 LLM Wiki〉(What-is-LLM-Wiki.zh-CN.md),用白话讲这套知识库在做什么;README 开头链接过去。程序没有改变,不必做任何事",
+  "en": "- Added a plain-language guide, \"What is an LLM Wiki?\" (What-is-LLM-Wiki.md), explaining what this knowledge base does; the README links to it at the top. The program is unchanged, so there is nothing to do"
+ },
+ {
   "source": "a5285a7",
   "date": "2026-10-23",
   "needs_human": false,
