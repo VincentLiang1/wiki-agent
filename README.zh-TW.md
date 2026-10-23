@@ -1,6 +1,6 @@
 # wiki-agent
 
-**繁體中文** | [简体中文](README.zh-Hans.md) | [English](README.md)
+[English](README.md) | **繁體中文** | [简体中文](README.zh-CN.md)
 
 **iPhone 按下記錄,知識庫自己長出一頁。**
 
@@ -29,11 +29,11 @@ wiki-agent 是一支在你電腦上常駐的小程式,替你照 Andrej Karpathy 
 
 ## 安裝
 
-- **Mac**:看 [Mac-Install-Guide.zh-Hant.md](Mac-Install-Guide.zh-Hant.md)。下載 [wiki-agent-mac.zip](https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip)、解開,把 wiki-agent 拖進「應用程式」再雙擊(已簽章公證)。備用:打開「終端機」貼上一行:
+- **Mac**:看 [Mac-Install-Guide.zh-TW.md](Mac-Install-Guide.zh-TW.md)。下載 [wiki-agent-mac.zip](https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip)、解開,把 wiki-agent 拖進「應用程式」再雙擊(已簽章公證)。備用:打開「終端機」貼上一行:
   ```bash
   curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash
   ```
-- **Windows**:看 [Windows-Install-Guide.zh-Hant.md](Windows-Install-Guide.zh-Hant.md)。下載 `Install.bat`,雙擊
+- **Windows**:看 [Windows-Install-Guide.zh-TW.md](Windows-Install-Guide.zh-TW.md)。下載 `Install.bat`,雙擊
 
 安裝會一題一題問(每題都有預設答案,大多直接按 Enter),最後裝好每分鐘自動跑的排程。第一題選語言:繁體中文、簡體中文或 English,之後的問題、摘要信、警示與新建的知識庫都用那個語言。
 

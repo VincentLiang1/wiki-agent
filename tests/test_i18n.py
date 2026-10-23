@@ -28,11 +28,11 @@ def test_hans_doc_points_links_at_the_simplified_guides():
     """說明檔名 2026-10-22 起是英文:OpenCC 不會再把連結裡的繁中檔名轉成簡中那份,要 hans_doc 自己換。"""
     class Same:
         convert = staticmethod(lambda s: s)
-    src = ("**繁體中文** | [简体中文](Mac-Install-Guide.zh-Hans.md) | [English](Mac-Install-Guide.md)\n\n"
-           "看 [Windows-Install-Guide.zh-Hant.md](Windows-Install-Guide.zh-Hant.md)。照 README.md 做\n")
+    src = ("[English](Mac-Install-Guide.md) | **繁體中文** | [简体中文](Mac-Install-Guide.zh-CN.md)\n\n"
+           "看 [Windows-Install-Guide.zh-TW.md](Windows-Install-Guide.zh-TW.md)。照 README.md 做\n")
     head, body = sync.hans_doc(src, Same()).split("\n", 1)
-    assert head == "[繁體中文](Mac-Install-Guide.zh-Hant.md) | **简体中文** | [English](Mac-Install-Guide.md)"
-    assert "[Windows-Install-Guide.zh-Hans.md](Windows-Install-Guide.zh-Hans.md)" in body and "README.md" in body
+    assert head == "[English](Mac-Install-Guide.md) | [繁體中文](Mac-Install-Guide.zh-TW.md) | **简体中文**"
+    assert "[Windows-Install-Guide.zh-CN.md](Windows-Install-Guide.zh-CN.md)" in body and "README.md" in body
 
 
 def _fields(s: str) -> tuple:

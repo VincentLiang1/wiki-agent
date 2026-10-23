@@ -79,19 +79,20 @@ def extract(files=EXTRACT) -> dict[str, str]:
 
 # 公開 repo 的說明文件:繁中 → 簡中(與畫面文字同一套轉換,說明裡引用的畫面字才對得上)
 PUBLIC = REPO / "public"
-DOCS = {"README.zh-Hant.md": "README.zh-Hans.md", "Mac-Install-Guide.zh-Hant.md": "Mac-Install-Guide.zh-Hans.md", "Windows-Install-Guide.zh-Hant.md": "Windows-Install-Guide.zh-Hans.md"}
+# 檔名與頁首比照 scribe2md(使用者 2026-10-23):X.md 英文、X.zh-TW.md 繁中、X.zh-CN.md 簡中;頁首 English | 繁體中文 | 简体中文
+DOCS = {"README.zh-TW.md": "README.zh-CN.md", "Mac-Install-Guide.zh-TW.md": "Mac-Install-Guide.zh-CN.md", "Windows-Install-Guide.zh-TW.md": "Windows-Install-Guide.zh-CN.md"}
 
 
 def hans_doc(text: str, cc) -> str:
     """頁首的語言切換列換成簡中那份的;連到繁中說明的連結換成簡中那份(檔名 2026-10-22 起是英文,
-    OpenCC 不會再順手轉)。README 2026-10-23 起也是 `README.zh-Hant.md`,`README.md` 是英文那份、不換。"""
+    OpenCC 不會再順手轉)。`README.md` 是英文那份、不換。"""
     lines = text.split("\n")
     for i, ln in enumerate(lines):
-        if ln.startswith("**繁體中文** | "):
+        if ln.startswith("[English](") and " | **繁體中文** | " in ln:
             hant = next(k for k, v in DOCS.items() if f"]({v})" in ln)
-            en = ln.rsplit("[English](", 1)[1].rstrip(")")
+            en = ln.split("[English](", 1)[1].split(")", 1)[0]
             lines[i] = f"@@HEAD@@"
-            head = f"[繁體中文]({hant}) | **简体中文** | [English]({en})"
+            head = f"[English]({en}) | [繁體中文]({hant}) | **简体中文**"
             break
     menu = "語言 / 语言 / Language:1 繁體中文  2 简体中文  3 English"     # 安裝問答第一題:三種寫法並列,不翻
     out = to_hans("\n".join(lines).replace(menu + "(Enter = 繁體中文)", "@@MENU@@"), cc)

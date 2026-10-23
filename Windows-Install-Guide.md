@@ -1,6 +1,6 @@
 # wiki-agent Installation Guide for Windows
 
-[繁體中文](Windows-Install-Guide.zh-Hant.md) | [简体中文](Windows-Install-Guide.zh-Hans.md) | **English**
+**English** | [繁體中文](Windows-Install-Guide.zh-TW.md) | [简体中文](Windows-Install-Guide.zh-CN.md)
 
 Follow the steps in order; it takes about 30–40 minutes (mostly waiting for downloads). If your screen looks different from what is described here, stop and send a photo of the screen to the person helping you install.
 

@@ -1,6 +1,6 @@
 # wiki-agent
 
-[繁體中文](README.zh-Hant.md) | [简体中文](README.zh-Hans.md) | **English**
+**English** | [繁體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md)
 
 
 

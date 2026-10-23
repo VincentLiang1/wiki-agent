@@ -1,6 +1,6 @@
 # wiki-agent Mac 安裝說明
 
-**繁體中文** | [简体中文](Mac-Install-Guide.zh-Hans.md) | [English](Mac-Install-Guide.md)
+[English](Mac-Install-Guide.md) | **繁體中文** | [简体中文](Mac-Install-Guide.zh-CN.md)
 
 照順序做,大約 30～40 分鐘(大多是等下載)。每一步都寫了「在哪裡、按什麼、會看到什麼」;畫面跟這裡寫的不一樣,就停下來把畫面拍給幫你裝的人看。
 

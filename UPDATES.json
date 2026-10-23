@@ -1,5 +1,13 @@
 [
  {
+  "source": "a5285a7",
+  "date": "2026-10-23",
+  "needs_human": false,
+  "zh-Hant": "- README 與安裝說明的中文版改名:繁中是 .zh-TW.md、簡中是 .zh-CN.md(原本 .zh-Hant／.zh-Hans),最上面的語言列改成 English | 繁體中文 | 简体中文;舊的連結會打不開,從 README 頁首切換即可。程式沒有改變,不必做任何事",
+  "zh-Hans": "- README 与安装说明的中文版改名:繁中是 .zh-TW.md、简中是 .zh-CN.md(原本 .zh-Hant/.zh-Hans),最上面的语言列改成 English | 繁體中文 | 简体中文;旧的链接会打不开,从 README 页首切换即可。程序没有改变,不必做任何事",
+  "en": "- The Chinese README and installation guides were renamed: Traditional Chinese is now .zh-TW.md and Simplified Chinese .zh-CN.md (previously .zh-Hant/.zh-Hans), and the language bar at the top now reads English | 繁體中文 | 简体中文; old links to the Chinese files no longer work, so switch from the top of the README. The program is unchanged, so there is nothing to do"
+ },
+ {
   "source": "4b25f9c",
   "date": "2026-10-23",
   "needs_human": false,

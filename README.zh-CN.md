@@ -1,6 +1,6 @@
 # wiki-agent
 
-[繁體中文](README.zh-Hant.md) | **简体中文** | [English](README.md)
+[English](README.md) | [繁體中文](README.zh-TW.md) | **简体中文**
 
 **iPhone 按下记录,知识库自己长出一页。**
 
@@ -29,11 +29,11 @@ wiki-agent 是一支在你电脑上常驻的小程序,替你照 Andrej Karpathy 
 
 ## 安装
 
-- **Mac**:看 [Mac-Install-Guide.zh-Hans.md](Mac-Install-Guide.zh-Hans.md)。下载 [wiki-agent-mac.zip](https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip)、解开,把 wiki-agent 拖进「应用程序」再双击(已签章公证)。备用:打开「终端」粘贴一行:
+- **Mac**:看 [Mac-Install-Guide.zh-CN.md](Mac-Install-Guide.zh-CN.md)。下载 [wiki-agent-mac.zip](https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip)、解开,把 wiki-agent 拖进「应用程序」再双击(已签章公证)。备用:打开「终端」粘贴一行:
   ```bash
   curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash
   ```
-- **Windows**:看 [Windows-Install-Guide.zh-Hans.md](Windows-Install-Guide.zh-Hans.md)。下载 `Install.bat`,双击
+- **Windows**:看 [Windows-Install-Guide.zh-CN.md](Windows-Install-Guide.zh-CN.md)。下载 `Install.bat`,双击
 
 安装会一题一题问(每题都有默认答案,大多直接按 Enter),最后装好每分钟自动跑的定时任务。第一题选语言:繁体中文、简体中文或 English,之后的问题、摘要信、警示与新建的知识库都用那个语言。
 

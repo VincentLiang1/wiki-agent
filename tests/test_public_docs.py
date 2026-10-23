@@ -11,9 +11,10 @@ ONE_LINER = "curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-age
 
 
 # 三種語言(spec §10):每一份都有繁中、簡中、英文版,頁首互相連結;README 各自連到同語言的安裝說明
-READMES = ("README.zh-Hant.md", "README.zh-Hans.md", "README.md")
-GUIDES = {"mac": ("Mac-Install-Guide.zh-Hant.md", "Mac-Install-Guide.zh-Hans.md", "Mac-Install-Guide.md"),
-          "win": ("Windows-Install-Guide.zh-Hant.md", "Windows-Install-Guide.zh-Hans.md", "Windows-Install-Guide.md")}
+# 檔名比照 scribe2md(使用者 2026-10-23):X.md 英文是預設、X.zh-TW.md 繁中、X.zh-CN.md 簡中
+READMES = ("README.zh-TW.md", "README.zh-CN.md", "README.md")
+GUIDES = {"mac": ("Mac-Install-Guide.zh-TW.md", "Mac-Install-Guide.zh-CN.md", "Mac-Install-Guide.md"),
+          "win": ("Windows-Install-Guide.zh-TW.md", "Windows-Install-Guide.zh-CN.md", "Windows-Install-Guide.md")}
 
 
 def _head(name: str) -> str:
@@ -59,9 +60,9 @@ def test_entry_files_and_guides_have_english_names():
 
 def test_simplified_docs_link_to_simplified_guides():
     """簡中 README 與說明的內文只連到簡中那份說明(頁首的語言切換列除外)。"""
-    for name in ("README.zh-Hans.md", GUIDES["mac"][1], GUIDES["win"][1]):
+    for name in ("README.zh-CN.md", GUIDES["mac"][1], GUIDES["win"][1]):
         body = (PUBLIC / name).read_text(encoding="utf-8").split("\n", 3)[3]
-        assert ".zh-Hant.md" not in body, name
+        assert ".zh-TW.md" not in body, name
 
 
 def test_guides_name_the_files_that_really_exist():
