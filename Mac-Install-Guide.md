@@ -115,9 +115,19 @@ Once set up, `上次同步` ("last synced") at the bottom of that column on the 
 
 ## Updating
 
-Repeat steps 1–3 of step 5: download the new zip, drag wiki-agent into Applications (click **Replace** if asked) and double-click it. Terminal puts the new program in place; when it asks whether to keep the current settings, press Enter. The schedule is replaced automatically; if a new version needs one more permission, a window appears during the final test read — click **Allow**. Permissions you already allowed don't need to be redone.
+**Normally you don't need to do anything**: once a day the program checks for a new version and installs the newest version once it has been out for a day — it downloads the new wiki-agent and only switches if it is signed by the same developer and notarized by Apple; it waits for the round being processed to finish, then test-reads your inbox and knowledge base in the background, and if they can't be read it switches back to the previous version by itself. The old version is kept as a hidden `.wiki-agent-previous.app` in Applications as a fallback; you can ignore it. Each auto-update sends a separate email (if you set up the summary email):
 
-(If you installed with the Terminal command: in Finder, open the **wiki-agent** folder in your home folder → double-click **Update.command**. If it says Python changed version, add the new path it prints to Full Disk Access again.)
+- `wiki-feeder updated itself to …`: it worked; the email says what changed
+- `wiki-feeder … is available: this version needs you to update it yourself`: this version has a step you need to do; update by hand as below
+- `⚠️ Needs attention | wiki-feeder auto-update failed, rolled back to …`: it went back to the previous version and keeps running; no rush
+
+If the daily summary shows the alert "Auto-update hasn't been able to check for days": on the days this computer was on, it couldn't check for new versions (days it was off or offline don't count), so auto-update itself may be broken. Update by hand once as below.
+
+The log is `~/Library/Application Support/wiki-feeder/logs/update.log`. **To turn auto-update off**: open Terminal, paste `open -e ~/Library/Application\ Support/wiki-feeder/config.toml` and press Enter, add the line `auto_update = false` under `[general]`, and save.
+
+To update right away (or when an email asks you to): repeat steps 1–3 of step 5: download the new zip, drag wiki-agent into Applications (click **Replace** if asked) and double-click it. Terminal puts the new program in place; when it asks whether to keep the current settings, press Enter. The schedule is replaced automatically; if a new version needs one more permission, a window appears during the final test read — click **Allow**. Permissions you already allowed don't need to be redone.
+
+(If you installed with the Terminal command: it updates itself too; to update by hand, open the **wiki-agent** folder in your home folder in Finder → double-click **Update.command**. A version that changes the Python version is not installed automatically — you get an email asking you to update by hand. If it says Python changed version, add the new path it prints to Full Disk Access again.)
 
 ## Uninstalling
 

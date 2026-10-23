@@ -1,13 +1,25 @@
 @echo off
+rem cmd reads a running .bat by byte offset, and git pull / the zip update may replace this very file
+rem (the rest would run from the middle of a line). So run a copy from %TEMP%, with the folder as argument.
+if /i "%~1"=="--copy" goto copied
+copy /y "%~f0" "%TEMP%\wiki-feeder-Update.bat" >nul
+if errorlevel 1 goto nocopy
+"%TEMP%\wiki-feeder-Update.bat" --copy "%~dp0."
+:nocopy
+echo Cannot copy Update.bat to %TEMP% - press any key to close.
+pause >nul
+exit /b 1
+:copied
 chcp 65001 >nul
 setlocal EnableExtensions
-rem git pull + uv sync. Disable the schedule first and let the running round finish: a round cut off
-rem halfway through would stop the next round until someone steps in.
+rem Update: git pull (cloned with git) or scripts\winupdate.py (installed from the zip), then uv sync.
+rem Disable the schedule first and let the running round finish: a round cut off halfway through would
+rem stop the next round until someone steps in.
 rem Chinese only inside call :msg / call :pick arguments - see the top of the install .bat
 call :lang
 call :pick T "wiki-feeder 更新" "wiki-feeder 更新" "wiki-feeder Update"
 title %T%
-cd /d "%~dp0"
+cd /d "%~2"
 if not exist pyproject.toml goto notrepo
 set "PATH=%PATH%;%ProgramFiles%\Git\cmd;%USERPROFILE%\.local\bin;%LOCALAPPDATA%\Microsoft\WinGet\Links"
 set "PYTHONUTF8=1"
@@ -16,8 +28,14 @@ call :msg "停用排程，等正在跑的一輪做完..." "禁用定时任务，
 ".venv\Scripts\python.exe" -X utf8 scripts\winsched.py disable
 echo.
 call :msg "下載新版..." "下载新版..." "Downloading the new version..."
+if not exist ".git\" goto viazip
 git pull
 if errorlevel 1 set "FAIL=git pull"
+goto synced
+:viazip
+".venv\Scripts\python.exe" -X utf8 scripts\winupdate.py
+if errorlevel 1 set "FAIL=winupdate"
+:synced
 if not defined FAIL uv sync
 if not defined FAIL if errorlevel 1 set "FAIL=uv sync"
 echo.

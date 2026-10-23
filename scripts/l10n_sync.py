@@ -26,7 +26,7 @@ REPO = Path(__file__).resolve().parents[1]
 LOCALES = REPO / "src" / "wiki_feeder" / "locales"
 OVERRIDES = REPO / "scripts" / "l10n" / "zh-Hans-overrides.json"
 EXTRACT = (sorted((REPO / "src" / "wiki_feeder").glob("*.py"))
-           + [REPO / "scripts" / f"{n}.py" for n in ("winsetup", "macsetup", "macsched", "winsched")])
+           + [REPO / "scripts" / f"{n}.py" for n in ("winsetup", "macsetup", "macsched", "winsched", "winupdate")])
 
 # OpenCC tw2sp 轉不到、或轉得不像大陸說法的。轉完才套,所以左邊寫簡體(與 scribe2md-ios 同一張,再加本程式的詞)
 ZH_HANS_FIX = {
@@ -38,10 +38,12 @@ ZH_HANS_FIX = {
     "档案": "文件",
     "个档": "个文件",
     "档名": "文件名",
+    "签章": "签名",
     # macOS／Windows／Google 簡中介面上的正式名稱(說明要照畫面找得到)
     "完整磁盘取用权限": "完全磁盘访问权限",
     "钥匙圈": "钥匙串",
     "认证管理员": "凭据管理器",
+    "工作调度器": "任务计划程序",   # 「工作排程器」:Windows 簡中介面的正式名稱;要在下面的「调度」之前
     "应用程序密码": "应用专用密码",
     "系统设定": "系统设置",
     "隐私权与安全性": "隐私与安全性",

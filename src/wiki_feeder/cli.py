@@ -110,9 +110,10 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     rg.add_argument("name", help=L("檔名,例如 IMG_5872.JPG"))
     rg.add_argument("--note", required=True, help=L("背景說明,會寫進攝入提示"))
     sub.add_parser("resume", help=L("檢查過 STOP 之後解除:恢復攝入與補推"))
-    w = sub.add_parser("watch", help=L("朋友版 Mac 的簡易看門狗一輪:哪一輪卡住、排程沒載入就發警示到當日摘要,"
-                                       "並做 iCloud 定時重啟(每 3 分鐘;不自動修)"))
-    w.add_argument("--prefix", default="io.github.wiki-agent", help=L("排程標籤的前綴(實測時換一組)"))
+    w = sub.add_parser("watch", help=L("朋友版的簡易看門狗一輪:哪一輪卡住、排程沒載入就發警示到當日摘要,"
+                                       "Mac 並做 iCloud 定時重啟(每 3 分鐘;不自動修)"))
+    w.add_argument("--prefix", default="wiki-feeder" if sys.platform == "win32" else "io.github.wiki-agent",
+                   help=L("排程標籤的前綴;Windows 是工作排程器的資料夾(實測時換一組)"))
     sub.add_parser("watchdog", help=L("看門狗的一輪:查有沒有卡住、CPU／記憶體被佔用,有就自動修理並寄信(launchd 每 3 分鐘)"))
     q = sub.add_parser("quarantine", help=L("把攝入留在公事庫的沒追蹤檔搬到隔離區(不刪)"))
     q.add_argument("path")
@@ -249,10 +250,11 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
         return 0
 
     if args.cmd == "watch":
-        # 朋友版 Mac 的第三個排程(macsched);使用者本人的由看門狗(watchdog)做
+        # 朋友版的第三個排程(Mac 的 macsched、Windows 的 winsched);使用者本人的由看門狗(watchdog)做
         from .repair import friend_round
         _setup_logging(cfg)
-        _post_alerts(cfg, friend_round(cfg, (f"{args.prefix}.collect", f"{args.prefix}.process")))
+        sep = "\\" if sys.platform == "win32" else "."   # Windows:工作排程器的「資料夾\任務」
+        _post_alerts(cfg, friend_round(cfg, (f"{args.prefix}{sep}collect", f"{args.prefix}{sep}process")))
         return 0
 
     if args.cmd == "watchdog":
@@ -327,6 +329,7 @@ def _work(args, cfg: Config) -> int:
     if args.only:
         cfg = _only(cfg, {x.strip().lower() for x in args.only.split(",")})
     if args.list:
+        bad = False   # 有一項讀不到就回 1:自動更新換版後的試讀看結束碼(訊息會翻譯,不比對字)
         for inbox in build_inboxes(replace(cfg, futures=None)):
             # 每個收件匣都印一行狀態:空的也印,否則「空」與「根本沒跑」分不出來
             try:
@@ -338,6 +341,7 @@ def _work(args, cfg: Config) -> int:
                     print(f"{inbox.name}\t" + " + ".join(c.rel for c in g))
             except Exception as e:  # noqa: BLE001
                 print(f"{inbox.name}\t{L('錯誤:')}{e}")
+                bad = True
         # macsched.py check 在 launchd 底下跑:知識庫放在「文件」「桌面」底下的話,App 版要趁安裝時讓系統問過權限
         for repo in cfg.repos if args.dirs else ():
             for d in (repo.repo_dir, repo.raw_root):
@@ -346,6 +350,7 @@ def _work(args, cfg: Config) -> int:
                     print(f"{d}\t{L('可讀')}")
                 except OSError as e:
                     print(f"{d}\t{L('錯誤:')}{e}")
+                    bad = True
         if args.dirs and cfg.icloud_restart:
             # iCloud 定時重啟要讀 brctl status(也靠它叫醒 bird)。App 版第一次讀時系統把它算在 wiki-agent 頭上、
             # 跳視窗等人按(2026-10-23 實測:沒人按就一直卡著)——要趁安裝時問完,半夜碰到就每輪卡 60 秒
@@ -355,7 +360,7 @@ def _work(args, cfg: Config) -> int:
             print(f"{name}\t{L('可讀')}" if last_sync(st) is not None
                   else f"{name}\t{L('錯誤:')}" + (L("等了 {s} 秒沒有回應", s=CHECK_BRCTL_WAIT) if st is None
                                                   else " ".join(st.split())[:200]))
-        return 0
+        return 1 if bad else 0
 
     _setup_logging(cfg)
     r = collect(cfg)

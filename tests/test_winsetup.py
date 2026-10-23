@@ -197,14 +197,28 @@ def test_install_bat_elevates_only_the_long_path_step():
 
 
 def test_update_bat_waits_for_the_running_round_and_always_reenables():
-    """更新不砍正在跑的一輪(攝入做到一半被砍會 STOP),pull／sync 失敗也要重新啟用排程。"""
-    lines = _bat("Update.bat").splitlines()
+    """更新不砍正在跑的一輪(攝入做到一半被砍會 STOP),pull／下載／sync 失敗也要重新啟用排程。"""
+    lines = [ln if not ln.lower().startswith("rem ") else "" for ln in _bat("Update.bat").splitlines()]
     i_disable = next(i for i, ln in enumerate(lines) if "winsched.py disable" in ln)
     i_pull = next(i for i, ln in enumerate(lines) if ln.strip() == "git pull")
+    i_zip = next(i for i, ln in enumerate(lines) if "winupdate.py" in ln)
     i_enable = next(i for i, ln in enumerate(lines) if "winsched.py enable" in ln)
-    assert i_disable < i_pull < i_enable
-    assert not any("goto" in ln for ln in lines[i_pull:i_enable])    # 失敗也走到 enable
+    assert i_disable < i_pull < i_enable and i_disable < i_zip < i_enable
+    labels = {ln.strip()[1:].lower(): i for i, ln in enumerate(lines) if ln.startswith(":")}
+    for ln in lines[i_disable:i_enable]:                              # 失敗也走到 enable:只跳到 enable 之前的標籤
+        if "goto" in ln:
+            assert labels[ln.split("goto", 1)[1].strip().lower()] < i_enable, ln
     assert not any("/End" in ln or "taskkill" in ln for ln in lines)
+
+
+def test_update_bat_runs_from_a_copy_in_temp():
+    """cmd 照位元組位置讀正在跑的 .bat:git pull／zip 更新換掉 Update.bat 之後,後半段會從某一行的中間讀起
+    (改名那次實測是直接中斷、排程停在停用)。開頭先複製到 %TEMP% 從副本跑。"""
+    lines = _bat("Update.bat").splitlines()
+    i_copy = next(i for i, ln in enumerate(lines) if ln.startswith("copy ") and "%~f0" in ln)
+    i_disable = next(i for i, ln in enumerate(lines) if "winsched.py disable" in ln)
+    assert i_copy < i_disable and any('"%TEMP%' in ln and "--copy" in ln for ln in lines[:i_disable])
+    assert all(ord(ch) < 128 for ln in lines[:i_copy + 3] for ch in ln)   # chcp 之前只能是 ASCII
 
 
 # -- 介面語言(繁中原文／簡中／English):問答第一題選,寫進設定檔 [general] language ---------------------

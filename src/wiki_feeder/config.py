@@ -154,6 +154,14 @@ class Config:
     # 閒著時大約每 15～18 分鐘重啟一次,重啟後當場叫醒 bird。使用者本人的 Mac 由看門狗做;朋友的 Mac 有 iCloud 收件匣
     # 就預設打開(使用者 2026-10-23:朋友也會碰到),由 macsched 的簡易看門狗(watch)做;設定檔 [inbox] icloud_restart = false 關掉
     icloud_restart: bool = False
+    # 朋友版的自動更新(Windows 與 Mac;使用者 2026-10-23;spec §7.9):watch 那一輪一天查一次,換到最新版,但最新版要發佈滿 1 天。
+    # 有設定檔(朋友版)就預設打開,[general] auto_update = false 關掉;使用者本人那台走 owner_mac.py,維持 False
+    # (發佈副本由 deploy 換;開發目錄與發佈副本的 origin 不是公開 repo,install_kind 本來就不動)
+    auto_update: bool = False
+    update_min_age: float = 24 * 3600     # 最新版發佈滿這麼久才換(使用者 2026-10-23:24 小時內發現問題可以趕快補發下一版)
+    update_check_every: float = 24 * 3600  # 一天查一次
+    update_retry_after: float = 3600       # 連不上網路、GitHub 出錯:一小時後再查(不等一天,也不每 3 分鐘洗 log)
+    update_stale_days: int = 3             # 開機的日子裡連續這麼多天沒查成功就警示(自動更新本身壞了;沒網路、關機的日子不算)
     icloud_kick_every: float = 900      # 距上次重啟多久才再重啟(秒,牆上時間)
     icloud_busy_max: float = 1800       # 收件匣的佔位檔出現多久內算「下載中」、不重啟;超過就是下載卡住,照樣重啟
     icloud_log_keep_days: float = 10    # icloud.log 留幾天
@@ -255,6 +263,26 @@ class Config:
         return self.state_dir / "icloud_kick.json"      # 上次重啟 bird 的時間、收件匣佔位檔第一次看到的時間
 
     @property
+    def update_state_path(self) -> Path:
+        return self.state_dir / "autoupdate.json"     # 上次查的時間、待寄的信、寄過的信、裝失敗過的版本
+
+    @property
+    def update_health_path(self) -> Path:
+        return self.state_dir / "update_health.json"  # watch 跑過的日子(開機的日子);repair._update_stale
+
+    @property
+    def update_lock_path(self) -> Path:
+        return self.state_dir / "autoupdate.lock"     # 換版程式(scripts/winautoupdate.py)正在跑:{pid, started}
+
+    @property
+    def update_result_path(self) -> Path:
+        return self.state_dir / "autoupdate-result.json"   # 換版程式的結果,下一輪 watch 寄信、寫 log
+
+    @property
+    def update_log_path(self) -> Path:
+        return self.state_dir / "logs" / "update.log"
+
+    @property
     def watch_lock_path(self) -> Path:
         return self.state_dir / "watch.lock"           # 朋友版簡易看門狗(wiki-feeder watch)防重入
 
@@ -331,7 +359,7 @@ class Config:
         except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
             raise ConfigError(L("設定檔 {path} 讀不了:{e}", path=path, e=e)) from e
         known = {"inbox": {"icloud", "onedrive", "icloud_restart"}, "wiki": {"dir", "raw", "label", "github", "branch"},
-                 "mail": {"from", "to"}, "tools": {"doc2md", "claude", "ffmpeg"}, "general": {"language"}}
+                 "mail": {"from", "to"}, "tools": {"doc2md", "claude", "ffmpeg"}, "general": {"language", "auto_update"}}
         problems = [f"[{k}]" for k in data if k not in known]
         problems += [f"[{k}] {x}" for k, keys in known.items() for x in data.get(k, {}) if x not in keys]
         if problems:
@@ -350,6 +378,8 @@ class Config:
             raise ConfigError(L("設定檔 {path} 沒有任何收件匣([inbox] icloud 或 onedrive)", path=path))
         if not isinstance(inbox.get("icloud_restart", True), bool):
             raise ConfigError(L("設定檔 {path} 的 [inbox] icloud_restart 只能是 true 或 false", path=path))
+        if not isinstance(data.get("general", {}).get("auto_update", True), bool):
+            raise ConfigError(L("設定檔 {path} 的 [general] auto_update 只能是 true 或 false", path=path))
 
         def opt(v: str | None) -> Path | None:
             return Path(v) if v else None
@@ -365,6 +395,7 @@ class Config:
             onedrive_inbox=opt(inbox.get("onedrive")),
             # 只有 Mac 的 iCloud 有 bird 要顧;Windows 的 iCloud 是另一套程式,不動
             icloud_restart=bool(inbox.get("icloud")) and PLATFORM == "darwin" and inbox.get("icloud_restart", True),
+            auto_update=data.get("general", {}).get("auto_update", True),   # 朋友版兩個平台都預設打開(§7.9)
             futures=None,
             repos=(RepoConfig("main", wiki.get("label", L("知識庫", lang)), Path(wiki["dir"]), raw,
                               wiki.get("github", ""), wiki.get("branch", "master"), managed=True),),

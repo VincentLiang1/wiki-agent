@@ -38,11 +38,11 @@ The daily summary is sent through Gmail. If you don't want the email you can ski
 
 ## 5. Install wiki-agent
 
-1. In your browser, open <https://github.com/VincentLiang1/wiki-agent>, click **Install.bat** in the file list, then click the **Download raw file** icon at the top right and save it to your Downloads folder. If the browser warns that this kind of file may be harmful, choose **Keep**
-2. Double-click the downloaded **Install.bat**. If a blue security warning appears ("Windows protected your PC" or similar), click **More info** → **Run anyway**
-3. The black window first lists `Before you start, please do these three things:` (steps 1–3 above); press any key to continue
-4. If Git or uv is missing, it installs them (you may be asked "Do you want to allow this app to make changes?" — click **Yes**)
-5. When asked `Which folder should the program go in?`, just press Enter (`C:\wiki-feeder`). It downloads the program from GitHub and installs what it needs; **no GitHub account is required**
+1. In your browser, open <https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-win.zip> to download **wiki-agent-win.zip** (**no GitHub account is required**). If the browser warns that this kind of file may be harmful, choose **Keep**
+2. In your Downloads folder, right-click the zip → **Extract All** and change the destination to `C:\`; you get `C:\wiki-agent`. ⚠️ Don't extract it to the Desktop or Documents: those are often synced by OneDrive
+3. Open `C:\wiki-agent` and double-click **Install.bat**. If a blue security warning appears ("Windows protected your PC" or similar), click **More info** → **Run anyway**
+4. The black window first lists `Before you start, please do these three things:` (steps 1–3 above); press any key to continue
+5. If Git or uv is missing, it installs them (you may be asked "Do you want to allow this app to make changes?" — click **Yes**; the program uses Git to keep the version history of your knowledge base), then installs the packages it needs
 6. While enabling Windows long path support, a **User Account Control** prompt appears — click **Yes** (this is the only step that needs administrator rights; it isn't asked if already enabled)
 
 ### 5-1. Answer the questions
@@ -99,15 +99,27 @@ Once set up, `上次同步` ("last synced") at the bottom of that column on the 
 
 ## Updating
 
-Double-click **Update.bat** in `C:\wiki-feeder`. If a file is being processed, it waits for that round to finish before updating; it never cuts it off midway.
+**Normally you don't need to do anything**: once a day the program checks for a new version and installs the newest version once it has been out for a day — it waits for the round being processed to finish, then test-reads your inbox and knowledge base, and if they can't be read it rolls back to the previous version by itself. Each auto-update sends a separate email (if you set up the summary email):
+
+- `wiki-feeder updated itself to …`: it worked; the email says what changed
+- `wiki-feeder … is available: this version needs you to update it yourself`: this version has a step you need to do; double-click Update.bat as below
+- `⚠️ Needs attention | wiki-feeder auto-update failed, rolled back to …`: it went back to the previous version and keeps running; no rush
+
+If the daily summary shows the alert "Auto-update hasn't been able to check for days": on the days this computer was on, it couldn't check for new versions (days it was off or offline don't count), so auto-update itself may be broken. Double-click Update.bat as described below to update by hand once.
+
+The log is `%LOCALAPPDATA%\wiki-feeder\logs\update.log`. **To turn auto-update off**: open `%LOCALAPPDATA%\wiki-feeder\config.toml` in Notepad, add the line `auto_update = false` under `[general]`, and save.
+
+To update right away (or when an email asks you to): double-click **Update.bat** in `C:\wiki-agent`. It downloads the new version from GitHub and replaces the files in the program folder; if a file is being processed, it waits for that round to finish before updating and never cuts it off midway. Settings, logs and your knowledge base are untouched.
+
+(If you installed with an older version of this guide — only Install.bat, into `C:\wiki-feeder` — double-click the Update.bat there; it updates with Git. Read `C:\wiki-feeder` wherever this guide says `C:\wiki-agent`.)
 
 ## Uninstalling
 
-- **Stop automatic processing only**: double-click **Remove-Schedule.bat** in `C:\wiki-feeder`. Settings, logs and your knowledge base are untouched; to turn it back on, run **Install.bat** again
-- **Remove everything**: do the step above, then delete `C:\wiki-feeder` and `%LOCALAPPDATA%\wiki-feeder`. **Your knowledge base (`WIKI`, `Raw_Sources`) is in neither place and will not be deleted**
+- **Stop automatic processing only**: double-click **Remove-Schedule.bat** in `C:\wiki-agent`. Settings, logs and your knowledge base are untouched; to turn it back on, run **Install.bat** again
+- **Remove everything**: do the step above, then delete `C:\wiki-agent` and `%LOCALAPPDATA%\wiki-feeder`. **Your knowledge base (`WIKI`, `Raw_Sources`) is in neither place and will not be deleted**
 
 ## When something goes wrong
 
-- **The email subject starts with `⚠️ Needs attention`**: open PowerShell, type `cd C:\wiki-feeder; claude`, paste the whole email into Claude and ask it to handle it according to wiki-agent's rules (you can write to Claude in English)
+- **The email subject starts with `⚠️ Needs attention`**: open PowerShell, type `cd C:\wiki-agent; claude`, paste the whole email into Claude and ask it to handle it according to wiki-agent's rules (you can write to Claude in English)
 - **The email says Claude Code is not signed in or the sign-in expired**: type `claude` in PowerShell and sign in again; the next round picks up where it left off
 - **Don't run git in the knowledge base yourself** (including asking Claude to commit for you): the program only accepts versions it has verified itself; one extra commit makes it stop and wait for a person

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -29,7 +30,9 @@ from .collect import build_inboxes, last_net_down, run_file, uptime
 from .config import Config
 from .i18n import L
 from .ledger import Ledger
-from .osplat import is_placeholder
+from .osplat import WINDOWS, is_placeholder, oem_decode, pid_alive, try_lock, unlock
+
+log = logging.getLogger(__name__)
 
 AGENT_LABELS = ("tw.vli.wiki-feeder.collect", "tw.vli.wiki-feeder.process")
 
@@ -52,13 +55,7 @@ def hung_limits(cfg: Config) -> dict[str, tuple[Path, float]]:
 
 
 def _alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+    return pid_alive(pid)
 
 
 def _nobody_holds(lock: Path, run: Path) -> bool:
@@ -67,7 +64,20 @@ def _nobody_holds(lock: Path, run: Path) -> bool:
     不能只看 .run 裡的 pid 還在不在:重開機或過一陣子 pid 會被別的行程用掉,照 pid 判斷會把不相干的行程
     當成卡住的一輪,unstick 就去砍它。清檔要在握著鎖的時候做:新的一輪先拿到獨佔鎖才寫 .run,不會刪到它的。
     """
-    import fcntl   # 看門狗只在 Mac 跑;放在函式裡,Windows 上 import 這個模組(附錄常數的測試)才不會失敗
+    if WINDOWS:   # 朋友版的簡易看門狗(watch):只有獨佔鎖,試拿一下就放(這一瞬間新的一輪拿不到鎖、直接結束,下一分鐘再來)
+        try:
+            f = open(lock, "a+")
+        except OSError:
+            return False
+        with f:
+            if not try_lock(f):
+                return False
+            try:
+                run.unlink(missing_ok=True)
+            finally:
+                unlock(f)
+            return True
+    import fcntl   # 放在函式裡:Windows 沒有 fcntl
     try:
         fd = os.open(lock, os.O_RDONLY)
     except OSError:
@@ -131,6 +141,35 @@ def agents_not_loaded(labels: tuple[str, ...] = AGENT_LABELS) -> list[str]:
     dom = f"gui/{os.getuid()}"
     return [lb for lb in labels
             if subprocess.run(["launchctl", "print", f"{dom}/{lb}"], capture_output=True).returncode != 0]
+
+
+def tasks_not_ready(names: tuple[str, ...], run=subprocess.run) -> list[str]:
+    """Windows 版的 agents_not_loaded(朋友版的簡易看門狗):工作排程器的任務(`資料夾\\名稱`)不存在或被停用。
+    查 PowerShell 的 State(英文列舉);schtasks 的「狀態」欄跟著系統語言、又是 OEM 碼頁,不解析。
+    PowerShell 自己跑不起來(逾時、結束碼非零)就當作查不到、不報:報出去是一則假的「排程沒有載入」。"""
+    folders = sorted({n.rsplit("\\", 1)[0] for n in names})
+    paths = ",".join("'\\" + f.replace("'", "''") + "\\'" for f in folders)
+    cmd = (f"Get-ScheduledTask -TaskPath {paths} -ErrorAction SilentlyContinue | "
+           "ForEach-Object { $_.TaskPath + $_.TaskName + '=' + $_.State }")
+    try:
+        r = run(["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd], capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log.warning(L("查不到工作排程器的任務狀態:%s"), e)
+        return []
+    if r.returncode != 0:
+        log.warning(L("查不到工作排程器的任務狀態:%s"), oem_decode(r.stderr or b"").strip()[:300])
+        return []
+    state = {}
+    for ln in oem_decode(r.stdout or b"").splitlines():
+        path, _, st = ln.strip().rpartition("=")
+        if path:
+            state[path.lstrip("\\").lower()] = st
+    return [n for n in names if state.get(n.lower()) not in ("Ready", "Running", "Queued")]
+
+
+def friend_agents_check(labels: tuple[str, ...]) -> list[str]:
+    """朋友版的簡易看門狗查排程:Mac 是 launchd 標籤,Windows 是工作排程器的任務名稱。"""
+    return tasks_not_ready(labels) if WINDOWS else agents_not_loaded(labels)
 
 
 def normalize(text: str, name: str = "") -> str:

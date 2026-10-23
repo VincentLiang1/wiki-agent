@@ -338,7 +338,8 @@ _NETWORK_DOWN = re.compile(r"Could not resolve|nodename nor servname|Temporary f
                            r"connect to host \S+ port \d+:|port \d+ timed out|Operation timed out|"
                            r"Connection timed out|read operation timed out|Failed to connect to|Connection reset|"
                            r"server \S+ not responding|Couldn't connect to server|Network is unreachable|"
-                           r"Network is down|No route to host|Can't assign requested address|Connection refused", re.I)
+                           r"Network is down|No route to host|Can't assign requested address|Connection refused|"
+                           r"getaddrinfo failed", re.I)   # Windows 的 urllib／socket 查不到 DNS
 
 
 def network_down(msg: str) -> bool:

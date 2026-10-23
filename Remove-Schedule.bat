@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal EnableExtensions
-rem Removes only the two Task Scheduler tasks; config, records and the knowledge base stay
+rem Removes only the Task Scheduler tasks (collect, process, watch); config, records and the knowledge base stay
 rem Chinese only inside call :msg / call :pick arguments - see the top of the install .bat
 call :lang
 call :pick T "wiki-feeder 移除排程" "wiki-feeder 移除定时任务" "wiki-feeder Remove schedule"

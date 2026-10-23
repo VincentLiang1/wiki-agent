@@ -1,0 +1,10 @@
+[
+ {
+  "source": "39a1eac",
+  "date": "2026-10-23",
+  "needs_human": false,
+  "zh-Hant": "- Windows:多一個每 3 分鐘的「簡易看門狗」,某一輪卡住、收件或攝入的排程被停用時,會寫進當日摘要的警示\n- Windows:可以從安裝包(wiki-agent-win.zip)安裝,Update.bat 會自己下載新版\n- Windows 與 Mac:每天查一次新版,最新版發佈滿 1 天就自動更新(等正在處理的那一輪做完才換,換完先試讀,讀不到就自己退回),結果另外寄一封信;Mac 雙擊 App 裝的會自己換上新的 wiki-agent,舊的留著當退路。不想自動更新的話,設定檔 [general] 加 auto_update = false",
+  "zh-Hans": "- Windows:多一个每 3 分钟的「简易看门狗」,某一轮卡住、收件或摄入的定时任务被禁用时,会写进当日摘要的警示\n- Windows:可以从安装包(wiki-agent-win.zip)安装,Update.bat 会自己下载新版\n- Windows 与 Mac:每天查一次新版,最新版发布满 1 天就自动更新(等正在处理的那一轮做完才换,换完先试读,读不到就自己退回),结果另外寄一封邮件;Mac 双击 App 装的会自己换上新的 wiki-agent,旧的留着当退路。不想自动更新的话,设置文件 [general] 加 auto_update = false",
+  "en": "- Windows: a new simple watchdog runs every 3 minutes; when a round gets stuck or the collect/ingest schedule is disabled, it adds an alert to the daily summary\n- Windows: you can install from the package (wiki-agent-win.zip), and Update.bat downloads new versions by itself\n- Windows and Mac: checks once a day and installs the newest version once it has been out for a day (it waits for the round being processed to finish, test-reads afterwards and rolls back by itself if reading fails), and emails you the result separately; on a Mac installed from the app, it swaps in the new wiki-agent by itself and keeps the old one as a fallback. To turn this off, add auto_update = false under [general] in the config file"
+ }
+]

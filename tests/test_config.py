@@ -135,3 +135,10 @@ def test_language_comes_from_the_config_file(tmp_path):
     c = Config.from_file(_write(tmp_path, GOOD + "\n[general]\nlanguage = 'en'\n"), tmp_path / "state")
     assert c.lang == "en"
     assert Config.from_file(_write(tmp_path, GOOD), tmp_path / "state").lang == "zh-Hant"
+
+
+def test_friends_config_turns_auto_update_on_by_default_on_both_platforms(tmp_path):
+    """朋友版的自動更新兩個平台都預設打開(使用者 2026-10-23);設定檔 [general] auto_update = false 關掉。"""
+    assert Config.from_file(_write(tmp_path, GOOD), tmp_path / "state").auto_update is True
+    off = GOOD + "\n[general]\nauto_update = false\n"
+    assert Config.from_file(_write(tmp_path, off), tmp_path / "state").auto_update is False

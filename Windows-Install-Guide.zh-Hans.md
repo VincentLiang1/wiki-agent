@@ -36,11 +36,11 @@
 
 ## 5. 安装 wiki-agent
 
-1. 浏览器打开 <https://github.com/VincentLiang1/wiki-agent>,在文件清单点 **Install.bat**,再按右上角的**下载**图标(Download raw file),存到「下载」文件夹。浏览器说这类文件可能有害的话,选**保留**
-2. 双击下载的 **Install.bat**。跳出蓝色的安全性警告(「Windows 已保护您的电脑」之类)的话,按**其他信息** → **仍要运行**
-3. 黑色窗口先列出「开始之前请先做好这三件事」(就是上面第 1～3 步),按任意键继续
-4. 没有 Git、uv 的话它会自己装(可能跳出「是否允许变更」,按**是**)
-5. 问「程序要放在哪个文件夹?」,直接按 Enter(`C:\wiki-feeder`)。它会从 GitHub 下载程序、装好需要的套件,**不需要 GitHub 账号**
+1. 浏览器打开 <https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-win.zip>,下载 **wiki-agent-win.zip**(**不需要 GitHub 账号**)。浏览器说这类文件可能有害的话,选**保留**
+2. 在「下载」文件夹对 zip 按右键 →「**全部解压缩**」,目的地改成 `C:\`,解出来就是 `C:\wiki-agent`。⚠️ 不要解到桌面或「文档」:这两个地方常被 OneDrive 同步
+3. 打开 `C:\wiki-agent`,双击 **Install.bat**。跳出蓝色的安全性警告(「Windows 已保护您的电脑」之类)的话,按**其他信息** → **仍要运行**
+4. 黑色窗口先列出「开始之前请先做好这三件事」(就是上面第 1～3 步),按任意键继续
+5. 没有 Git、uv 的话它会自己装(可能跳出「是否允许变更」,按**是**;程序要用 Git 帮你的知识库留版本记录),接着装好需要的套件
 6. 「打开 Windows 长路径支持」时会跳出**用户帐户控制**,按**是**(只有这一步需要系统管理员;已经开过就不会问)
 
 ### 5-1. 回答问题
@@ -97,15 +97,27 @@
 
 ## 更新
 
-双击 `C:\wiki-feeder` 里的 **Update.bat**。如果刚好在处理文件,它会等那一轮做完才更新,不会中途砍掉。
+**平常不必自己动手**:程序一天查一次新版,最新版发布满 1 天就自己换上——等正在处理的那一轮做完才换,换完先试读收件箱与知识库,读不到就自己退回原本的版本。每次自动更新另外寄一封信(有设摘要信的话):
+
+- 「wiki-feeder 已自动更新到 …」:成功,信里写这次改了什么
+- 「wiki-feeder 有新版 …:这一版要你动手更新」:这一版有要你自己做的步骤,照下面双击 Update.bat
+- 「⚠️ 需要处理｜wiki-feeder 自动更新失败,已退回 …」:已经退回原本的版本、照常在跑,不急着处理
+
+当日摘要的警示出现「自动更新好几天没有查成功」:开机的这几天都没能查新版(关机、没网络的日子不算),可能是自动更新本身出了问题,照下面双击 Update.bat 手动更新一次。
+
+记录在 `%LOCALAPPDATA%\wiki-feeder\logs\update.log`。**不想自动更新**:用记事本打开 `%LOCALAPPDATA%\wiki-feeder\config.toml`,在 `[general]` 那段加一行 `auto_update = false`,存盘。
+
+要马上更新(或信里请你动手时):双击 `C:\wiki-agent` 里的 **Update.bat**。它会到 GitHub 下载新版、换掉程序文件夹里的文件;如果刚好在处理文件,它会等那一轮做完才更新,不会中途砍掉。设置、记录、知识库都不动。
+
+(以前照旧版说明、只下载 Install.bat 一个文件装在 `C:\wiki-feeder` 的,一样双击那里的 Update.bat,它会用 Git 更新。以下的 `C:\wiki-agent` 都换成 `C:\wiki-feeder`。)
 
 ## 移除
 
-- **只停掉自动处理**:双击 `C:\wiki-feeder` 里的 **Remove-Schedule.bat**。设置、记录、知识库都不动;要再开,重跑 **Install.bat**
-- **整个拿掉**:先做上面那步,再删掉 `C:\wiki-feeder` 与 `%LOCALAPPDATA%\wiki-feeder`。**你的知识库(`WIKI`、`Raw_Sources`)不在这两个地方,不会被删**
+- **只停掉自动处理**:双击 `C:\wiki-agent` 里的 **Remove-Schedule.bat**。设置、记录、知识库都不动;要再开,重跑 **Install.bat**
+- **整个拿掉**:先做上面那步,再删掉 `C:\wiki-agent` 与 `%LOCALAPPDATA%\wiki-feeder`。**你的知识库(`WIKI`、`Raw_Sources`)不在这两个地方,不会被删**
 
 ## 出状况时
 
-- **信的主旨开头是「⚠️ 需要处理」**:打开 PowerShell,打 `cd C:\wiki-feeder; claude`,把那封信整封贴给 Claude,请它照 wiki-agent 的规则处理
+- **信的主旨开头是「⚠️ 需要处理」**:打开 PowerShell,打 `cd C:\wiki-agent; claude`,把那封信整封贴给 Claude,请它照 wiki-agent 的规则处理
 - **「Claude Code 没登录或登录过期」**:PowerShell 打 `claude` 重新登录,下一轮就会自己接着做
 - **不要自己在知识库里运行 git**(包括请 Claude 帮你 commit):程序只接受它自己验证过的版本,多一笔就会停下来等人

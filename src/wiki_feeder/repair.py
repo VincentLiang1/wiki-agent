@@ -37,6 +37,7 @@ from .i18n import L
 from .ledger import Ledger
 from .proc import run_net
 from .notify import send
+from .osplat import friend_claude_hint, friend_update_hint
 from .watchdog import (BIRD, Problem, _descendants, bird_running, brctl_status, deploying, detect, icloud_kick,
                        icloud_log, icloud_synced, idle_of, inbox_placeholders, mark_kicked, probe_path, processes,
                        running, write_probe)
@@ -309,16 +310,22 @@ def _kick_icloud(cfg: Config, deps: Deps, now: float, alert: Callable[[str, str,
                 kind=type(e).__name__, log=cfg.log_path))
 
 
-def friend_round(cfg: Config, labels: tuple[str, ...], deps: Deps | None = None) -> list[str]:
-    """朋友版 Mac 的簡易看門狗(`wiki-feeder watch`,macsched 每 3 分鐘;使用者 2026-10-23)。朋友那台沒有看門狗與
-    自動修理,這裡只查「只有另一個排程才看得到」的兩件事——某一輪卡住(卡住的那輪寄不出摘要)、排程沒載入(根本沒在跑)——
-    再做 iCloud 定時重啟(icloud_restart 打開時)。只發警示(呼叫端發到當日摘要;同一則 24 小時一次,collect._alert),
-    不自動修。更新中(deploy.lock 被獨佔:排程可能剛拿掉、程式正在換)這輪不做。"""
+# 朋友那台 clone 下來的資料夾(uv sync 是可編輯安裝,程式就在這裡;Windows 預設 C:\wiki-feeder,朋友可以改)
+FRIEND_REPO = Path(__file__).resolve().parents[2]
+
+
+def friend_round(cfg: Config, labels: tuple[str, ...], deps: Deps | None = None,
+                 windows: bool = sys.platform == "win32") -> list[str]:
+    """朋友版的簡易看門狗(`wiki-feeder watch`,每 3 分鐘:Mac 是 macsched、Windows 是 winsched;使用者 2026-10-23)。
+    朋友那台沒有看門狗與自動修理,這裡只查「只有另一個排程才看得到」的兩件事——某一輪卡住(卡住的那輪寄不出摘要)、
+    排程沒載入(根本沒在跑;Windows 是任務不存在或被停用)——再做 iCloud 定時重啟(icloud_restart 打開時,只有 Mac)。
+    只發警示(呼叫端發到當日摘要;同一則 24 小時一次,collect._alert),不自動修。更新中(deploy.lock 被獨佔:
+    排程可能剛拿掉、程式正在換)這輪不做;Windows 沒有共享鎖,改由 winsched 停用時先停 watch、啟用時最後才啟用 watch。"""
     from .collect import _alert, deploy_guard
-    from .watchdog import agents_not_loaded
+    from .watchdog import friend_agents_check
     if deps is None:
         deps = default_deps()
-        deps.agents_check = lambda: agents_not_loaded(labels)
+        deps.agents_check = lambda: friend_agents_check(labels)
     found: list[str] = []
 
     def alert(key: str, subject: str, body: str) -> None:
@@ -336,18 +343,68 @@ def friend_round(cfg: Config, labels: tuple[str, ...], deps: Deps | None = None)
             now = deps.now()
             for r in running(cfg):
                 if idle_of(r, now) > r["limit"]:
+                    m = f"{r['limit'] / 60:.0f}"
                     alert("hung", L("{stage}卡住了", stage=stage_names.get(r["stage"], r["stage"])),
                           L("超過 {m} 分鐘沒有進度,之後的檔都在排隊。重開機一次通常就會好;還是一樣的話,"
-                            "打開終端機打 cd ~/wiki-agent && claude,把這則警示貼給 Claude",
-                            m=f"{r['limit'] / 60:.0f}"))
-            down = deps.agents_check()
+                            "打開 PowerShell 打 cd \"{repo}\"; claude,把這則警示貼給 Claude", m=m, repo=FRIEND_REPO)
+                          if windows else
+                          L("超過 {m} 分鐘沒有進度,之後的檔都在排隊。重開機一次通常就會好;還是一樣的話,"
+                            "打開終端機打 cd ~/wiki-agent && claude,把這則警示貼給 Claude", m=m))
+            # 自動更新(§7.9,兩個平台):換版正在進行時 Windows 的收件、攝入被停用是正常的,這輪不查排程沒載入。
+            # folder:Windows 是工作排程器的資料夾(「資料夾\任務」的前半)、Mac 是 launchd 標籤的開頭
+            updating = False
+            try:          # import 也包進來:autoupdate.py 本身壞了(語法錯、漏檔)也不可拖垮其他檢查
+                from .autoupdate import tick as update_tick
+                folder = labels[0].rsplit("\\" if windows else ".", 1)[0]
+                updating = update_tick(cfg, FRIEND_REPO, folder, deps.extra.get("update"))
+            except Exception as e:  # noqa: BLE001 —— 自動更新壞了不可以拖垮卡住與排程的檢查
+                log.error(L("自動更新出錯:%s"), e)
+            try:
+                _update_stale(cfg, now, alert, windows)
+            except Exception as e:  # noqa: BLE001
+                log.error(L("自動更新出錯:%s"), e)
+            down = [] if updating else deps.agents_check()
             if down:
                 alert("agents", L("排程沒有載入"),
+                      L("{labels} 沒有在跑(工作排程器裡不見了或被停用),收件或攝入停了,檔案會一直留在收件匣。"
+                        "雙擊 {repo} 裡的 Install.bat、沿用原本的設定,就會重新裝好(更新到一半關掉視窗的,"
+                        "再雙擊一次 Update.bat 也可以)", labels=L("、").join(down), repo=FRIEND_REPO)
+                      if windows else
                       L("{labels} 沒有在跑,收件或攝入停了,檔案會一直留在收件匣。雙擊一次 wiki-agent 就會重新裝好"
                         "(用終端機那一行裝的:打開終端機打 cd ~/wiki-agent && uv run python scripts/macsched.py install)",
                         labels=L("、").join(down)))
             _kick_icloud(cfg, deps, now, alert)
     return found
+
+
+def _update_stale(cfg: Config, now: float, alert, windows: bool = sys.platform == "win32") -> None:
+    """自動更新本身壞掉時的最後一道(使用者 2026-10-23):壞掉的版本裝上去以後,之後的版本都要靠它自己的更新程式,
+    大家會默默卡在那一版。開機的日子裡連續 update_stale_days 天都沒查成功(autoupdate 記的 ok_day 之後;沒網路的
+    那幾天不算、關機的日子不算)就發警示,請朋友手動更新(Windows 跑 Update.bat;Mac 換新版 App 或 Update.command)。刻意放在 repair、不 import autoupdate:
+    壞掉的正是 autoupdate 時這裡還要能動。警示走當日摘要(不走 autoupdate 的寄信)。"""
+    if not cfg.auto_update:
+        return
+    today = datetime.fromtimestamp(now).strftime("%Y-%m-%d")
+    try:
+        health = json.loads(cfg.update_health_path.read_text(encoding="utf-8"))
+        days = [d for d in health.get("days", []) if isinstance(d, str)]
+    except (OSError, ValueError, AttributeError):
+        days = []
+    if today not in days:
+        days = sorted(set(days) | {today})[-30:]
+        cfg.update_health_path.write_text(json.dumps({"days": days}), encoding="utf-8")
+    try:
+        st = json.loads(cfg.update_state_path.read_text(encoding="utf-8"))
+        ok, offline = str(st.get("ok_day", "")), set(st.get("offline_days", []))
+    except (OSError, ValueError, AttributeError, TypeError):
+        ok, offline = "", set()                # 讀不懂也算沒查成功
+    missed = [d for d in days if d > ok and d not in offline]
+    if len(missed) >= cfg.update_stale_days:
+        # 內容不可含天數、日期:警示以全文去重,每天變的字會讓它每輪報一次
+        alert("update-stale", L("自動更新好幾天沒有查成功"),
+              L("開機的這幾天,自動更新都沒能查新版(不是沒網路),可能是自動更新本身出了問題,新版一直裝不上來。"
+                "請{human}手動更新;還是一樣的話,{claude},把這則警示貼給 Claude",
+                human=friend_update_hint(FRIEND_REPO, windows), claude=friend_claude_hint(FRIEND_REPO, windows)))
 
 
 # -- 紀錄 --------------------------------------------------------------------------

@@ -86,6 +86,7 @@ def test_windows_secret_from_credential_manager(monkeypatch):
     assert osplat.secret("svc", "other", windows=True) is None
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows 走 QueryUnbiasedInterruptTime;Mac 一定有 clock_gettime")
 def test_uptime_without_clock_gettime(monkeypatch):
     monkeypatch.delattr(osplat.time, "clock_gettime", raising=False)   # Windows 本來就沒有
     assert osplat.uptime() > 0

@@ -3,7 +3,8 @@
 - 鎖檔:Mac 用 flock(有共享鎖);Windows 用 msvcrt.locking(只有獨佔)。共享鎖只用在 deploy.lock,
   Windows 不 deploy(朋友更新是 git pull),所以 Windows 上 deploy_guard 一律放行
 - 逾時砍整組子行程:Mac 開新 session、killpg;Windows 開新行程群組、taskkill /T /F
-- 不含睡眠的時鐘:Mac 的 CLOCK_UPTIME_RAW;Windows 沒有 clock_gettime,用 monotonic
+- 不含睡眠的時鐘:Mac 的 CLOCK_UPTIME_RAW;Windows 的 QueryUnbiasedInterruptTime
+- 行程還在不在:Mac 用 os.kill(pid, 0);Windows 的 os.kill(pid, 0) 是送 Ctrl+C、不是探測,改查結束碼
 - 雲端佔位檔:Mac 看 st_flags 的 SF_DATALESS、用 brctl 要求下載;Windows 看檔案屬性
   RECALL_ON_DATA_ACCESS／RECALL_ON_OPEN／OFFLINE、用 attrib +P(「永遠保留在此裝置上」)要求下載
 - 寄信密碼:Mac 鑰匙圈(/usr/bin/security);Windows 認證管理員(keyring)
@@ -141,12 +142,50 @@ def kill_group(pid: int, graceful: bool = False) -> None:
 
 # -- 時鐘 --------------------------------------------------------------------------
 
-def uptime() -> float:
-    """不含睡眠的秒數(Mac 的 CLOCK_UPTIME_RAW)。Windows 沒有 clock_gettime:用 monotonic(含睡眠;
-    只給看門狗算多久沒心跳,Windows 版不跑看門狗)。"""
-    if not hasattr(time, "clock_gettime"):
-        return time.monotonic()
+def uptime(windows: bool = WINDOWS) -> float:
+    """不含睡眠的秒數,每個行程讀到的都一樣(Mac 的 CLOCK_UPTIME_RAW)。Windows 用 QueryUnbiasedInterruptTime
+    (100 奈秒為單位、不含睡眠與休眠):朋友版的簡易看門狗(watch)靠它算多久沒心跳,含睡眠的話闔上螢幕一兩個小時,
+    醒來就把那一輪報成卡住(Python 3.12 的 monotonic 是 GetTickCount64,含睡眠)。"""
+    if windows:
+        import ctypes
+        t = ctypes.c_ulonglong()
+        ctypes.windll.kernel32.QueryUnbiasedInterruptTime(ctypes.byref(t))
+        return t.value / 1e7
     return time.clock_gettime(getattr(time, "CLOCK_UPTIME_RAW", time.CLOCK_MONOTONIC))
+
+
+# -- 行程 --------------------------------------------------------------------------
+
+def pid_alive(pid: int, windows: bool = WINDOWS) -> bool:
+    """行程還在不在。⚠️ Windows 不可用 os.kill(pid, 0):那裡 0 是 CTRL_C_EVENT,不是探測——對已經結束的
+    pid 也不報錯(2026-10-23 實測),永遠回「還在」,還會對那個主控台行程群組送 Ctrl+C。改查結束碼。"""
+    if windows:
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(0x1000, False, pid)   # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return ctypes.GetLastError() == 5   # 存取被拒:行程在,只是不是我們的
+        try:
+            code = ctypes.c_ulong()
+            return bool(k.GetExitCodeProcess(h, ctypes.byref(code))) and code.value == 259   # STILL_ACTIVE
+        finally:
+            k.CloseHandle(h)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def oem_decode(b: bytes) -> str:
+    """主控台程式(schtasks、powershell)的輸出是 OEM 碼頁;-X utf8 底下 text=True 會照 utf-8 解而失敗。
+    Mac 上(只有測試會叫到)照 utf-8。"""
+    if not WINDOWS:
+        return b.decode("utf-8", "replace")
+    import ctypes
+    return b.decode(f"cp{ctypes.windll.kernel32.GetOEMCP()}", "replace")
 
 
 # -- 雲端佔位檔 ---------------------------------------------------------------------
@@ -193,3 +232,23 @@ def decode_cmd(src: str, out_wav: str, rate: int, ffmpeg: str = "", windows: boo
         return [ffmpeg, "-nostdin", "-v", "error", "-y", "-i", src, "-ac", "1", "-ar", str(rate),
                 "-acodec", "pcm_s16le", "-f", "wav", out_wav]
     return ["/usr/bin/afconvert", "-f", "WAVE", "-d", f"LEI16@{rate}", "-c", "1", src, out_wav]
+
+
+# -- 朋友版的「手動更新」與「找 Claude」(自動更新的信與 repair._update_stale 共用) ----------------
+
+def friend_update_hint(root, windows: bool = WINDOWS) -> str:
+    """請朋友手動更新的那半句(接在「請」後面)。Mac 分兩種裝法:雙擊 App 的(有 .app-bundle)換新版 App 再雙擊;
+    終端機那一行 clone 的雙擊 Update.command。"""
+    from pathlib import Path
+    if windows:
+        return L("在程式資料夾 {root} 裡雙擊 Update.bat", root=root)
+    if (Path(root) / ".app-bundle").is_file():
+        return L("下載新版 wiki-agent(wiki-agent-mac.zip),拖進「應用程式」取代舊的,再雙擊一次")
+    return L("雙擊 {root} 裡的 Update.command", root=root)
+
+
+def friend_claude_hint(root, windows: bool = WINDOWS) -> str:
+    """「打開 PowerShell／終端機、cd 到程式資料夾、開 Claude」那半句。"""
+    if windows:
+        return L("打開 PowerShell 打 cd \"{root}\"; claude", root=root)
+    return L("打開終端機打 cd \"{root}\" && claude", root=root)

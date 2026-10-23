@@ -88,7 +88,7 @@ def test_list_says_readable_in_the_config_language(cfg, capsys):
 
     c = replace(cfg, lang="en", onedrive_inbox=cfg.onedrive_inbox.parent / "gone")
     (c.icloud_inbox / "a.jpg").write_bytes(b"jpg")
-    assert main(["collect", "--list"], cfg=c) == 0
+    assert main(["collect", "--list"], cfg=c) == 1                     # OneDrive 讀不到:結束碼 1(自動更新的試讀看它)
     assert i18n.get_lang() == "en"                      # 整個行程照設定檔的語言
     readable = i18n.L("可讀")
     assert readable != "可讀" and not re.search(_CJK, readable)
@@ -140,7 +140,8 @@ def test_list_dirs_tries_the_knowledge_base_and_originals_folder(cfg, capsys, tm
     wiki = tmp_path / "W"
     wiki.mkdir()
     c = replace(cfg, repos=(RepoConfig("main", "知識庫", wiki, tmp_path / "gone", ""),))
-    assert main(["collect", "--list", "--dirs"], cfg=c) == 0
+    # 有一項讀不到就回 1:自動更新換版後的試讀看結束碼(訊息會翻譯,不比對字;spec §7.9)
+    assert main(["collect", "--list", "--dirs"], cfg=c) == 1
     lines = capsys.readouterr().out.splitlines()
     assert lines[-2] == f"{wiki}\t可讀" and lines[-1].startswith(f"{tmp_path / 'gone'}\t錯誤:")
     assert main(["collect", "--list"], cfg=c) == 0

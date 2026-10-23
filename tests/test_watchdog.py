@@ -1516,6 +1516,24 @@ def test_friend_watch_skips_while_updating(env):
         assert repair.friend_round(c, LABELS, _friend(c, calls, bird, t, down=["test.wa.process"])) == []
 
 
+def test_friend_watch_runs_auto_update_on_a_mac_with_the_label_prefix(env, monkeypatch):
+    """自動更新兩個平台都做(使用者 2026-10-23):Mac 交給 autoupdate 的是 launchd 標籤的開頭(macsched --prefix 要用)。
+    換版正在進行時這輪不查排程沒載入;autoupdate 出錯不可拖垮其他檢查。"""
+    from wiki_feeder import autoupdate
+    c = env["cfg"]
+    calls, bird, t = Calls(), Bird(), [T0]
+    got = []
+    monkeypatch.setattr(autoupdate, "tick", lambda cfg, root, folder, deps=None: got.append(folder) or True)
+    assert repair.friend_round(c, LABELS, _friend(c, calls, bird, t, down=["test.wa.process"]), windows=False) == []
+    assert got == ["test.wa"]
+
+    def boom(*a, **k):
+        raise RuntimeError("壞了")
+    monkeypatch.setattr(autoupdate, "tick", boom)
+    alerts = repair.friend_round(c, LABELS, _friend(c, calls, bird, t, down=["test.wa.process"]), windows=False)
+    assert len(alerts) == 1 and "排程沒有載入" in alerts[0]
+
+
 def test_friend_config_turns_icloud_restart_on_with_an_icloud_inbox(tmp_path, monkeypatch):
     """朋友的設定檔有 iCloud 收件匣就預設打開(使用者 2026-10-23);[inbox] icloud_restart = false 關掉;Windows 不開。"""
     from wiki_feeder.config import Config, ConfigError
