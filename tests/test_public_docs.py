@@ -11,7 +11,7 @@ ONE_LINER = "curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-age
 
 
 # 三種語言(spec §10):每一份都有繁中、簡中、英文版,頁首互相連結;README 各自連到同語言的安裝說明
-READMES = ("README.md", "README.zh-Hans.md", "README.en.md")
+READMES = ("README.zh-Hant.md", "README.zh-Hans.md", "README.md")
 GUIDES = {"mac": ("Mac-Install-Guide.zh-Hant.md", "Mac-Install-Guide.zh-Hans.md", "Mac-Install-Guide.md"),
           "win": ("Windows-Install-Guide.zh-Hant.md", "Windows-Install-Guide.zh-Hans.md", "Windows-Install-Guide.md")}
 

@@ -86,12 +86,12 @@ class Updater:
         self.git = shutil.which("git", path=self.env["PATH"]) or "git"
         self.venv_py = str(self.root / ".venv" / "bin" / "python")
         self.lock = lock or self._lock
-        self.app = None
+        self.app, self.swapped = None, False
         if a.kind == "app":
             try:
                 self.app = Path((self.root / ".app-bundle").read_text(encoding="utf-8").strip())
             except OSError:
-                self.app = None
+                pass
         if self.app:
             self.stage = self.app.parent / ".wiki-agent-update"         # 跟 App 同一個資料夾:rename 不跨磁碟
             self.backup = self.app.parent / ".wiki-agent-previous.app"  # 舊的留著當退路(點開頭:Finder 不顯示)
@@ -201,7 +201,7 @@ class Updater:
     def rollback(self, old: str) -> None:
         if self.a.kind == "git":
             self.run("rollback", [self.git, "reset", "--hard", "-q", old])
-        elif getattr(self, "swapped", False):
+        elif self.swapped:
             bad = self.stage / "failed.app"
             shutil.rmtree(bad, ignore_errors=True)
             try:

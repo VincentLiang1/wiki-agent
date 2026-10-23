@@ -1,6 +1,6 @@
 # wiki-agent
 
-[繁體中文](README.md) | **简体中文** | [English](README.en.md)
+[繁體中文](README.zh-Hant.md) | **简体中文** | [English](README.md)
 
 **iPhone 按下记录,知识库自己长出一页。**
 

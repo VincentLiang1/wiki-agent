@@ -346,10 +346,7 @@ def friend_round(cfg: Config, labels: tuple[str, ...], deps: Deps | None = None,
                     m = f"{r['limit'] / 60:.0f}"
                     alert("hung", L("{stage}卡住了", stage=stage_names.get(r["stage"], r["stage"])),
                           L("超過 {m} 分鐘沒有進度,之後的檔都在排隊。重開機一次通常就會好;還是一樣的話,"
-                            "打開 PowerShell 打 cd \"{repo}\"; claude,把這則警示貼給 Claude", m=m, repo=FRIEND_REPO)
-                          if windows else
-                          L("超過 {m} 分鐘沒有進度,之後的檔都在排隊。重開機一次通常就會好;還是一樣的話,"
-                            "打開終端機打 cd ~/wiki-agent && claude,把這則警示貼給 Claude", m=m))
+                            "{claude},把這則警示貼給 Claude", m=m, claude=friend_claude_hint(FRIEND_REPO, windows)))
             # 自動更新(§7.9,兩個平台):換版正在進行時 Windows 的收件、攝入被停用是正常的,這輪不查排程沒載入。
             # folder:Windows 是工作排程器的資料夾(「資料夾\任務」的前半)、Mac 是 launchd 標籤的開頭
             updating = False

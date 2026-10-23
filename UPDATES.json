@@ -1,5 +1,13 @@
 [
  {
+  "source": "b37a8c1",
+  "date": "2026-10-23",
+  "needs_human": false,
+  "zh-Hant": "- GitHub 頁面的 README 預設改成英文,最上面可以切換繁體中文、簡體中文;程式沒有改變,不必做任何事",
+  "zh-Hans": "- GitHub 页面的 README 默认改成英文,最上面可以切换繁体中文、简体中文;程序没有改变,不必做任何事",
+  "en": "- The README on GitHub now defaults to English, with links at the top to switch to Traditional or Simplified Chinese; the program itself is unchanged, so there is nothing to do"
+ },
+ {
   "source": "39a1eac",
   "date": "2026-10-23",
   "needs_human": false,

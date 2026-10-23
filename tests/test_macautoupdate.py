@@ -48,7 +48,7 @@ class Fake:
         self.tmp, self.fail_on, self.team, self.bundle, self.notarized = tmp, fail_on, team, bundle, notarized
         self.cmds: list[str] = []
         self.python_moves = python_moves
-        self.rolled = False
+        self.rolled = self.moved = False
 
     def __call__(self, cmd, timeout=3600):
         text = " ".join(cmd)
@@ -90,7 +90,7 @@ def _updater(tmp_path, kind="git", prefix="test.wa", fake=None, lock=None):
     fake = fake or Fake(tmp_path)
     u = mod.Updater(a, run=fake, sleep=lambda s: None, lock=lock or (lambda: open(tmp_path / "held", "w")))
     if fake.python_moves:
-        u.python_now = lambda: "/new/python" if getattr(fake, "moved", False) and not fake.rolled else "/old/python"
+        u.python_now = lambda: "/new/python" if fake.moved and not fake.rolled else "/old/python"
     return u, fake
 
 
@@ -141,7 +141,6 @@ def test_app_kind_with_a_git_folder_is_refused(tmp_path):
 
 def test_waits_for_the_running_round_to_let_go_of_the_shared_lock(tmp_path):
     """正在跑的一輪(含叫它的 watch)全程握 deploy.lock 的共享鎖:拿得到獨佔鎖之前什麼都不換。"""
-    mod = _mod()
     (tmp_path / "state").mkdir()
     holder = open(tmp_path / "state" / "deploy.lock", "a+")
     fcntl.flock(holder, fcntl.LOCK_SH)

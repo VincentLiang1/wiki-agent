@@ -607,6 +607,12 @@ def _iso(t):
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
 
 
+def _rel(tag, age, url="uc"):
+    """附了 Mac App 的正式 Release,age 秒前發佈。"""
+    return {"tag_name": tag, "draft": False, "published_at": _iso(NOW - age),
+            "assets": [{"name": "wiki-agent-mac.zip", "browser_download_url": url}]}
+
+
 def test_mac_app_install_takes_the_newest_release_with_the_mac_app(ucfg, tmp_path):
     """附了 wiki-agent-mac.zip 的最新正式 Release(草稿、只附 Windows 的跳過);舊的 tag(mac-日期-sha)也認得出現在這版。"""
     root = _app_root(tmp_path, notes=[_entry("aaaaaaa")])
@@ -616,8 +622,7 @@ def test_mac_app_install_takes_the_newest_release_with_the_mac_app(ucfg, tmp_pat
             {"tag_name": "20261024-ccccccc", "draft": False, "published_at": _iso(NOW - 2 * DAY),
              "assets": [{"name": "wiki-agent-mac.zip", "browser_download_url": "uc"},
                         {"name": "wiki-agent-win.zip", "browser_download_url": "wc"}]},
-            {"tag_name": "mac-20261023-aaaaaaa", "draft": False, "published_at": _iso(NOW - 5 * DAY),
-             "assets": [{"name": "wiki-agent-mac.zip", "browser_download_url": "ua"}]}]
+            _rel("mac-20261023-aaaaaaa", 5 * DAY, "ua")]
     got = []
 
     def get(url, timeout=60):
@@ -633,8 +638,7 @@ def test_mac_app_install_takes_the_newest_release_with_the_mac_app(ucfg, tmp_pat
 
 def test_mac_app_already_newest_and_too_new(ucfg, tmp_path):
     root = _app_root(tmp_path, current="ccccccc")
-    rels = [{"tag_name": "20261024-ccccccc", "draft": False, "published_at": _iso(NOW - 2 * DAY),
-             "assets": [{"name": "wiki-agent-mac.zip", "browser_download_url": "uc"}]}]
+    rels = [_rel("20261024-ccccccc", 2 * DAY)]
     box = Box()
     get = lambda url, timeout=60: json.dumps(rels).encode()   # noqa: E731
     assert au.tick(ucfg, root, "test.wa", _mac(box, get=get)) is False and not box.spawned
@@ -650,8 +654,7 @@ def test_mac_app_needs_human_in_a_skipped_version_only_mails(ucfg, tmp_path):
     """跳過好幾版時,中間那一版要人動手也算(App 的 payload 帶 UPDATES.json 才算得出來)。信寫 Mac 的做法。"""
     root = _app_root(tmp_path, notes=[_entry("aaaaaaa")])
     z = _app_zip("ccccccc", [_entry("ccccccc"), _entry("bbbbbbb", human=True), _entry("aaaaaaa")])
-    rels = [{"tag_name": "20261024-ccccccc", "draft": False, "published_at": _iso(NOW - 2 * DAY),
-             "assets": [{"name": "wiki-agent-mac.zip", "browser_download_url": "uc"}]}]
+    rels = [_rel("20261024-ccccccc", 2 * DAY)]
 
     def get(url, timeout=60):
         return json.dumps(rels).encode() if url == au.RELEASES_API else z
@@ -663,13 +666,27 @@ def test_mac_app_needs_human_in_a_skipped_version_only_mails(ucfg, tmp_path):
 
 def test_mac_app_zip_with_another_version_inside_is_not_installed(ucfg, tmp_path):
     root = _app_root(tmp_path)
-    rels = [{"tag_name": "20261024-ccccccc", "draft": False, "published_at": _iso(NOW - 2 * DAY),
-             "assets": [{"name": "wiki-agent-mac.zip", "browser_download_url": "uc"}]}]
+    rels = [_rel("20261024-ccccccc", 2 * DAY)]
 
     def get(url, timeout=60):
         return json.dumps(rels).encode() if url == au.RELEASES_API else _app_zip("eeeeeee", [])
     box = Box()
     assert au.tick(ucfg, root, "test.wa", _mac(box, get=get)) is False and not box.spawned
+
+
+def test_mac_app_failed_version_is_not_downloaded_again(ucfg, tmp_path):
+    """換失敗過的那一版:不再下載(App 約 29 MB)、不再重試,也不退而裝它前一版;等更新的版本。"""
+    root = _app_root(tmp_path)
+    rels = [_rel("20261024-ccccccc", 2 * DAY), _rel("20261023-bbbbbbb", 3 * DAY, "ub")]
+    got = []
+
+    def get(url, timeout=60):
+        got.append(url)
+        return json.dumps(rels).encode() if url == au.RELEASES_API else _app_zip("ccccccc", [])
+    _state(ucfg, failed=["20261024-ccccccc"])
+    box = Box()
+    assert au.tick(ucfg, root, "test.wa", _mac(box, get=get)) is False and not box.spawned
+    assert got == [au.RELEASES_API]
 
 
 def test_mac_mails_say_what_to_do_on_a_mac(ucfg, tmp_path, monkeypatch):

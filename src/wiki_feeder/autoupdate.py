@@ -99,17 +99,14 @@ def _spawn_mac(cmd: list[str]) -> int:
 def default_deps(root: Path, windows: bool = WINDOWS) -> UpdateDeps:
     from .notify import send
 
-    if windows:
-        def enable(folder: str) -> None:
-            subprocess.run([str(_python(root, True)), "-X", "utf8", str(root / "scripts" / "winsched.py"), "enable",
-                            "--folder", folder], capture_output=True, timeout=600)
-        return UpdateDeps(run=_git_local, get=_get, mail=send, spawn=_spawn, enable=enable, windows=True)
-
-    def enable_mac(prefix: str) -> None:
-        # agent 從頭到尾沒停用;換版程式死在 macsched install 的半途時可能少了幾個,裝一次
-        subprocess.run([str(_python(root, False)), str(root / "scripts" / "macsched.py"), "install",
-                        "--prefix", prefix], capture_output=True, timeout=600, stdin=subprocess.DEVNULL)
-    return UpdateDeps(run=_git_local, get=_get, mail=send, spawn=_spawn_mac, enable=enable_mac, windows=False)
+    def enable(folder: str) -> None:
+        # Mac:agent 從頭到尾沒停用;換版程式死在 macsched install 的半途時可能少了幾個,裝一次
+        args = (["-X", "utf8", str(root / "scripts" / "winsched.py"), "enable", "--folder"] if windows
+                else [str(root / "scripts" / "macsched.py"), "install", "--prefix"])
+        subprocess.run([str(_python(root, windows)), *args, folder], capture_output=True, timeout=600,
+                       stdin=subprocess.DEVNULL)
+    return UpdateDeps(run=_git_local, get=_get, mail=send, spawn=_spawn if windows else _spawn_mac, enable=enable,
+                      windows=windows)
 
 
 # -- 狀態與紀錄 ----------------------------------------------------------------------
@@ -148,9 +145,7 @@ def install_kind(root: Path, run=_git_local, windows: bool = WINDOWS) -> str:
         url = r.stdout.strip().lower().rstrip("/") if r.returncode == 0 else ""
         return "git" if url in PUBLIC_URLS else ""
     if windows:
-        if (root / "VERSION").is_file() and (root / "MANIFEST").is_file():
-            return "zip"
-        return ""
+        return "zip" if (root / "VERSION").is_file() and (root / "MANIFEST").is_file() else ""
     if (root / ".app-bundle").is_file() and (root / "VERSION").is_file():
         return "app"
     return ""
@@ -204,7 +199,7 @@ class Candidate:
     python_changed: str = ""   # Mac git 裝的:.python-version 變了(「舊 → 新」);換了完整磁碟取用權限會掉
 
 
-def git_candidate(cfg: Config, root: Path, now: float, deps: UpdateDeps) -> Candidate | None:
+def git_candidate(cfg: Config, root: Path, now: float, deps: UpdateDeps, failed=()) -> Candidate | None:
     r = deps.run_net(["git", "fetch", "-q", "origin"], timeout=FETCH_TIMEOUT, cwd=root)
     if r.returncode != 0:
         err = (r.stderr.decode("utf-8", "replace") if isinstance(r.stderr, bytes) else r.stderr or "").strip()
@@ -212,7 +207,7 @@ def git_candidate(cfg: Config, root: Path, now: float, deps: UpdateDeps) -> Cand
     run = deps.run
     head = run(["git", "rev-parse", "HEAD"], cwd=root).stdout.strip()
     target = run(["git", "rev-parse", "origin/main"], cwd=root).stdout.strip()
-    if not target or target == head:
+    if not target or target == head or target in failed:
         return None
     if run(["git", "merge-base", "--is-ancestor", head, target], cwd=root).returncode != 0:
         log.warning("自動更新:本機的版本不在公開 repo 的 main 上,不更新(%s)", head[:7])
@@ -272,28 +267,37 @@ def _releases(deps: UpdateDeps) -> list[dict]:
     return [r for r in v if isinstance(r, dict)] if isinstance(v, list) else []
 
 
-def zip_candidate(cfg: Config, root: Path, now: float, deps: UpdateDeps) -> Candidate | None:
-    sys.path.insert(0, str(root / "scripts"))
-    from winupdate import UpdateError, local_version, parse_version, read_zip   # noqa: E402 —— 朋友那邊的驗法
-    releases = _releases(deps)
-    current = local_version(root).get("tag", "")
+def _pick_release(cfg: Config, now: float, deps: UpdateDeps, asset_name: str, is_current: Callable[[str], bool],
+                  failed) -> tuple[dict, bytes] | None:
+    """zip／App 裝的:附了 asset_name 的最新正式 Release 跟它的附件。碰到現在這版就停;換失敗過的不下載、
+    也不退而求其次(等更新的版本)。"""
     pick = None
-    for rel in releases:                       # 新的在前
-        if rel.get("tag_name") == current:
+    for rel in _releases(deps):                # 新的在前
+        if is_current(str(rel.get("tag_name", ""))):
             break
         if rel.get("draft") or rel.get("prerelease"):
             continue
-        asset = next((a for a in rel.get("assets", []) if a.get("name") == ASSET), None)
-        if asset:                              # 沒附安裝包的(Windows 還沒收尾)跳過,不當成最新版
+        asset = next((a for a in rel.get("assets", []) if a.get("name") == asset_name), None)
+        if asset:                              # 沒附這個平台的安裝包(另一個平台先發佈)跳過,不當成最新版
             pick = (rel, asset)
             break
-    if pick is None:
+    if pick is None or pick[0]["tag_name"] in failed:
         return None
     rel, asset = pick
     published = _published(rel)
     if now - published < cfg.update_min_age:   # 先看時間再下載:不滿 1 天的不必下載
         raise TooNew(rel["tag_name"], published + cfg.update_min_age)
-    data = _download(asset, deps)
+    return rel, _download(asset, deps)
+
+
+def zip_candidate(cfg: Config, root: Path, now: float, deps: UpdateDeps, failed=()) -> Candidate | None:
+    sys.path.insert(0, str(root / "scripts"))
+    from winupdate import UpdateError, local_version, parse_version, read_zip   # noqa: E402 —— 朋友那邊的驗法
+    current = local_version(root).get("tag", "")
+    pick = _pick_release(cfg, now, deps, ASSET, lambda t: bool(current) and t == current, failed)
+    if pick is None:
+        return None
+    rel, data = pick
     try:
         files = read_zip(data)
     except UpdateError as e:
@@ -311,28 +315,14 @@ def tag_source(tag: str) -> str:
     return tag.rsplit("-", 1)[-1]
 
 
-def app_candidate(cfg: Config, root: Path, now: float, deps: UpdateDeps) -> Candidate | None:
+def app_candidate(cfg: Config, root: Path, now: float, deps: UpdateDeps, failed=()) -> Candidate | None:
     """Mac 雙擊 App 裝的:附了 wiki-agent-mac.zip 的最新正式 Release。簽章、公證、Team ID 由換版程式驗。"""
     current = _read(root / "VERSION").strip()
-    pick = None
-    for rel in _releases(deps):                # 新的在前
-        tag = str(rel.get("tag_name", ""))
-        if current and tag_source(tag) == current[:7]:
-            break
-        if rel.get("draft") or rel.get("prerelease"):
-            continue
-        asset = next((a for a in rel.get("assets", []) if a.get("name") == MAC_ASSET), None)
-        if asset:
-            pick = (rel, asset)
-            break
+    pick = _pick_release(cfg, now, deps, MAC_ASSET, lambda t: bool(current) and tag_source(t) == current[:7], failed)
     if pick is None:
         return None
-    rel, asset = pick
+    rel, data = pick
     tag = rel["tag_name"]
-    published = _published(rel)
-    if now - published < cfg.update_min_age:
-        raise TooNew(tag, published + cfg.update_min_age)
-    data = _download(asset, deps)
     try:
         zf = zipfile.ZipFile(io.BytesIO(data))
         info = plistlib.loads(zf.read(f"{MAC_APP}/Contents/Info.plist"))
@@ -480,7 +470,7 @@ def _tick(cfg: Config, root: Path, folder: str, deps: UpdateDeps, now: float, st
         return False                           # 開發目錄、發佈副本、看不出來的:不動,也不寄信
     finder = {"git": git_candidate, "zip": zip_candidate, "app": app_candidate}[kind]
     try:
-        cand = finder(cfg, root, now, deps)
+        cand = finder(cfg, root, now, deps, failed=state.get("failed", []))
     except TooNew as e:
         _ok(state, now)
         state["ready_at"] = e.ready_at
@@ -495,7 +485,7 @@ def _tick(cfg: Config, root: Path, folder: str, deps: UpdateDeps, now: float, st
             state["offline_days"] = sorted(set(state.get("offline_days", [])) | {_day(now)})[-14:]
         update_log(cfg, now, "", "", "offline" if offline else "check_failed", msg)
         return False
-    if cand is None or cand.target in state.get("failed", []):
+    if cand is None:
         _ok(state, now)
         return False
     script = root / "scripts" / ("winautoupdate.py" if deps.windows else "macautoupdate.py")
@@ -526,15 +516,13 @@ def _tick(cfg: Config, root: Path, folder: str, deps: UpdateDeps, now: float, st
                      root=_root_hint(), files=dirty, claude=_claude(deps)))
             return False
     common = ["--root", str(root), "--state", str(cfg.state_dir), "--kind", cand.kind, "--target", cand.target,
-              "--label", cand.label]
+              "--label", cand.label, "--current", cand.current, "--notes", notes_text(cand.entries)]
     if deps.windows:
         cmd = [str(_python(root, True).with_name("pythonw.exe")), "-I", "-S", str(script), *common,
-               "--folder", folder, "--parent", str(os.getpid()), "--current", cand.current,
-               "--notes", notes_text(cand.entries)]
+               "--folder", folder, "--parent", str(os.getpid())]
     else:
         # python 本體(uv 管的,不在 .venv、不在 App 裡):換版途中 .venv 與 App 都會被換掉;-B 不寫 .pyc
-        cmd = [os.path.realpath(_python(root, False)), "-I", "-S", "-B", str(script), *common,
-               "--prefix", folder, "--current", cand.current, "--notes", notes_text(cand.entries)]
+        cmd = [os.path.realpath(_python(root, False)), "-I", "-S", "-B", str(script), *common, "--prefix", folder]
     if cand.zip_path:
         cmd += ["--zip", str(cand.zip_path)]
     pid = deps.spawn(cmd)
