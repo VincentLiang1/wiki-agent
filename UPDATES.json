@@ -1,5 +1,13 @@
 [
  {
+  "source": "4b25f9c",
+  "date": "2026-10-23",
+  "needs_human": false,
+  "zh-Hant": "- 更正上一則:那一版除了 README 改成英文預設,程式也有小改——自動更新換某一版失敗過,就不再每天重新下載那一版(Mac 雙擊 App 裝的每次約 29 MB);Mac 的「卡住了」警示改用你實際的安裝位置提示怎麼找 Claude。不必做任何事",
+  "zh-Hans": "- 更正上一则:那一版除了 README 改成英文默认,程序也有小改——自动更新换某一版失败过,就不再每天重新下载那一版(Mac 双击 App 装的每次约 29 MB);Mac 的「卡住了」警示改用你实际的安装位置提示怎么找 Claude。不必做任何事",
+  "en": "- Correction to the previous note: besides making the README default to English, that version also included a small program change — if switching to a version has failed once, auto-update no longer downloads that version again every day (about 29 MB each time for the Mac app); on a Mac, the \"stuck\" alert now uses your actual install location when telling you how to reach Claude. Nothing to do"
+ },
+ {
   "source": "b37a8c1",
   "date": "2026-10-23",
   "needs_human": false,
