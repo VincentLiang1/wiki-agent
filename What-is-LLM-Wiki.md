@@ -66,17 +66,37 @@ The notes are ordinary text files (Markdown) that any app can open. **Your data 
 
 ## What's in the rules file, CLAUDE.md?
 
-`CLAUDE.md` is a work manual written for the AI: Claude reads it every time before it organizes material or answers a question. When you install Wiki Agent, one is written for you following Karpathy's approach, roughly in these parts:
+`CLAUDE.md` is a work manual written for the AI: Claude reads it every time before it organizes material or answers a question. When you install Wiki Agent, one is written for you following Karpathy's approach, and it looks roughly like this (use the copy button at the top right to paste it into your own CLAUDE.md and edit):
 
-| Part | What it says |
-| --- | --- |
-| Role | The AI is a "knowledge organizer": it turns the sources into note pages, not just summaries |
-| Intake and filing | New files land in `_Pending/` first; the AI decides which topic each belongs to, files the original into that topic folder under `Raw_Sources/`, and notes on the page where the source is |
-| Workflows | **Ingest**: write new material into pages and add related material to existing pages. **Query**: answer questions from the notes, citing sources. **Lint**: find pages that contradict each other, are out of date, or aren't linked from anywhere |
-| Quality standards | Which language to write in, Markdown formatting. **No Obsidian**: every link between pages (including the table of contents `index.md`) uses a standard Markdown link `[name](path.md)`; Obsidian's wikilink syntax `[[name]]` is not allowed (this rule is written out in the rules file's quality standards) |
-| Conversion | PDFs, Office files and recordings are converted to text before reading; the intermediate files are not put into the sources |
-| Version history | Managed by Wiki Agent; the AI must not run git itself (added during installation if you agree) |
-| Name-correction table | When you point out a misheard name or term on a meeting page, the AI fixes the page and records it, so the phone's meeting drafts get it right too (added during installation if you agree) |
+````markdown
+# Knowledge base rules
+
+## Role
+You are a "knowledge organizer": turn the sources into note pages, not just summaries.
+
+## Intake and filing
+- New files always land in `_Pending/` first
+- Decide which topic each belongs to and file the original into that topic folder under `Raw_Sources/`
+- Note on the page where the source is (its location after the move)
+
+## Workflows
+- Ingest: write new material into pages, and add related material to existing pages
+- Query: answer questions from the notes, citing sources
+- Lint: find pages that contradict each other, are out of date, or aren't linked from anywhere
+
+## Quality standards
+- Write in English, standard Markdown
+- No Obsidian: every link between pages (including the table of contents `index.md`) uses a standard Markdown link `[name](path.md)`; Obsidian's wikilink syntax `[[name]]` is not allowed
+
+## Conversion
+PDFs, Office files and recordings are converted to text before reading; the intermediate files are not put into the sources.
+
+## Version history (added during installation if you agree)
+Managed by Wiki Agent; do not run git yourself.
+
+## Name-correction table (added during installation if you agree)
+When the user points out a misheard name or term on a meeting page, fix the page and record it, so the phone's meeting drafts get it right too.
+````
 
 **You can change the rules file**: to file things differently or add a rule (for example "always write the client's full name"), just tell Claude "add this to CLAUDE.md", and it will follow it every time from then on.
 

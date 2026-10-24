@@ -1,5 +1,13 @@
 [
  {
+  "source": "8209bb0",
+  "date": "2026-10-24",
+  "needs_human": false,
+  "zh-Hant": "- 〈什麼是 LLM Wiki〉的「規則檔 CLAUDE.md 裡寫了什麼」改成一份可以整段複製的 CLAUDE.md 範例(不再是表格),想自己寫規則檔的可以直接貼來改",
+  "zh-Hans": "- 〈什么是 LLM Wiki〉的「规则文件 CLAUDE.md 里写了什么」改成一份可以整段复制的 CLAUDE.md 示例(不再是表格),想自己写规则文件的可以直接贴来改",
+  "en": "- In \"What is an LLM Wiki?\", \"What's in the rules file, CLAUDE.md?\" is now a sample CLAUDE.md you can copy in one go (instead of a table), ready to paste into your own rules file and edit"
+ },
+ {
   "source": "d9a6bf6",
   "date": "2026-10-24",
   "needs_human": false,
