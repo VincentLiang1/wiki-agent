@@ -42,7 +42,9 @@ def test_the_one_line_install_matches_install_sh():
 
 def test_every_public_md_links_resolve():
     for md in PUBLIC.glob("*.md"):
-        for name in re.findall(r"\]\(([^)#:]+\.md)\)", md.read_text(encoding="utf-8")):
+        # `[名稱](路徑.md)` 這種寫在程式碼格式裡的是語法範例(〈什麼是 LLM Wiki〉的規則檔一節),不是連結
+        text = re.sub(r"`[^`\n]*`", "", md.read_text(encoding="utf-8"))
+        for name in re.findall(r"\]\(([^)#:]+\.md)\)", text):
             assert (PUBLIC / name).is_file(), (md.name, name)
 
 

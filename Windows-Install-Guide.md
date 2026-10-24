@@ -91,9 +91,20 @@ Speakers you have named in the scribe2md iPhone app or in scribe2md on the PC ar
 1. Open **iCloud Drive** in File Explorer and create a folder `_聲紋同步` ("voiceprint sync") at the top level. ⚠️ **Do not put it inside `_WikiBox`** (files there are sent into the knowledge base, and the voiceprints and real names would go with them)
 2. Right-click `_聲紋同步` → **Always keep on this device** (skip this if the option isn't there)
 3. On the PC, open scribe2md (`AI 文件.MD 轉換器` on the desktop) → the `聲音→MD` (audio → MD) tab → `名單與聲紋` (names and voiceprints). At the bottom of the middle column `聲紋資料管理` (voiceprint data), under `聲紋同步資料夾` (voiceprint sync folder), click `選擇資料夾…` (choose folder…) and pick the `_聲紋同步` folder. The screen and the folder picker say "a folder in OneDrive", but one in iCloud Drive works too; a folder inside (or containing) `_WikiBox` is refused
-4. On the iPhone, open the scribe2md app → `設定` (Settings) → under `聲紋與名單` (voiceprints and names), `聲紋同步資料夾` (voiceprint sync folder) → **iCloud Drive** → `_聲紋同步`. If Settings doesn't have this item, the app is still in "transcripts only" mode: go to `設定 › 模式` (Settings › Mode) and switch to `送進知識庫` ("send to knowledge base") — this needs an activation password; ask the person who set it up for you
+4. On the iPhone, open the scribe2md app → `設定` (Settings) → under `聲紋與名單` (voiceprints and names), `聲紋同步資料夾` (voiceprint sync folder) → **iCloud Drive** → `_聲紋同步`. If Settings doesn't have this item, the app is still in "transcripts only" mode: go to `設定 › 模式` (Settings › Mode) and switch to `送進知識庫` ("send to knowledge base")
 
 Once set up, `上次同步` ("last synced") at the bottom of that column on the PC, and the area under `立即同步` ("sync now") on the phone, show when the other device last made a change.
+
+Once this is set up, the phone also uses a **name-correction table** when it drafts meeting notes, to fix names, companies and terms that speech recognition got wrong. You don't maintain the table yourself: it builds up bit by bit as you correct Claude, and after each ingest round wiki-agent puts it into `_聲紋同步`, where the phone picks it up when it syncs (you can see it under `設定 › 離線 AI 會議草稿識別 › 名詞對照表` (Settings › offline AI meeting draft › name-correction table)). `_聲紋同步` has to be at the top level of iCloud Drive as in step 1.
+
+**When you spot a mistake**: there is no file to edit. When a meeting page has a name, company or term wrong, open the Claude desktop app (on your knowledge base folder) and just tell it, for example:
+
+- "On the 10/21 sales weekly page, 'Jon Smyth' should be 'Jon Smith'"
+- "The 'Akme' that kept coming up in yesterday's meeting is our client Acme"
+- "'Lin Da' is Linda, but only the sales weekly gets it wrong like this"
+- "The 'Manager Chang' correction was wrong, remove it"
+
+Claude fixes the page and also records the correction in the knowledge base's name-correction table (`memory/name-corrections.md`), so later meeting drafts and ingests use the right spelling. Two-character Chinese words are only replaced for the meeting series you name, so that common words are not changed in every meeting. (Claude only knows to record these if you agreed during installation to add the "name-correction table" section to CLAUDE.md; if you didn't, run the installation again)
 
 ⚠️ When wiki-agent transcribes recordings automatically it does not apply voiceprints; the transcript says `講者1`, `講者2` ("Speaker 1", "Speaker 2"). If you want names, transcribe and name the speakers in the phone app or scribe2md first, then put the transcript into `_WikiBox`.
 

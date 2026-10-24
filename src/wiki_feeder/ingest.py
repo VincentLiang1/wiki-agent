@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from . import toolgaps
+from . import glossary, toolgaps
 from .collect import _alert, _forget_alerts, heartbeat, run_lock
 from .config import LEGACY_DISCARD, LEGACY_PENDING, Config, RepoConfig
 from .doc2md import SIDECAR_EXT
@@ -111,7 +111,7 @@ _PROMPT = """本次為 wiki-feeder 自動攝入:無人值守,沒有人可以回�
    - 某個 commit 的完整訊息與動到哪些檔:`{tools} commit-detail <commit 雜湊>`;commit 完要確認自己 commit 了什麼用 `{tools} commit-detail HEAD`
 {handout_line}   - 放圖片(本庫〈圖片管理〉):`{tools} add-image <原件或轉寫快取裡的圖> "Wiki_Pages/<群組>/images/<頁名>/<檔名>.jpg"`——.png／.webp／.gif 轉成 .jpg、.jpg／.jpeg 原樣放進去,不覆蓋既有的圖(換檔名)。只收原件樹與轉寫快取裡的圖;含個資的圖照本庫規則不放
    本庫規則要你改之前先查 git 的,照規則用上面的指令查。commit 前對這次改過的每一頁跑一次 check-pages。這幾個指令做不到的檢查用 Grep／Read,再做不到的在 commit message 註明「未驗」,**同時一項一句寫進回報的 unverified**(格式「哪一項檢查:為什麼做不到」,同一種檢查每次用同樣的說法,例如「同名 docx 未重產:要執行本庫 tools/ 的腳本」;全都驗了就填空陣列)——使用者靠它知道還缺哪些指令,不要省略;**只寫權限做不到的**,你判斷不必做的(不適用、內容太少不回填、本庫規則說留待日後)不寫。要看自己改了什麼用 git status 與 Read。**Bash 一次只打一條指令,不要用 `&&`、`;`、`|` 串接**——串接裡只要有一段沒放行(例如 git diff),整條都被擋下;暫存了什麼用 `git status --short`、commit 了什麼用 commit-detail HEAD。git 指令直接打 `git add`／`git commit`／`git status`(工作目錄就是本庫),**不要加 `-C <路徑>`**——會被權限擋下。除了要 commit 的頁面與上面兩個指令產生的講義、圖片,**不得在庫裡建立任何檔案**(暫存檔、檢查腳本都不行)——commit 後庫裡留有任何沒 commit 的檔,程式會判成 STOP、停下所有攝入等人處理。**不得修改 tools/ 與 .claude/ 底下的任何檔**(動到也會 STOP)。
-完成後回報:建了或擴充了哪些頁(repo、路徑、每頁一句)、群組、待確認事項、一句摘要。
+{glossary_rule}完成後回報:建了或擴充了哪些頁(repo、路徑、每頁一句)、群組、待確認事項、一句摘要。
 """
 
 
@@ -123,10 +123,20 @@ _COMMIT_SELF = ("照本庫規則 commit(commit message 格式照 CLAUDE.md),但*
 # 程式代管 git(單庫,朋友的 Windows 版):claude 拿不到 git add／commit,只改檔
 _COMMIT_MANAGED = ("**不要 git add、不要 git commit**(會被權限擋下):改完檔案就好,程式驗證後代為 commit。"
                    "commit message 照本庫 CLAUDE.md 的格式寫進回報的 commit_message;本庫沒規定格式就寫"
-                   "「攝入:<原件檔名>——一句摘要」。只能改 Wiki_Pages/ 底下的檔,動到別處程式不 commit、停下所有攝入等人。"
+                   "「攝入:<原件檔名>——一句摘要」。只能改 Wiki_Pages/ 底下的檔(與下面第 7 條的名詞校正表),"
+                   "動到別處程式不 commit、停下所有攝入等人。"
                    "**不要打 `git show`、`git log`、`git diff`(含 `--stat`)**——會被權限擋下。")
 _BACKFILL_RULE = ("\n   **回填個人 WIKI 照本庫規則做,但只寫在副本裡**:個人 WIKI 的頁面副本在 {stage}(那個庫自己的規則是 {stage}/CLAUDE.md,照它建頁、改頁、登錄它的 index.md)。只能新增或修改 {stage}/Wiki_Pages/ 底下的 .md(知識圖譜/ 除外),不刪檔、不改名、不大幅刪減既有內容;副本不是 git 庫,不要在那裡 commit——程式驗證後替你寫回個人 WIKI、commit 並推送,commit message 照個人 WIKI 的 CLAUDE.md 格式寫進回報的 wiki_commit_message(沒回填就填空字串)。回填的頁面與 commit message 都**不得提到本庫{forbidden}**:只寫去除內部細節後可攜的通用知識;寫不出來就不回填。")
 MANAGED_DENY = ["Bash(git add:*)", "Bash(git commit:*)"]
+# 程式代管的庫(朋友)才給:名詞校正表由攝入的 claude 維護,程式轉成手機的名詞對照表(glossary.py,§5.14)。
+# 使用者本人的公事庫照它自己 CLAUDE.md 的規則維護另一份,不給這段(提示一字不差)
+_GLOSSARY_RULE = ("7. **名詞校正表** `" + glossary.TABLE_FILE + "`(手機 App 產生會議草稿前,用它把語音辨識聽錯的人名、公司、產品、"
+                  "術語換成正確寫法):原件是逐字稿時,先讀這個檔(沒有就當成空的),頁面照它寫正確寫法。攝入時確定某個寫法是語音辨識"
+                  "聽錯的(同音、近音),而且確定正確寫法,就在這個檔的表格加一列;沒有這個檔就建,第一行 `# 名詞校正`,接著表頭"
+                  " `| 聽錯的寫法 | 正確寫法 | 分組 |` 與分隔列(表頭的字用回報的語言寫,欄位順序不變)。一個正確寫法一列,"
+                  "聽錯的寫法有好幾種用「、」隔開;只在某個系列的會議會聽錯、換到別場會改壞的,分組填那個會議系列的名字"
+                  "(例如「業務週會」:手機對名稱含這幾個字的會議套用),每場都適用就空白——**兩個字的中文詞只有填了分組才會套用**。"
+                  "沒把握的不要寫,不要刪既有的列。\n")
 # 回報與 commit message 用哪種語言(朋友選的介面語言)。給 claude 看的,不經 L;繁中不加任何字(提示跟原本一字不差)
 PROMPT_LANG = {
     "zh-Hans": ("输出语言:回报里给人看的文字(pages 每页一句、questions、unverified、skip_reason、notes、summary)"
@@ -281,9 +291,11 @@ def _managed_commit(rc: RepoConfig, before: str, result: dict, name: str) -> Non
     if git(rc.repo_dir, "rev-parse", "HEAD") != before:
         raise IngestError(L("STOP:{repo} 是程式代管 git 的庫,攝入卻自己 commit 了"
                             "(它拿不到 git commit 才對),停止後續攝入待人檢查", repo=rc.repo_dir.name))
-    if not any(c.startswith(MANAGED_ROOT) for c in _changed_paths(rc)):
+    changed = _changed_paths(rc)
+    if not any(c.startswith(MANAGED_ROOT) or c == glossary.TABLE_FILE for c in changed):
         return
-    git(rc.repo_dir, "add", "-A", "--", MANAGED_ROOT)
+    # 名詞校正表只收這一個檔(§5.14);沒改到它就不列,git add 對不存在的路徑會報錯
+    git(rc.repo_dir, "add", "-A", "--", MANAGED_ROOT, *([glossary.TABLE_FILE] if glossary.TABLE_FILE in changed else []))
     git(rc.repo_dir, "commit", "-q", "-m", (result.get("commit_message") or "").strip() or L("攝入:{name}", name=name))
 
 
@@ -544,7 +556,8 @@ def ingest(cfg: Config) -> IngestReport:
             except IngestError as e:
                 report.alerts.append(L("這輪不攝入,待攝入的都不算失敗:{e}", e=e))
                 not_ready = True
-            if not_ready or _stopped(cfg, ledger, report):
+            halted = not_ready or _stopped(cfg, ledger, report)
+            if halted:
                 cands = []
             else:
                 # 先推上一輪沒推成功的 commit
@@ -585,6 +598,12 @@ def ingest(cfg: Config) -> IngestReport:
                 report.alerts.append(L("有 {n} 個檔攝入已停止重試:{names}。"
                                        "查明原因後用 `uv run wiki-feeder reingest <檔名> --note \"...\"` 救回",
                                        n=len(stuck), names=L("、").join(stuck[:10])))
+            # 名詞對照表:STOP 中(或這輪 STOP)不更新——沒驗證過的內容不送到手機
+            if not halted and not cfg.ingest_stop_path.exists():
+                try:
+                    report.alerts += glossary.refresh(cfg)
+                except Exception as e:  # noqa: BLE001 —— 對照表出錯不影響攝入
+                    log.warning(L("名詞對照表沒更新:%s"), e)
     try:
         prune_md_cache(cfg)
     except Exception as e:  # noqa: BLE001 —— 清快取失敗不影響攝入
@@ -951,7 +970,8 @@ def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: l
                           raw_root=target.raw_root.name, suffix=raw.suffix,
                           text_line=text_line, meta=meta_txt, user_sidecar=user, tools=tools,
                           commit_rule=commit_rule, backfill_rule=backfill_rule, handout_line=handout_line, page_checks=page_checks,
-                          stage_check=stage_check, pending=pending, discard=discard) + PROMPT_LANG.get(lang, "")
+                          stage_check=stage_check, pending=pending, discard=discard,
+                          glossary_rule=_GLOSSARY_RULE if target.managed else "") + PROMPT_LANG.get(lang, "")
 
 
 def _wiki_deny(cfg: Config) -> list[str]:
@@ -1576,6 +1596,10 @@ def post_summary(cfg: Config, report: IngestReport, when: datetime | None = None
     gaps = [] if toolgaps.reported_today(cfg, when) else toolgaps.digest(cfg, when)
     if gaps:
         body += "\n\n" + "\n".join(gaps)
+    # 名詞對照表分組規則沒列到的新分組:附在下一封信裡、同一組只提一次,不算警示(使用者 2026-10-24)
+    groups = glossary.new_groups(cfg)
+    if groups:
+        body += "\n\n" + "\n".join(glossary.summary_lines(cfg, groups))
     try:
         _archive_summary(cfg, when, body)
     except OSError as e:
@@ -1583,6 +1607,8 @@ def post_summary(cfg: Config, report: IngestReport, when: datetime | None = None
     sent = _mail_summary(cfg, report, when, body)
     if gaps and sent is not False:   # 沒寄到的話下一封再附
         toolgaps.mark_reported(cfg, when)
+    if groups and sent is not False:
+        glossary.mark_notified(cfg, groups)
     if sent is False:
         # 信沒寄到:警示撤銷「已報」,下一輪再報。本機留底不算報過——沒有人會去看;不撤的話
         # 24 小時內都不會再報,使用者完全不知道(2026-10-05 審查)。沒設定寄信(None)不撤:

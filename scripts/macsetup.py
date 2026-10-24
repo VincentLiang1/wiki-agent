@@ -168,6 +168,7 @@ def main(argv: list[str] | None = None) -> int:
             say(L("✗ {e}\n  請重填", e=e))
             continue
         say(L("\n✓ 已寫入 {path}", path=path))
+    ws.offer_glossary_section(cfg.repo(cfg.target_repo).repo_dir)
 
     if cfg.mail_from:
         say(L("\n=== 寄信 ==="))

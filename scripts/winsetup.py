@@ -334,6 +334,30 @@ def add_git_section(wiki: Path, pending: str = PENDING) -> bool:
     return True
 
 
+def add_glossary_section(wiki: Path) -> bool:
+    """CLAUDE.md 最後補上名詞校正表那一節(spec §5.14;使用者 2026-10-24:對照表是平常跟 AI 說哪場會議哪裡寫錯、
+    一點一點累積的,朋友開 Claude 桌面版說「這裡寫錯」時讀的是 CLAUDE.md)。已經有就不動。回傳有沒有補。"""
+    from wiki_feeder import glossary
+    p = wiki / "CLAUDE.md"
+    text = p.read_text(encoding="utf-8-sig")
+    if glossary.has_rule(text):
+        return False
+    with open(p, "a", encoding="utf-8", newline="\n") as f:
+        f.write(("" if text.endswith("\n") else "\n") + glossary.rule_section(i18n.get_lang()))
+    return True
+
+
+def offer_glossary_section(wiki: Path) -> None:
+    """設定確定之後才問(兩個平台的 main 都叫):沿用舊設定檔重跑安裝不會走 ask_wiki,放在那裡的話「當時沒補就重跑安裝」不成立。"""
+    from wiki_feeder import glossary
+    p = wiki / "CLAUDE.md"
+    if p.is_file() and not glossary.has_rule(p.read_text(encoding="utf-8-sig", errors="replace")) and yes(
+            L("  要在 CLAUDE.md 最後補上「名詞校正表」這一節嗎?(你跟 Claude 說會議頁哪裡寫錯時,它會順手記下來,"
+              "手機的會議草稿就跟著改;建議要)")):
+        add_glossary_section(wiki)
+        say(L("  ✓ 已補上"))
+
+
 def _existing(wiki: Path) -> dict[Path, bytes]:
     return {p: p.read_bytes() for p in wiki.rglob("*") if p.is_file() and ".git" not in p.relative_to(wiki).parts}
 
@@ -532,6 +556,7 @@ def main(argv: list[str] | None = None) -> int:
             say(L("✗ {e}\n  請重填", e=e))
             continue
         say(L("\n✓ 已寫入 {path}", path=path))
+    offer_glossary_section(cfg.repo(cfg.target_repo).repo_dir)
 
     if cfg.mail_from:
         say(L("\n=== 寄信 ==="))

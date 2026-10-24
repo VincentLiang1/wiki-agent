@@ -35,6 +35,7 @@ FAKE_CLAUDE_GUARDED  同一個 commit 裡順手改 tools/make_handout.py(tools)�
 FAKE_CLAUDE_UNVERIFIED  回報的 unverified(JSON 字串陣列;做不到的檢查)
 FAKE_CLAUDE_DENIALS  回報的 permission_denials(JSON;被權限擋下的工具呼叫)
 FAKE_CLAUDE_NOREPORT  照常 commit,但結束時沒有 structured_output(花完預算:subtype error_max_budget_usd)
+FAKE_CLAUDE_GLOSSARY  照提示把這段寫進 memory/name-corrections.md(朋友的名詞校正表)
 參數記在 FAKE_CLAUDE_ARGS。
 """
 import json
@@ -118,6 +119,9 @@ if mode not in ("nocommit", "skip", "backfill_only"):
         f = repo / ("tools/make_handout.py" if guarded == "tools" else ".claude/settings.local.json")
         f.parent.mkdir(exist_ok=True)
         f.write_text("x\n", encoding="utf-8")
+    if os.environ.get("FAKE_CLAUDE_GLOSSARY"):
+        (repo / "memory").mkdir(exist_ok=True)
+        (repo / "memory" / "name-corrections.md").write_text(os.environ["FAKE_CLAUDE_GLOSSARY"], encoding="utf-8")
     if os.environ.get("FAKE_CLAUDE_RECENT"):
         idx = repo / "Wiki_Pages" / "index.md"
         text = idx.read_text(encoding="utf-8")

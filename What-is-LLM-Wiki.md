@@ -64,6 +64,22 @@ iCloud Drive/_WikiBox/            ← inbox: transcripts you Send from the phone
 
 The notes are ordinary text files (Markdown) that any app can open. **Your data stays in your hands**: it is not locked into anyone's cloud service, and you can still read it ten years from now.
 
+## What's in the rules file, CLAUDE.md?
+
+`CLAUDE.md` is a work manual written for the AI: Claude reads it every time before it organizes material or answers a question. When you install Wiki Agent, one is written for you following Karpathy's approach, roughly in these parts:
+
+| Part | What it says |
+| --- | --- |
+| Role | The AI is a "knowledge organizer": it turns the sources into note pages, not just summaries |
+| Intake and filing | New files land in `_Pending/` first; the AI decides which topic each belongs to, files the original into that topic folder under `Raw_Sources/`, and notes on the page where the source is |
+| Workflows | **Ingest**: write new material into pages and add related material to existing pages. **Query**: answer questions from the notes, citing sources. **Lint**: find pages that contradict each other, are out of date, or aren't linked from anywhere |
+| Quality standards | Which language to write in, Markdown formatting. **No Obsidian**: every link between pages (including the table of contents `index.md`) uses a standard Markdown link `[name](path.md)`; Obsidian's wikilink syntax `[[name]]` is not allowed (this rule is written out in the rules file's quality standards) |
+| Conversion | PDFs, Office files and recordings are converted to text before reading; the intermediate files are not put into the sources |
+| Version history | Managed by Wiki Agent; the AI must not run git itself (added during installation if you agree) |
+| Name-correction table | When you point out a misheard name or term on a meeting page, the AI fixes the page and records it, so the phone's meeting drafts get it right too (added during installation if you agree) |
+
+**You can change the rules file**: to file things differently or add a rule (for example "always write the client's full name"), just tell Claude "add this to CLAUDE.md", and it will follow it every time from then on.
+
 ## What Notetaker + Wiki Agent do for you
 
 Building an LLM Wiki yourself takes a fair amount of learning. With these two programs, you just press one button:

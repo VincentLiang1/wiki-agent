@@ -147,6 +147,10 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     tg.add_argument("--ignore", metavar=L("關鍵字"), help=L("確定不做:含這個關鍵字的缺口不再出現在摘要信的提醒"))
     tg.add_argument("--resolved", metavar=L("關鍵字"), action="append", default=[],
                     help=L("已經補好(可重複):在這之前的紀錄不再提醒,之後又出現的照樣列、標「修好後又出現」"))
+    gl = sub.add_parser("glossary", help=L("重產給手機的名詞對照表 name-corrections.json(平常每輪攝入後自動做,內容沒變不寫)"))
+    gl.add_argument("--out", help=L("寫到這個資料夾(預設是設定的聲紋同步資料夾)"))
+    gl.add_argument("--before", metavar="YYYY-MM-DD", help=L("評測用:只收這天以前的整理頁"))
+    gl.add_argument("--print", action="store_true", help=L("只印出來,不寫檔"))
     ts = sub.add_parser("table-sums", help=L("公事庫某頁每張表各數字欄的加總、與合計列比對(攝入重算統計表時驗算用)"))
     ts.add_argument("page")
     ts.add_argument("--heading", help=L("只看標題(或表前那一行)含這個關鍵字的表"))
@@ -221,6 +225,31 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
         print("\n".join(toolgaps.digest(cfg, days=args.days)) or L("近 {days} 天沒有攝入工具缺口", days=args.days))
         if toolgaps.ignored(cfg):
             print(L("(不提醒:{words})", words=L("、").join(toolgaps.ignored(cfg))))
+        return 0
+
+    if args.cmd == "glossary":
+        from . import glossary
+        try:
+            doc, skipped, unruled = glossary.build(cfg.repo(cfg.target_repo).repo_dir, cfg.glossary_fwiki,
+                                                   cfg.glossary_rules, args.before)
+        except (OSError, ValueError, glossary.GlossaryError) as e:
+            print(L("失敗:{e}", e=e))
+            return 1
+        if args.print:
+            print(glossary.render(doc))
+        else:
+            out = Path(args.out) if args.out else cfg.glossary_dir
+            if out is None or not out.is_dir():
+                print(L("失敗:沒有聲紋同步資料夾 {out}(用 --out 指定)", out=out))
+                return 1
+            if (hit := glossary.unsafe_out(cfg, out)) is not None:
+                print(L("失敗:{out} 跟 {hit} 重疊(對照表含真名,會被收件或攝入)", out=out, hit=hit))
+                return 1
+            print(L("已更新 {path}", path=out / glossary.OUT_NAME) if glossary.write(out, doc)
+                  else L("內容沒變,沒寫:{path}", path=out / glossary.OUT_NAME))
+        print(glossary.counts(doc) + L(",略過 {n} 條未確定", n=len(skipped)), file=sys.stderr)
+        if unruled:
+            print(L("分組規則沒列到的新分組:{groups}", groups=L("、").join(unruled)), file=sys.stderr)
         return 0
 
     if args.cmd == "test-mail":

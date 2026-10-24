@@ -170,3 +170,36 @@ def test_git_section_heading_in_any_language_counts_as_present(tmp_path, monkeyp
     monkeypatch.setattr("builtins.input", lambda *_: "")                     # ask_wiki 也不再問要不要補
     ws.ask_wiki(str(wiki), None, False)
     assert ws.GIT_HEADING not in (wiki / "CLAUDE.md").read_text(encoding="utf-8")
+
+
+def test_glossary_section_is_appended_once_in_the_install_language(tmp_path):
+    """名詞校正表那一節(spec §5.14):朋友開 Claude 桌面版說「這場會議的某某寫錯了」時讀的是 CLAUDE.md,
+    沒有這一節就只改頁面、不記進表。補一次就好,換了語言重跑安裝也不再補;照安裝時的語言寫。"""
+    from wiki_feeder import glossary, i18n
+    (tmp_path / "CLAUDE.md").write_text("# 原本的規則\n\n照我的分類。", encoding="utf-8")
+    assert ws.add_glossary_section(tmp_path)
+    assert not ws.add_glossary_section(tmp_path)
+    text = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+    assert text.startswith("# 原本的規則\n\n照我的分類。\n") and text.count(glossary.RULE_HEADING) == 1
+    assert glossary.TABLE_FILE in text and "使用者指出哪場會議哪裡寫錯時" in text
+    i18n.set_lang("en")
+    assert not ws.add_glossary_section(tmp_path)        # 已經有繁中那一節
+    en = tmp_path / "en"
+    en.mkdir()
+    (en / "CLAUDE.md").write_text("# Rules\n", encoding="utf-8")
+    assert ws.add_glossary_section(en)
+    text = (en / "CLAUDE.md").read_text(encoding="utf-8")
+    assert i18n.L(glossary.RULE_HEADING) in text and glossary.RULE_HEADING not in text
+
+
+def test_glossary_section_is_offered_even_when_the_old_config_is_kept(tmp_path, monkeypatch):
+    """沿用舊設定檔重跑安裝也會問(安裝說明叫「當時沒補的話重跑一次安裝」);已經有就不問。"""
+    from wiki_feeder import glossary
+    (tmp_path / "CLAUDE.md").write_text("# Rules\n", encoding="utf-8")
+    asked = []
+    monkeypatch.setattr("builtins.input", lambda *a: asked.append(a) or "")
+    ws.offer_glossary_section(tmp_path)
+    ws.offer_glossary_section(tmp_path)
+    assert len(asked) == 1 and glossary.has_rule((tmp_path / "CLAUDE.md").read_text(encoding="utf-8"))
+    for name in ("winsetup", "macsetup"):
+        assert "offer_glossary_section(cfg.repo(cfg.target_repo).repo_dir)" in (ROOT / "scripts" / f"{name}.py").read_text(encoding="utf-8")

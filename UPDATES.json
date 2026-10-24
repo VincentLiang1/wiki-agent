@@ -1,5 +1,13 @@
 [
  {
+  "source": "d9a6bf6",
+  "date": "2026-10-24",
+  "needs_human": false,
+  "zh-Hant": "- 手機 scribe2md 的「送進知識庫」模式產生會議草稿時,會用**名詞對照表**把語音辨識聽錯的人名、公司、術語換成正確寫法。對照表不用另外維護:看到會議頁寫錯,跟 Claude 說哪場會議、哪裡錯、正確是什麼,它改頁面時順手記下來,wiki-agent 每一輪攝入完自動放進 iCloud 雲碟的 `_聲紋同步`。安裝時會問要不要在 CLAUDE.md 補上這條規則,說法的例子見安裝說明第 7 節\n- 安裝說明第 7 節:「送進知識庫」模式已經不用開通密碼\n- 〈什麼是 LLM Wiki〉新增「規則檔 CLAUDE.md 裡寫了什麼」:角色、收件分類、工作流程、品質標準(不用 Obsidian、一律標準 Markdown 連結)等,以及規則檔可以請 Claude 改",
+  "zh-Hans": "- 手机 scribe2md 的「送进知识库」模式生成会议草稿时,会用**名词对照表**把语音识别听错的人名、公司、术语换成正确写法。对照表不用另外维护:看到会议页写错,跟 Claude 说哪场会议、哪里错、正确是什么,它改页面时顺手记下来,wiki-agent 每一轮摄入完自动放进 iCloud 云盘的 `_聲紋同步`。安装时会问要不要在 CLAUDE.md 补上这条规则,说法的例子见安装说明第 7 节\n- 安装说明第 7 节:「送进知识库」模式已经不用开通密码\n- 〈什么是 LLM Wiki〉新增「规则文件 CLAUDE.md 里写了什么」:角色、收件分类、工作流程、质量标准(不用 Obsidian、一律标准 Markdown 链接)等,以及规则文件可以请 Claude 改",
+  "en": "- When the scribe2md phone app drafts meeting notes in \"send to knowledge base\" mode, it now uses a **name-correction table** to fix names, companies and terms that speech recognition got wrong. You don't maintain the table yourself: when a meeting page has something wrong, tell Claude which meeting, what is wrong and what is right; it fixes the page and records the correction, and after each ingest round wiki-agent puts the table into `_聲紋同步` in iCloud Drive. Installation asks whether to add this rule to CLAUDE.md; see section 7 of the install guide for example phrasings\n- Install guide section 7: \"send to knowledge base\" mode no longer needs an activation password\n- \"What is an LLM Wiki?\" now has \"What's in the rules file, CLAUDE.md?\": the role, intake and filing, workflows, quality standards (no Obsidian; standard Markdown links only) and more, and that you can ask Claude to change the rules"
+ },
+ {
   "source": "ef8c5b6",
   "date": "2026-10-24",
   "needs_human": false,

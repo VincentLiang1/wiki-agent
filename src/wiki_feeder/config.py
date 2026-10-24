@@ -25,6 +25,8 @@ LEGACY_PENDING, LEGACY_DISCARD, LEGACY_INTAKE = "_待處理", "_捨棄候選", "
 LEGACY = {PENDING: LEGACY_PENDING, DISCARD: LEGACY_DISCARD, INTAKE: LEGACY_INTAKE}
 # 掃描既有原件時跳過的資料夾:新舊名稱都收(不然待處理、捨棄的檔被當成已歸檔的原件,同內容新檔被判重複)
 SYSTEM_DIRS = tuple(LEGACY) + tuple(LEGACY.values())
+# 安裝說明第 7 節讓朋友在 iCloud 雲碟最上層建的聲紋同步資料夾(每種語言同一個名字):名詞對照表寫在這裡給手機(glossary.py)
+GLOSSARY_SYNC_DIR = "_聲紋同步"
 
 
 def folder_names(raw: Path) -> dict[str, str]:
@@ -190,6 +192,11 @@ class Config:
     vp_bridge_fresh: float = 600         # 狀態檔要在這段時間內寫過才算數(剛睡醒、橋樑還沒跑的舊狀態不算)
     vp_bridge_checks: int = 8            # 出手之後最多查幾次(每 15 秒一次)
     md_cache_keep_days: float = 7       # 攝入完成(或捨棄、移走)幾天後刪掉轉寫快取;原件不動,要重轉再轉
+    # 名詞對照表(glossary.py,spec §5.14):寫到哪個資料夾(聲紋同步資料夾;None 或資料夾不存在 = 不產生)、
+    # 來源是公事庫的寫法(True,使用者本人)還是朋友的表格、分組規則(只用在公事庫的寫法;None = 不整理、不提新分組)
+    glossary_dir: Path | None = None
+    glossary_fwiki: bool = False
+    glossary_rules: Path | None = None
     lang: str = SOURCE                  # 介面語言(i18n.py):朋友的設定檔 [general] language;使用者本人永遠 zh-Hant
 
     @property
@@ -330,6 +337,10 @@ class Config:
         return self.state_dir / "tool_gaps_reported"      # 今天提醒過沒(日期)
 
     @property
+    def glossary_state_path(self) -> Path:
+        return self.state_dir / "glossary.json"      # 上次產生時的戳記、規則沒列到的分組、摘要信提過的分組
+
+    @property
     def quarantine_dir(self) -> Path:
         # 攝入在庫裡留下的沒追蹤檔搬來這裡,不刪(檔案不能丟)
         return self.state_dir / "quarantine"
@@ -426,6 +437,8 @@ class Config:
             # 只有 Mac 的 iCloud 有 bird 要顧;Windows 的 iCloud 是另一套程式,不動
             icloud_restart=bool(inbox.get("icloud")) and PLATFORM == "darwin" and inbox.get("icloud_restart", True),
             auto_update=data.get("general", {}).get("auto_update", True),   # 朋友版兩個平台都預設打開(§7.9)
+            # 收件匣在 iCloud 雲碟的,聲紋同步資料夾就在同一層(安裝說明第 7 節);沒建就不產生對照表
+            glossary_dir=Path(inbox["icloud"]).parent / GLOSSARY_SYNC_DIR if inbox.get("icloud") else None,
             futures=None,
             repos=(RepoConfig("main", wiki.get("label", L("知識庫", lang)), Path(wiki["dir"]), raw,
                               wiki.get("github", ""), wiki.get("branch", "master"), managed=True),),
