@@ -7,9 +7,10 @@ import os
 import sys
 from dataclasses import replace
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from .collect import build_inboxes, collect, deploy_guard
-from .config import Config, ConfigError
+from .config import INTAKE, Config, ConfigError
 from .convert import convert
 from .ingest import FILE_TOOLS, PAGE_TOOLS, IngestReport, ingest, post_summary
 from .i18n import L, detect, set_lang
@@ -93,18 +94,20 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     cfg, cfg_error = _load_config(cfg)
     ap = argparse.ArgumentParser(prog="wiki-feeder")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    c = sub.add_parser("collect", help=L("從三個收件匣取件到 Raw_Sources/_待處理/"))
+    # 收件落點:使用者本人是 Raw_Sources/_待處理,朋友版是原件樹的收件區(新裝的叫 _Inbox);讀不到設定檔時寫新名
+    pend = cfg.pending_dir if cfg else Path("Raw_Sources") / INTAKE
+    c = sub.add_parser("collect", help=L("從三個收件匣取件到 {dir}/", dir=f"{pend.parent.name}/{pend.name}"))
     c.add_argument("--only", help=L("只跑部分入口,逗號分隔:icloud,onedrive,futures"))
     c.add_argument("--list", action="store_true", help=L("只列出雲端收件匣的候選檔,不搬、不碰 FUTURES"))
     c.add_argument("--dirs", action="store_true", help=L("與 --list 一起用:每個知識庫與原件資料夾也各試讀一次"))
-    sub.add_parser("convert", help=L("把 _待處理/ 裡取到的檔轉寫／OCR 成 md"))
+    sub.add_parser("convert", help=L("把 {dir}/ 裡取到的檔轉寫／OCR 成 md", dir=pend.name))
     sub.add_parser("ingest", help=L("把轉好的檔攝入公事庫(FWIKI)、推送、發當日摘要"))
     sub.add_parser("process", help=L("轉寫＋攝入:convert → ingest(launchd 與收件分開跑,長錄音轉寫時收件不被擋)"))
     sub.add_parser("run", help=L("一輪完整流程:collect → convert → ingest"))
     sub.add_parser("ledger", help=L("列出處理紀錄"))
     sub.add_parser("test-mail", help=L("寄一封測試信,確認 Email 摘要寄得出去、手機會跳通知"))
     rc = sub.add_parser("reconvert", help=L("已停止重試的轉寫檔重新排入(查明原因、修好之後)"))
-    rc.add_argument("name", nargs="?", help=L("檔名(_待處理/ 裡的名字),例如 錄音.m4a"))
+    rc.add_argument("name", nargs="?", help=L("檔名({dir}/ 裡的名字),例如 錄音.m4a", dir=pend.name))
     rc.add_argument("--all", action="store_true", help=L("全部已停止重試的轉寫檔"))
     rg = sub.add_parser("reingest", help=L("看過摘要後重新攝入某一筆(例如被誤判為捨棄),附上背景說明"))
     rg.add_argument("name", help=L("檔名,例如 IMG_5872.JPG"))
@@ -150,8 +153,6 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     args = ap.parse_args(argv)
 
     if args.cmd == "office-dump":
-        from pathlib import Path
-
         from .office import dump
         print(dump(Path(args.path)))
         return 0

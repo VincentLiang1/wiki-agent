@@ -103,13 +103,13 @@ def _doc2md_down(cfg: Config, e: doc2md.Doc2mdUnavailable, report: ConvertReport
 
 
 def _remind_stuck(cfg: Config, ledger: Ledger, report: ConvertReport) -> None:
-    """已停止重試、還卡在 _待處理/ 的檔:每輪都列(警示以全文去重,清單不變就一天寄一次信)。
+    """已停止重試、還卡在收件落點(_待處理/、朋友版的收件區)的檔:每輪都列(警示以全文去重,清單不變就一天寄一次信)。
     只在失敗那一輪報一次的話,漏看那封信,檔案就永遠卡著沒人知道。"""
     stuck = [Path(d).name for _, d, _ in ledger.stuck_conversions(cfg.convert_max_attempts) if Path(d).exists()]
     if stuck:
-        report.alerts.append(L("有 {n} 個檔轉寫已停止重試,卡在 _待處理/:{names}。"
+        report.alerts.append(L("有 {n} 個檔轉寫已停止重試,卡在 {dir}/:{names}。"
                                "查明原因後用 `uv run wiki-feeder reconvert <檔名>`(或 `--all`)救回",
-                               n=len(stuck), names=L("、").join(sorted(stuck)[:10])))
+                               n=len(stuck), dir=cfg.pending_dir.name, names=L("、").join(sorted(stuck)[:10])))
 
 
 def reconvert(cfg: Config, name: str | None) -> str:

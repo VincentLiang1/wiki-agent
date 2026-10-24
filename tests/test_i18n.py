@@ -64,8 +64,14 @@ def test_tokens_the_program_matches_on_survive(cat):
     assert bad == []
     # collect.network_down 以「訊息裡有沒有 STOP」決定斷網時要不要照樣報:原文有 STOP 的譯文也要有
     assert [KEYS[k] for k, v in cat.items() if "STOP" in k and "STOP" not in v] == []
-    for word in ("_待處理", "_捨棄候選", "_收件區"):
-        assert [KEYS[k] for k, v in cat.items() if word in k and word not in v] == [], word
+
+
+
+def test_system_folder_names_are_never_baked_into_messages():
+    """原件樹的系統資料夾名依安裝而不同(新裝 _Pending,舊版 _待處理):要翻的字裡寫死了,
+    英文朋友就看到中文資料夾名、舊庫的人看到他磁碟上沒有的英文名(使用者 2026-10-24)。一律用佔位符代入。"""
+    from wiki_feeder.config import SYSTEM_DIRS
+    assert [(KEYS[k], d) for k in KEYS for d in SYSTEM_DIRS if d in k] == []
 
 
 def test_english_has_no_leftover_chinese():

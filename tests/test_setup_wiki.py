@@ -53,10 +53,11 @@ def test_new_wiki_is_built_from_the_handout_prompt_with_file_tools_only(tmp_path
     ok, said = ws.scaffold_wiki(Path("/x/claude"), wiki, raw, False,
                                 run=_fake_claude({"CLAUDE.md": "# 規則\n", "Wiki_Pages/index.md": "# 索引\n"}, seen))
     assert ok and "建好了" in said
-    assert (raw / "_待處理").is_dir()
+    assert (raw / "_Pending").is_dir() and not (raw / "_待處理").exists()   # 新安裝一律英文(使用者 2026-10-24)
     ((args, prompt),) = seen
     assert "Bash" not in " ".join(args) and "--dangerously-skip-permissions" not in args
     assert "../Raw_Sources/" in prompt and "\\" not in prompt              # Mac 的路徑寫法
+    assert "_Pending/" in prompt and "_待處理" not in prompt                # 講義寫實際建的資料夾
     assert "[[名稱]]" in prompt and "不要停下來問" in prompt and "不要執行 git" in prompt
     assert "已經有的檔" not in prompt                                       # 空資料夾不必多講
     assert "..\\Raw_Sources\\" in ws.handout_prompt(wiki, raw, True)       # Windows 照講義原文
@@ -101,7 +102,7 @@ def test_ask_wiki_builds_missing_folders_and_never_rebuilds_an_existing_claude_m
     wiki = tmp_path / "SOURCE5" / "WIKI"
     w, r = ws.ask_wiki(str(wiki), Path("/x/claude"), False)
     assert (w, r) == (str(wiki), str(tmp_path / "SOURCE5" / "Raw_Sources"))
-    assert (Path(r) / "_待處理").is_dir() and calls == [wiki]
+    assert (Path(r) / "_Pending").is_dir() and calls == [wiki]
     assert ws.GIT_HEADING in (wiki / "CLAUDE.md").read_text(encoding="utf-8")
 
     (wiki / "CLAUDE.md").write_text("# 原本的\n", encoding="utf-8")
@@ -130,17 +131,17 @@ def test_wikilink_check_looks_at_pages_not_the_rule_that_forbids_it(tmp_path):
 # -- 三種語言:知識庫用安裝時選的語言建;代管 git 那一節認得三種寫法的標題 ------------------------------
 
 def test_english_handout_prompt_asks_for_an_english_wiki(tmp_path):
-    """要等主代理合併 locales/en.json 才會過。資料夾名(_待處理、Wiki_Pages、index.md、.md_cache)是程式寫死的,照原樣。"""
+    """資料夾名(_Pending、Wiki_Pages、index.md、.md_cache)是程式寫死的,照原樣。"""
     from wiki_feeder import i18n
     i18n.set_lang("en")
     wiki, raw = tmp_path / "LLMWIKI" / "WIKI", tmp_path / "LLMWIKI" / "Raw_Sources"
     prompt = ws.handout_prompt(wiki, raw, False)
     assert "English" in prompt and "Markdown" in prompt and "繁體中文" not in prompt
-    assert "../Raw_Sources/" in prompt and "../Raw_Sources/_待處理/" in prompt and "\\" not in prompt
+    assert "../Raw_Sources/" in prompt and "../Raw_Sources/_Pending/" in prompt and "\\" not in prompt
     for kept in ("Wiki_Pages/", "index.md", ".md_cache/", "CLAUDE.md", "[[", "git"):
         assert kept in prompt
     assert "..\\Raw_Sources\\" in ws.handout_prompt(wiki, raw, True)
-    assert not any("一" <= ch <= "鿿" for ch in prompt.replace("_待處理", ""))
+    assert not any("一" <= ch <= "鿿" for ch in prompt)
     keep = ws.L(ws.KEEP_EXISTING)                                            # 已經有的檔不要動:也是英文
     assert keep.startswith("\n") and keep.strip() and not any("一" <= ch <= "鿿" for ch in keep)
 
@@ -153,7 +154,7 @@ def test_english_git_section_uses_the_english_commit_format(tmp_path):
     assert ws.add_git_section(tmp_path)
     text = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
     assert "Ingest: <original file name> — one-line summary" in text and ws.L(ws.GIT_HEADING) in text
-    assert not any("一" <= ch <= "鿿" for ch in text.replace("_待處理", ""))
+    assert not any("一" <= ch <= "鿿" for ch in text) and "`_Pending`" in text
 
 
 def test_git_section_heading_in_any_language_counts_as_present(tmp_path, monkeypatch):

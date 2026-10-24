@@ -45,6 +45,23 @@ It is simply a folder on your computer, with three parts:
 - **Notes pages**: the pages the AI writes, plus an overall table of contents
 - **Rules file**: tells the AI how to organize things (language, format, categories). The AI reads it before every job
 
+Here is what the folders actually look like (Wiki Agent creates them when you install it):
+
+```
+Your knowledge base folder/       ← the outer folder; name it anything
+├─ Raw_Sources/                   ← sources: recordings, transcripts, PDFs, slides
+│  ├─ _Pending/                   ← new files land here first
+│  └─ New product/                ← once processed, the original moves to a topic folder
+└─ WIKI/                          ← the knowledge base itself
+   ├─ CLAUDE.md                   ← rules file: how the AI organizes things
+   └─ Wiki_Pages/                 ← the notes the AI writes
+      ├─ index.md                 ← table of contents
+      └─ New product/
+         └─ 2026-10-20 Weekly.md  ← one page per meeting, linked to related pages
+
+iCloud Drive/_WikiBox/            ← inbox: transcripts you Send from the phone arrive here
+```
+
 The notes are ordinary text files (Markdown) that any app can open. **Your data stays in your hands**: it is not locked into anyone's cloud service, and you can still read it ten years from now.
 
 ## What Notetaker + Wiki Agent do for you

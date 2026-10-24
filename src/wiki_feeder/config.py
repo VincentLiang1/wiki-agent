@@ -17,7 +17,21 @@ from pathlib import Path, PureWindowsPath
 from .i18n import LANGS, SOURCE, L
 
 CONFIG_FILE = "config.toml"
-INTAKE_DIR = "_收件區"     # 單庫設定的收件區:原件樹底下、不算原件(raw_skip_dirs)
+# 原件樹底下的系統資料夾(使用者 2026-10-24):新安裝一律英文、每種語言同一個名字;舊版建的是中文。
+# 用哪一套由安裝程式看磁碟決定、寫進設定檔([wiki] pending／discard／intake);設定檔沒寫 = 舊版裝的 = 中文舊名。
+# 不在每一輪看磁碟猜:某一輪讀不到舊資料夾就會另建英文的,檔案搬進去之後沒人處理(spec §5.13)
+PENDING, DISCARD, INTAKE = "_Pending", "_Discarded", "_Inbox"
+LEGACY_PENDING, LEGACY_DISCARD, LEGACY_INTAKE = "_待處理", "_捨棄候選", "_收件區"
+LEGACY = {PENDING: LEGACY_PENDING, DISCARD: LEGACY_DISCARD, INTAKE: LEGACY_INTAKE}
+# 掃描既有原件時跳過的資料夾:新舊名稱都收(不然待處理、捨棄的檔被當成已歸檔的原件,同內容新檔被判重複)
+SYSTEM_DIRS = tuple(LEGACY) + tuple(LEGACY.values())
+
+
+def folder_names(raw: Path) -> dict[str, str]:
+    """安裝時決定原件樹的系統資料夾名 {PENDING: 實際名, …}:原件樹裡已經有任何一個中文舊名(舊版裝的、或照講義
+    自己建的庫)就三個都用舊名——只看各自有沒有的話,舊庫第一次捨棄時會多出一個英文的 _Discarded;一個都沒有才用英文。"""
+    old = any((raw / name).is_dir() for name in LEGACY.values())
+    return {new: (LEGACY[new] if old else new) for new in LEGACY}
 # 攝入時 claude 執行 wiki-feeder 子命令的開頭(兩種設定共用一份,突變與測試才守得到兩邊)。用「正在執行的這一份」
 # 程式的 python:常駐跑的是發佈副本,不可指回開發目錄。-P:`-m` 預設把 cwd(攝入時是知識庫)放進 sys.path 最前面,
 # claude 先寫一個 wiki_feeder.py 再執行這行,就等於能跑任意程式
@@ -90,7 +104,7 @@ class RepoConfig:
 
 @dataclass(frozen=True)
 class Config:
-    pending_dir: Path                   # Raw_Sources/_待處理
+    pending_dir: Path                   # 收件的落點:使用者本人是 Raw_Sources/_待處理,朋友版是原件樹的收件區(_Inbox)
     state_dir: Path                     # 處理紀錄、鎖檔、log、警示
     icloud_inbox: Path | None
     onedrive_inbox: Path | None
@@ -99,7 +113,10 @@ class Config:
     unavailable_alert_after: int = 3    # 收件匣連續幾輪讀不到才發警示(偶發一次多半是雲端同步中,不是權限壞了)
     trigger_icloud_download: bool = True
     raw_roots: tuple[Path, ...] = ()    # 既有原件的根目錄(重複判定用),排除下面兩個子目錄
-    raw_skip_dirs: tuple[str, ...] = ("_待處理", "_捨棄候選")
+    raw_skip_dirs: tuple[str, ...] = SYSTEM_DIRS
+    # 目標庫原件樹裡的待處理、捨棄資料夾名(上面 PENDING 那段);預設中文舊名,使用者本人那台在 owner_mac 明寫
+    pending_name: str = LEGACY_PENDING
+    discard_name: str = LEGACY_DISCARD
     # --- M2 轉寫與 OCR ---
     doc2md_cmd: tuple[str, ...] = ()    # 呼叫 doc2md 的命令(不含檔案與參數);測試換成假腳本
     doc2md_timeout: float = 6 * 3600    # 長錄音可能要數十分鐘
@@ -231,7 +248,12 @@ class Config:
     @property
     def discard_dir(self) -> Path:
         # 捨棄候選放在原件樹裡(要備份的地方),不放 state dir;人確認後才真的刪
-        return self.repo(self.target_repo).raw_root / "_捨棄候選"
+        return self.repo(self.target_repo).raw_root / self.discard_name
+
+    @property
+    def target_pending(self) -> Path:
+        # 目標庫原件樹的待處理資料夾:攝入從這裡讀、照回報搬進群組(朋友版的 pending_dir 是收件區,不是這個)
+        return self.repo(self.target_repo).raw_root / self.pending_name
 
     @property
     def sidecar_archive(self) -> Path:
@@ -358,7 +380,8 @@ class Config:
             data = tomllib.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
             raise ConfigError(L("設定檔 {path} 讀不了:{e}", path=path, e=e)) from e
-        known = {"inbox": {"icloud", "onedrive", "icloud_restart"}, "wiki": {"dir", "raw", "label", "github", "branch"},
+        known = {"inbox": {"icloud", "onedrive", "icloud_restart"},
+                 "wiki": {"dir", "raw", "label", "github", "branch", "pending", "discard", "intake"},
                  "mail": {"from", "to"}, "tools": {"doc2md", "claude", "ffmpeg"}, "general": {"language", "auto_update"}}
         problems = [f"[{k}]" for k in data if k not in known]
         problems += [f"[{k}] {x}" for k, keys in known.items() for x in data.get(k, {}) if x not in keys]
@@ -385,11 +408,18 @@ class Config:
             return Path(v) if v else None
 
         raw = Path(wiki["raw"])
+        # 沒寫 = 舊版安裝程式寫的設定檔 = 中文舊名(升級不重寫設定檔,舊庫照舊)
+        names = {k: wiki.get(k, LEGACY[new]) for k, new in (("pending", PENDING), ("discard", DISCARD), ("intake", INTAKE))}
+        for k, v in names.items():
+            if not isinstance(v, str) or v not in SYSTEM_DIRS:
+                raise ConfigError(L("設定檔 {path} 的 [wiki] {key} 只能是 {names}:{value}", path=path, key=k,
+                                     names=L("、").join(SYSTEM_DIRS), value=repr(v)))
         return cls(
-            # 收件區不可與原件樹的 _待處理 同一個:收件區的檔搬進 _待處理 時會把自己改名成 X_2
-            pending_dir=raw / INTAKE_DIR,
+            # 收件區不可與原件樹的待處理同一個:收件區的檔搬進待處理時會把自己改名成 X_2
+            pending_dir=raw / names["intake"],
             raw_roots=(raw,),
-            raw_skip_dirs=("_待處理", "_捨棄候選", INTAKE_DIR),
+            pending_name=names["pending"],
+            discard_name=names["discard"],
             state_dir=state,
             icloud_inbox=opt(inbox.get("icloud")),
             onedrive_inbox=opt(inbox.get("onedrive")),

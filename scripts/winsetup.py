@@ -27,7 +27,8 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from wiki_feeder import i18n  # noqa: E402
-from wiki_feeder.config import CONFIG_FILE, Config, ConfigError, state_dir_for  # noqa: E402
+from wiki_feeder.config import (CONFIG_FILE, DISCARD, INTAKE, PENDING, Config, ConfigError,  # noqa: E402
+                                folder_names, state_dir_for)
 from wiki_feeder.i18n import L, N_  # noqa: E402
 
 SMTP_SERVICE = "wiki-feeder-smtp"
@@ -56,8 +57,12 @@ def render_config(a: dict) -> str:
     for k in ("icloud", "onedrive"):
         if a.get(k):
             lines.append(f"{k} = {toml_path(a[k])}")
+    # 系統資料夾名照原件資料夾現況(config.folder_names):ask_wiki 已經照它建好待處理資料夾,這裡再看一次結果相同
+    names = a.get("folders") or folder_names(Path(a["raw"]))
     lines += ["", "[wiki]", f"dir = {toml_path(a['wiki'])}", f"raw = {toml_path(a['raw'])}",
               f"label = {toml_text(a.get('label') or L('知識庫'))}",
+              f"pending = {toml_text(names[PENDING])}", f"discard = {toml_text(names[DISCARD])}",
+              f"intake = {toml_text(names[INTAKE])}",
               "", "[mail]", f"from = {toml_text(a.get('mail_from', ''))}", f"to = {toml_text(a.get('mail_to', ''))}",
               "", "[tools]", f"doc2md = {toml_path(a['doc2md'])}"]
     if a.get("claude"):
@@ -265,11 +270,11 @@ def ask_inbox(home: Path) -> str:
 # (使用者 2026-10-20:「給的目錄不存在也幫忙建立,包含 CLAUDE.md」)。原文是 Windows 的路徑寫法,Mac 換成 /
 # 三種語言:知識庫用安裝時選的語言建(英文版另寫,簡中版整段手寫在 hans 覆寫裡)
 HANDOUT_PROMPT = N_("""請根據 Andrej Karpathy 的 LLM Wiki 設計模式,在這個資料夾裡幫我建立一套個人知識庫系統。
-- 原始資料在 {raw}(我放、你只讀不改),底下的 _待處理\\ 是統一入口:
-  我新丟的檔案一律先進 _待處理\\;你攝入前要先判讀內容歸屬,把檔案 mv 到 {raw} 底下
+- 原始資料在 {raw}(我放、你只讀不改),底下的 {pending}\\ 是統一入口:
+  我新丟的檔案一律先進 {pending}\\;你攝入前要先判讀內容歸屬,把檔案 mv 到 {raw} 底下
   對應的主題子目錄(子目錄命名對齊 Wiki_Pages\\ 的群組)再開始編頁,頁面裡標的來源路徑寫
-  搬移後的位置,攝入完 _待處理\\ 必須是空的。把這套分流流程明文寫進 CLAUDE.md
-- 我的電腦裝了 doc2md 這個轉檔 Skill。{raw}_待處理\\ 裡若有 PDF、Word、PowerPoint、
+  搬移後的位置,攝入完 {pending}\\ 必須是空的。把這套分流流程明文寫進 CLAUDE.md
+- 我的電腦裝了 doc2md 這個轉檔 Skill。{raw}{pending}\\ 裡若有 PDF、Word、PowerPoint、
   Excel、掃描件、圖片、郵件、錄音錄影或 EPUB 電子書,攝入前一律先用它轉成 Markdown 再讀,
   不要直接讀二進位檔;轉出來的 md 放這個資料夾底下的 .md_cache\\(中間產物),
   不要寫回 {raw}。這條也要寫進 CLAUDE.md
@@ -288,7 +293,7 @@ KEEP_EXISTING = N_("\n這個資料夾裡已經有一些檔:已經有的檔一個
 # 不交給 claude 寫——它自己 commit 一筆,下一輪攝入就因「本機有沒驗證過的 commit」STOP(§5.6)
 GIT_HEADING = N_("## 版本紀錄(wiki-feeder 代管 git)")
 GIT_BODY = N_("""這個資料夾的版本紀錄由 wiki-feeder 用 git 代管:第一次自動攝入時它會 `git init`,每一筆攝入一個 commit,
-另外在它的執行狀態目錄留一份備份。iPhone 丟進收件匣的檔,wiki-feeder 會自動轉寫、放進原件資料夾的 `_待處理`、照本檔攝入。
+另外在它的執行狀態目錄留一份備份。iPhone 丟進收件匣的檔,wiki-feeder 會自動轉寫、放進原件資料夾的 `{pending}`、照本檔攝入。
 
 - **不要自己執行 git**(init、add、commit、push、reset、checkout、stash 都不要),也不要動 `.git/`:
   wiki-feeder 只接受它自己驗證過的 commit,多出一筆別人的 commit,自動攝入會整個停下來等人處理
@@ -298,8 +303,8 @@ GIT_BODY = N_("""這個資料夾的版本紀錄由 wiki-feeder 用 git 代管:�
 """)
 
 
-def git_section() -> str:
-    return "\n" + L(GIT_HEADING) + "\n\n" + L(GIT_BODY)
+def git_section(pending: str = PENDING) -> str:
+    return "\n" + L(GIT_HEADING) + "\n\n" + L(GIT_BODY, pending=pending)
 
 
 def has_git_section(text: str) -> bool:
@@ -314,18 +319,18 @@ def raw_ref(wiki: Path, raw: Path, windows: bool) -> str:
 
 
 def handout_prompt(wiki: Path, raw: Path, windows: bool) -> str:
-    text = L(HANDOUT_PROMPT, raw=raw_ref(wiki, raw, windows))
+    text = L(HANDOUT_PROMPT, raw=raw_ref(wiki, raw, windows), pending=folder_names(raw)[PENDING])
     return text if windows else text.replace("\\", "/")
 
 
-def add_git_section(wiki: Path) -> bool:
+def add_git_section(wiki: Path, pending: str = PENDING) -> bool:
     """CLAUDE.md 最後補上代管 git 的一節;已經有就不動。回傳有沒有補。"""
     p = wiki / "CLAUDE.md"
     text = p.read_text(encoding="utf-8-sig")
     if has_git_section(text):
         return False
     with open(p, "a", encoding="utf-8", newline="\n") as f:
-        f.write(("" if text.endswith("\n") else "\n") + git_section())
+        f.write(("" if text.endswith("\n") else "\n") + git_section(pending))
     return True
 
 
@@ -349,7 +354,7 @@ def scaffold_wiki(claude: Path, wiki: Path, raw: Path, windows: bool, run=subpro
     """照講義請 claude 建 CLAUDE.md、Wiki_Pages/index.md。只給讀寫檔案的工具(不給 Bash):它只需要建檔。
     已經有的檔絕不覆蓋(使用者 2026-10-20:原本可能已經有知識庫的建置):先記下內容,建完被改到、刪掉的照原樣寫回。"""
     wiki.mkdir(parents=True, exist_ok=True)
-    (raw / "_待處理").mkdir(parents=True, exist_ok=True)
+    (raw / folder_names(raw)[PENDING]).mkdir(parents=True, exist_ok=True)
     before = _existing(wiki)
     args = [str(claude), "-p", "--output-format", "json", "--no-session-persistence", "--max-budget-usd", "3",
             "--permission-mode", "acceptEdits", "--tools", "Read,Write,Edit,Glob,Grep",
@@ -401,7 +406,9 @@ def ask_wiki(default: str = "", claude: Path | None = None, windows: bool = True
         if yes(L("  {path} 還沒有,要建立嗎?", path=r)):
             r.mkdir(parents=True)
             break
-    (r / "_待處理").mkdir(exist_ok=True)
+    # 原件資料夾裡已經有中文舊名的系統資料夾(舊版裝的、照講義自己建的)就沿用,不另建英文的(使用者 2026-10-24)
+    pending = folder_names(r)[PENDING]
+    (r / pending).mkdir(exist_ok=True)
     if not (w / "CLAUDE.md").is_file():
         if claude and yes(L("  {path} 裡還沒有 CLAUDE.md:要照講義請 Claude 建好規則檔與目錄索引嗎?(約 1～3 分鐘,用你的 Claude 額度)", path=w)):
             say(L("  Claude 正在建……"))
@@ -412,7 +419,7 @@ def ask_wiki(default: str = "", claude: Path | None = None, windows: bool = True
             return str(w), str(r)
     if not has_git_section((w / "CLAUDE.md").read_text(encoding="utf-8-sig", errors="replace")) and yes(
             L("  要在 CLAUDE.md 最後補上「版本紀錄由 wiki-feeder 代管、不要自己執行 git」這一節嗎?(建議要)")):
-        add_git_section(w)
+        add_git_section(w, pending)
         say(L("  ✓ 已補上"))
     if ignore_md_cache(w):
         say(L("  ✓ .gitignore 補上 .md_cache/(轉檔的中間產物不進版本紀錄)"))

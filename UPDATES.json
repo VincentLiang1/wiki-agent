@@ -1,5 +1,13 @@
 [
  {
+  "source": "ef8c5b6",
+  "date": "2026-10-24",
+  "needs_human": false,
+  "zh-Hant": "- 新安裝時,原件資料夾底下的系統資料夾改用英文名稱:`_Pending`(待處理)、`_Discarded`(捨棄候選)、`_Inbox`(收件區),每種語言都一樣。已經在用的知識庫照舊用原來的中文名稱,不受影響,不必做任何事\n- 〈什麼是 LLM Wiki〉的「知識庫長什麼樣子」加上資料夾架構圖",
+  "zh-Hans": "- 新安装时,原件文件夹底下的系统文件夹改用英文名称:`_Pending`(待处理)、`_Discarded`(舍弃候选)、`_Inbox`(收件区),每种语言都一样。已经在用的知识库照旧用原来的中文名称,不受影响,不必做任何事\n- 〈什么是 LLM Wiki〉的「知识库长什么样子」加上文件夹架构图",
+  "en": "- New installs now name the system folders under the sources folder in English, the same for every language: `_Pending`, `_Discarded` and `_Inbox`. Knowledge bases already in use keep their existing folder names and are not affected, so there is nothing to do\n- Added a folder diagram to \"What does the knowledge base look like?\" in \"What is an LLM Wiki?\""
+ },
+ {
   "source": "b0267d9",
   "date": "2026-10-24",
   "needs_human": false,
