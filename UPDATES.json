@@ -1,5 +1,13 @@
 [
  {
+  "source": "0df0b90",
+  "date": "2026-10-26",
+  "needs_human": false,
+  "zh-Hant": "- 雲端收件匣(例如 OneDrive)正在同步時偶爾會讀不到一次,以前會立刻寄「需要處理」的信、打開電腦看卻一切正常;現在跟沒有權限一樣,連續 3 輪讀不到才提醒",
+  "zh-Hans": "- 云端收件箱(例如 OneDrive)正在同步时偶尔会读不到一次,以前会立刻发「需要处理」的邮件、打开电脑看却一切正常;现在跟没有权限一样,连续 3 轮读不到才提醒",
+  "en": "- A cloud inbox (such as OneDrive) can briefly fail to be read while it is syncing. This used to send a \"Needs attention\" email right away even though everything was fine; now, as with a missing permission, you are only alerted after 3 rounds in a row fail"
+ },
+ {
   "source": "8209bb0",
   "date": "2026-10-24",
   "needs_human": false,

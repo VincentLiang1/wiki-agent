@@ -128,7 +128,8 @@ class Config:
     silence_margin_db: float = 15.0     # 「安靜」與「有聲」兩群至少要差幾 dB 才算有安靜段(離手機遠的小聲講者約差 10 dB)
     silence_min_gap: float = 180.0      # 連續幾秒沒聲音才列進當日摘要
     # --- M3 攝入、當日摘要 ---
-    # 不分流:一律攝入 target_repo(使用者 2026-10-04 定案:先全進公事庫,事後要搬再下指令)
+    # 原件一律先進 target_repo、在那裡攝入;有個人庫(backfill_repo)時,同一次攝入判斷歸屬,純個人的只進個人庫
+    #(使用者 2026-10-26,取代 10-04 的「不分流」;spec §1.3)
     repos: tuple[RepoConfig, ...] = ()
     target_repo: str = "company"
     # 攝入照公事庫規則回填的個人庫(使用者 2026-10-07 放行);寫進副本、程式驗證後才 commit(ingest.backfill)

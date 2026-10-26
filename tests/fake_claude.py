@@ -20,7 +20,7 @@ FAKE_CLAUDE_BREAK_REMOTE  commit 之後把 origin 指到不存在的地方(模�
 FAKE_CLAUDE_PAGE_EXTRA  新頁最後多寫這一段(例如失效的粗體)
 FAKE_CLAUDE_DIE_ON  攝入這個檔名時 commit 完就死掉、不印 JSON(commit 之後逾時、被 unstick 砍掉)
 FAKE_CLAUDE_DIRTY  不管哪種模式,最後都留下 暫存.txt(例如 backfill 又留暫存檔)
-FAKE_CLAUDE_STAGE  正常攝入之外,照公事庫規則回填到個人 WIKI 的副本(提示裡給的路徑):
+FAKE_CLAUDE_STAGE  正常攝入之外(off:什麼都不改),照公事庫規則回填到個人 WIKI 的副本(提示裡給的路徑):
                     new 新增一頁通用知識、leak 新增的頁提到 甲公司(測試設定的回填禁字)、script 改知識圖譜/ 的腳本、graph 改知識圖譜/ 的 .md、
                     nonmd 新增一個 .txt、delete 刪掉副本裡的 index.md、cut 把副本裡的 長頁.md 刪到剩 5 行、
                     bold 新增的頁有一處 CJK 粗體失效
@@ -36,6 +36,9 @@ FAKE_CLAUDE_UNVERIFIED  回報的 unverified(JSON 字串陣列;做不到的檢�
 FAKE_CLAUDE_DENIALS  回報的 permission_denials(JSON;被權限擋下的工具呼叫)
 FAKE_CLAUDE_NOREPORT  照常 commit,但結束時沒有 structured_output(花完預算:subtype error_max_budget_usd)
 FAKE_CLAUDE_GLOSSARY  照提示把這段寫進 memory/name-corrections.md(朋友的名詞校正表)
+FAKE_CLAUDE_SCOPE  回報的 scope(回報格式有這欄才交;預設 company)。personal:公事庫什麼都不寫、不 commit,
+                    只在個人 WIKI 副本建頁(FAKE_CLAUDE_STAGE 沒設就當成 new);personal_commit:回報 personal 卻照常 commit 公事庫
+FAKE_CLAUDE_PERSONAL_GROUP  回報的 personal_group(預設:scope 是 personal 時「健康生活」,其餘空字串)
 參數記在 FAKE_CLAUDE_ARGS。
 """
 import json
@@ -81,6 +84,7 @@ if mode == "apidown":
                      ensure_ascii=False))
     sys.exit(0)
 subpath = os.environ.get("FAKE_CLAUDE_SUBPATH", "")
+scope = os.environ.get("FAKE_CLAUDE_SCOPE", "company")
 if mode == "halfway":
     page = repo / "Wiki_Pages" / "會議與月報" / f"{src.stem}.md"
     page.parent.mkdir(parents=True, exist_ok=True)
@@ -93,7 +97,7 @@ if mode in ("backfill_only", "backfill"):
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "add", "-A"], cwd=other, check=True)
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "backfill"],
                    cwd=other, check=True)
-if mode not in ("nocommit", "skip", "backfill_only"):
+if mode not in ("nocommit", "skip", "backfill_only") and scope != "personal":
     group = raw_root / "會議與月報"
     if mode == "rm":
         src.unlink()
@@ -149,7 +153,8 @@ if mode not in ("nocommit", "skip", "backfill_only"):
     if os.environ.get("FAKE_CLAUDE_DIE_ON") == src.name:
         sys.exit(143)
 
-stage_mode = os.environ.get("FAKE_CLAUDE_STAGE", "")
+stage_mode = os.environ.get("FAKE_CLAUDE_STAGE", "") or ("new" if scope == "personal" else "")
+stage_mode = "" if stage_mode == "off" else stage_mode   # off:副本什麼都不改
 wiki_msg = ""
 if stage_mode:
     stage = Path(re.search(r"個人 WIKI 的頁面副本在 (.+?)\(", prompt).group(1))
@@ -194,6 +199,8 @@ structured = {
     "unverified": json.loads(os.environ.get("FAKE_CLAUDE_UNVERIFIED", "[]")),
     "summary": "攝入一筆",
     "wiki_commit_message": wiki_msg,
+    "scope": "personal" if scope.startswith("personal") else scope,
+    "personal_group": os.environ.get("FAKE_CLAUDE_PERSONAL_GROUP", "健康生活" if scope.startswith("personal") else ""),
 }
 if managed:
     structured["commit_message"] = f"攝入:{src.name}——測試頁"

@@ -72,6 +72,9 @@ class FolderInbox:
             raise InboxUnavailable(
                 L("{inbox} 收件匣沒有讀取權限(經 ssh/launchd 執行時查「完整磁碟取用權限」):{e}", inbox=self.name, e=e)
             ) from e
+        except OSError as e:
+            # 2026-10-25:OneDrive 同步的瞬間 listdir 回 EINTR、下一輪就好——跟沒權限一樣連續幾輪才報(§3.4)
+            raise InboxUnavailable(L("{inbox} 收件匣暫時讀不到:{e}", inbox=self.name, e=e)) from e
 
     def candidates(self) -> list[list[Candidate]]:
         found: list[Candidate] = []

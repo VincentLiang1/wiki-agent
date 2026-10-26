@@ -378,3 +378,20 @@ def test_one_off_unreadable_inbox_is_not_alerted_until_it_persists(cfg):
     collect(c)                                            # 恢復一輪就歸零
     c.onedrive_inbox.rmdir()
     assert collect(c).alerts == []
+
+
+def test_interrupted_listing_is_not_alerted_until_it_persists(cfg, monkeypatch):
+    """實測踩過(2026-10-25):OneDrive 同步中 listdir 回 EINTR 一輪、下一輪就好——不該寄「預期外的錯誤」。"""
+    c = replace(cfg, unavailable_alert_after=3)
+    real = inboxes.os.listdir
+
+    def eintr(p="."):
+        if Path(p) == c.onedrive_inbox:
+            raise InterruptedError(4, "Interrupted system call", str(p))
+        return real(p)
+
+    monkeypatch.setattr(inboxes.os, "listdir", eintr)
+    assert collect(c).alerts == []
+    assert collect(c).alerts == []
+    alerts = collect(c).alerts                            # 一直讀不到,連續第 3 輪照樣報
+    assert len(alerts) == 1 and "OneDrive 收件匣暫時讀不到" in alerts[0]

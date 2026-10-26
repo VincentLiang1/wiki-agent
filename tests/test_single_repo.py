@@ -143,9 +143,13 @@ def test_prompt_has_no_personal_wiki_company_words_or_handouts(single, monkeypat
     ingest(single["cfg"])
 
     (prompt,) = seen
-    for word in ("個人 WIKI", "不得提到", "FRaw_Sources", "make-handout", "wiki_commit_message", "{"):
+    for word in ("個人 WIKI", "不得提到", "FRaw_Sources", "make-handout", "wiki_commit_message", "{", "scope", "歸屬"):
         assert word not in prompt, word
     assert "程式驗證後代為 commit" in prompt and "commit_message" in prompt
+    # 歸屬判斷只在有個人庫時才有(使用者 2026-10-26):朋友的回報格式一個欄位都不多
+    (args,) = [json.loads(x) for x in (single["tmp"] / "claude.jsonl").read_text(encoding="utf-8").splitlines()]
+    props = json.loads(args[args.index("--json-schema") + 1])["properties"]
+    assert "scope" not in props and "personal_group" not in props
 
 
 def test_manual_edits_are_snapshotted_before_the_next_ingest(single):

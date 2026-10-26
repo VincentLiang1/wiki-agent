@@ -1,6 +1,7 @@
 """M3 攝入:假 claude、tmp_path 裡的假 FWIKI／WIKI 與假 remote,絕不碰真的庫。"""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -1531,6 +1532,159 @@ def test_wiki_push_failure_is_retried_next_round_without_stop(env, monkeypatch):
     assert not c.ingest_stop_path.exists(), r2.outcomes[0].error
     assert r2.outcomes[0].status == "done"
     assert _remote_log(w_remote)[0] == "docs(backfill): 通用知識"   # 補推上去了
+
+
+# -- 歸屬(使用者 2026-10-26):純個人的只進個人 WIKI,拿不準一律公事 ------------------------------------------
+
+def _spy_prompts(monkeypatch) -> list[str]:
+    seen = []
+    real_run = subprocess.run
+
+    def spy(cmd, *a, **k):
+        if "-p" in cmd:
+            seen.append(k.get("input", ""))
+        return real_run(cmd, *a, **k)
+
+    monkeypatch.setattr("wiki_feeder.ingest.subprocess.run", spy)
+    return seen
+
+
+def test_scope_is_asked_with_personal_groups_and_company_when_unsure(env, monkeypatch):
+    seen = _spy_prompts(monkeypatch)
+    _feed(env, "a.txt", b"aaa")
+    ingest(env["cfg"])
+
+    (args,) = _calls(env, "claude.jsonl")
+    props = json.loads(args[args.index("--json-schema") + 1])["properties"]
+    assert props["scope"]["enum"] == ["company", "personal"]
+    assert props["personal_group"]["enum"] == ["健康生活", ""]
+    (prompt,) = seen
+    assert "拿不準一律填 company" in prompt and "本庫什麼都不改、不 commit" in prompt
+    assert "personal_group:健康生活" in prompt and "`Raw_Sources\\<personal_group>\\" in prompt
+    assert "不是不攝入的理由" in prompt            # 跟業務無關照樣是公事、照樣不捨棄(2026-10-04 定案不變)
+    assert "收件匣的「Personal」資料夾" not in prompt
+
+
+def test_personal_scope_goes_only_to_wiki_and_original_to_its_raw_tree(env, monkeypatch):
+    c = env["cfg"]
+    monkeypatch.setenv("FAKE_CLAUDE_SCOPE", "personal")
+    _feed(env, "勵志.txt", "情緒來自評判".encode())
+
+    r = ingest(c)
+
+    assert r.ok, r.alerts
+    (o,) = r.outcomes
+    assert o.status == "done" and o.scope == "personal" and not o.notes, (o.error, o.notes)
+    assert _remote_log(env["f_remote"]) == ["init"]                         # 公事庫什麼都沒有
+    w_remote = env["f_remote"].parent / "WIKI.git"
+    assert _remote_log(w_remote)[0] == "docs(backfill): 通用知識"            # 個人庫由程式 commit、推上去
+    raw = env["fraw"].parent / "Raw_Sources" / "健康生活" / "勵志.txt"
+    assert raw.read_text(encoding="utf-8") == "情緒來自評判" and o.raw_path == str(raw)
+    assert not any((env["fraw"] / "_待處理").iterdir())
+    assert o.lines.startswith("+") and o.lines != "+0／−0"                  # 行數算個人庫的
+    assert "**勵志.txt** → 只進個人庫 `健康生活`" in _summary(env)
+    with Ledger(c.ledger_path) as ledger:
+        assert ledger.ingest_row(hashlib.sha256("情緒來自評判".encode()).hexdigest())["repo"] == "personal"
+    assert not c.ingest_stop_path.exists()
+    # 下一筆照常:個人庫的 commit 是程式驗證過才做的,不會被當成沒驗證的而 STOP
+    monkeypatch.delenv("FAKE_CLAUDE_SCOPE")
+    _feed(env, "週會.txt", b"meeting")
+    r2 = ingest(c)
+    assert r2.ok and r2.outcomes[0].status == "done", r2.alerts
+
+
+@pytest.mark.parametrize("stage", ["leak", "off"])
+def test_personal_scope_not_written_to_wiki_is_a_failure_not_done(env, monkeypatch, stage):
+    """判成純個人、卻沒寫進個人庫(回填被擋、副本沒改):哪裡都沒攝入,不可記成完成——失敗、原件留在 _待處理/ 重試。"""
+    c = env["cfg"]
+    monkeypatch.setenv("FAKE_CLAUDE_SCOPE", "personal")
+    monkeypatch.setenv("FAKE_CLAUDE_STAGE", stage)
+    _feed(env, "勵志.txt", b"self-help")
+
+    r = ingest(c)
+
+    (o,) = r.outcomes
+    assert o.status == "failed" and "判成只進個人 WIKI,卻沒寫進個人 WIKI" in o.error, o.error
+    assert not c.ingest_stop_path.exists()
+    assert _remote_log(env["f_remote"]) == ["init"]
+    assert _remote_log(env["f_remote"].parent / "WIKI.git") == ["init"]
+    assert (env["fraw"] / "_待處理" / "勵志.txt").exists()
+    if stage == "leak":
+        assert list(c.wiki_refused_dir.rglob("通用知識.md"))                 # 副本的改動留給人看
+
+
+def test_personal_scope_with_company_commit_is_treated_as_company(env, monkeypatch):
+    """回報純個人卻 commit 了公事庫:判斷分歧不是損害,照公事處理、摘要提醒;不 STOP。"""
+    c = env["cfg"]
+    monkeypatch.setenv("FAKE_CLAUDE_SCOPE", "personal_commit")
+    monkeypatch.setenv("FAKE_CLAUDE_PERSONAL_GROUP", "健康生活")
+    _feed(env, "週會.txt", b"meeting")
+
+    r = ingest(c)
+
+    (o,) = r.outcomes
+    assert o.status == "done" and o.scope == "", o.error
+    assert "docs(ingest): 週會" in _remote_log(env["f_remote"])
+    assert (env["fraw"] / "會議與月報" / "週會.txt").exists()
+    assert any("卻在 FWIKI commit 了:照公事處理" in n for n in o.notes), o.notes
+    assert not c.ingest_stop_path.exists()
+
+
+def _feed_personal_dir(env, name: str, data: bytes, folder: str = "Personal") -> None:
+    c = env["cfg"]
+    (c.icloud_inbox / folder).mkdir(exist_ok=True)
+    (c.icloud_inbox / folder / name).write_bytes(data)
+    assert collect(c).ok
+    assert convert(c).ok
+
+
+def test_personal_inbox_dir_forces_personal_scope(env, monkeypatch):
+    """使用者投遞到收件匣的 Personal 資料夾(不分大小寫):提示講明只進個人庫,claude 回報 company 也照個人處理。"""
+    c = env["cfg"]
+    seen = _spy_prompts(monkeypatch)
+    monkeypatch.setenv("FAKE_CLAUDE_STAGE", "new")
+    monkeypatch.setenv("FAKE_CLAUDE_PERSONAL_GROUP", "健康生活")
+    # 假 claude 回報 company,但照提示沒動公事庫
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "nocommit")
+    _feed_personal_dir(env, "日記.txt", b"diary", folder="personal")
+
+    r = ingest(c)
+
+    (o,) = r.outcomes
+    assert o.status == "done" and o.scope == "personal", o.error
+    assert "收件匣的「Personal」資料夾,已指定這份**只進個人 WIKI**" in seen[0]
+    assert _remote_log(env["f_remote"]) == ["init"]
+    assert (env["fraw"].parent / "Raw_Sources" / "健康生活" / "日記.txt").read_bytes() == b"diary"
+    assert _remote_log(env["f_remote"].parent / "WIKI.git")[0] == "docs(backfill): 通用知識"
+
+
+def test_personal_inbox_dir_without_report_alerts(env, monkeypatch):
+    """指定只進個人庫、寫回了卻沒交回報:原件留在 _待處理/,要發警示(信的主旨標需要處理),不只一行備註。"""
+    c = env["cfg"]
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "nocommit")
+    monkeypatch.setenv("FAKE_CLAUDE_STAGE", "new")
+    monkeypatch.setenv("FAKE_CLAUDE_NOREPORT", "1")
+    _feed_personal_dir(env, "日記.txt", b"diary")
+
+    r = ingest(c)
+
+    (o,) = r.outcomes
+    assert o.status == "done" and o.scope == "personal", o.error
+    assert any("沒交回報" in a for a in r.alerts), r.alerts
+    assert (env["fraw"] / "_待處理" / "日記.txt").exists()
+
+
+def test_personal_inbox_dir_with_company_commit_stops(env, monkeypatch):
+    """指定只進個人庫,攝入卻 commit 了公事庫:私人內容不可推上公事庫,STOP 等人。"""
+    c = env["cfg"]
+    _feed_personal_dir(env, "日記.txt", b"diary")
+
+    r = ingest(c)
+
+    (o,) = r.outcomes
+    assert o.status == "failed" and o.error.startswith("STOP:") and "指定只進個人 WIKI" in o.error, o.error
+    assert c.ingest_stop_path.exists()
+    assert _remote_log(env["f_remote"]) == ["init"]
 
 
 # -- 介面語言(朋友版):提示詞維持繁中,只附回報語言;摘要與信照介面語言 ---------------------------------
