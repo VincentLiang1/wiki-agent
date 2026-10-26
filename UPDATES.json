@@ -1,11 +1,11 @@
 [
  {
-  "source": "c6511cb",
+  "source": "d1b4911",
   "date": "2026-10-26",
   "needs_human": false,
-  "zh-Hant": "- 攝入時順手寫進個人知識庫的內容,頁面沒問題、只有 commit 說明裡提到不該出現的字時,以前整筆退回、要重新攝入一次;現在只刪掉那幾行說明、照常寫入,信裡會註明刪了幾行",
-  "zh-Hans": "- 摄入时顺手写进个人知识库的内容,页面没问题、只有 commit 说明里提到不该出现的字时,以前整笔退回、要重新摄入一次;现在只删掉那几行说明、照常写入,邮件里会注明删了几行",
-  "en": "- When an ingest also writes to your personal wiki and the pages are fine but the commit message mentions a forbidden word, the whole write used to be rejected and the file had to be ingested again; now only those lines of the message are removed, the write goes through, and the email says how many lines were removed"
+  "zh-Hant": "- 內部調整:只跟「公事、個人兩個知識庫一起用」的設定有關;安裝問答建的是單一知識庫,你這邊的行為沒有任何變化,不必做什麼",
+  "zh-Hans": "- 内部调整:只跟「公事、个人两个知识库一起用」的设置有关;安装问答建的是单一知识库,你这边的行为没有任何变化,不必做什么",
+  "en": "- Internal change that only affects setups using two wikis (work and personal) together; the setup wizard creates a single wiki, so nothing changes for you and there is nothing to do"
  },
  {
   "source": "0df0b90",
