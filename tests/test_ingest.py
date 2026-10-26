@@ -1463,6 +1463,29 @@ def test_backfilled_pages_are_checked_again_by_the_program(env, monkeypatch):
     assert "前文**X（Y）**中文" in git("show", "master:Wiki_Pages/通用知識.md", cwd=env["f_remote"].parent / "WIKI.git")
 
 
+@pytest.mark.parametrize("scope", ["company", "personal"])
+def test_forbidden_words_in_wiki_commit_message_are_dropped_not_refused(env, monkeypatch, scope):
+    """頁面乾淨、只有 commit message 交代了「沒有回填公事庫」:那幾行整行刪掉照樣 commit,摘要註明(使用者 2026-10-26);
+    以前整筆不收,只進個人 WIKI 的那筆就白做一次攝入、算失敗。"""
+    c = env["cfg"]
+    _wiki_seed(env, {"CLAUDE.md": "# 個人庫規則\n"})
+    monkeypatch.setenv("FAKE_CLAUDE_STAGE", "msg")
+    monkeypatch.setenv("FAKE_CLAUDE_SCOPE", scope)
+    _feed(env, "m.txt", b"mmm")
+
+    r = ingest(c)
+
+    (o,) = r.outcomes
+    assert o.status == "done", o.error
+    assert o.notes == ["回填個人 WIKI 的 commit message 有 2 行提到公事庫的字,已整行刪掉再 commit"]
+    w_remote = env["f_remote"].parent / "WIKI.git"
+    body = git("log", "-1", "--format=%B", "master", cwd=w_remote)
+    assert body.startswith("docs(backfill): 通用知識") and "來源:網路公開資料" in body and "Co-Authored-By: x" in body
+    assert not any(w in body for w in c.backfill_forbidden), body
+    assert "期貨市場的一般做法" in git("show", "master:Wiki_Pages/通用知識.md", cwd=w_remote)
+    assert not c.ingest_stop_path.exists()
+
+
 @pytest.mark.parametrize("mode, why", [
     pytest.param("leak", "提到「甲公司」", id="leak"),
     pytest.param("script", "知識圖譜/ 除外", id="script"),

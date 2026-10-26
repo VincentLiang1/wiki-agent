@@ -181,6 +181,8 @@ if stage_mode:
     if idx.exists():
         idx.write_text(idx.read_text(encoding="utf-8") + "- [通用知識](通用知識.md)\n", encoding="utf-8")
     wiki_msg = "docs(backfill): 通用知識\n\n來源:網路公開資料"
+    if stage_mode == "msg":   # 頁面乾淨,commit message 卻交代了「沒有回填公事庫」(2026-10-26 實例)
+        wiki_msg += "\n- 沒有回填 FWIKI:通用內容\n- 參考 甲公司 的做法\n\nCo-Authored-By: x"
 
 if os.environ.get("FAKE_CLAUDE_BREAK_WIKI_REMOTE"):   # 攝入到一半斷網:個人庫推不上去
     subprocess.run(["git", "remote", "set-url", "origin", str(repo.parent / "斷網.git")], cwd=repo.parent / "WIKI", check=True)

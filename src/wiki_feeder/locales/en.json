@@ -362,6 +362,7 @@
  "名詞對照表有 {n} 個誤譯,超過上限 {max},不寫": "The name-correction table has {n} misrecognitions, over the limit of {max}; not written",
  "名詞對照表沒更新:%s": "Name-correction table not updated: %s",
  "啟動就結束、沒有印出「執行記錄:」": "Exits right after starting without printing \"執行記錄:\"",
+ "回填個人 WIKI 的 commit message 有 {n} 行提到公事庫的字,已整行刪掉再 commit": "{n} line(s) of the personal WIKI commit message mentioned the work wiki and were removed before committing",
  "在程式資料夾 {root} 裡雙擊 Update.bat": "double-click Update.bat in the program folder {root}",
  "執行失敗:{e}": "failed to run: {e}",
  "大量刪減既有內容": "deleted a large part of existing content",

@@ -136,7 +136,7 @@ _COMMIT_MANAGED = ("**不要 git add、不要 git commit**(會被權限擋下):�
                    "「攝入:<原件檔名>——一句摘要」。只能改 Wiki_Pages/ 底下的檔(與下面第 7 條的名詞校正表),"
                    "動到別處程式不 commit、停下所有攝入等人。"
                    "**不要打 `git show`、`git log`、`git diff`(含 `--stat`)**——會被權限擋下。")
-_BACKFILL_RULE = ("\n   **回填個人 WIKI 照本庫規則做,但只寫在副本裡**:個人 WIKI 的頁面副本在 {stage}(那個庫自己的規則是 {stage}/CLAUDE.md,照它建頁、改頁、登錄它的 index.md)。只能新增或修改 {stage}/Wiki_Pages/ 底下的 .md(知識圖譜/ 除外),不刪檔、不改名、不大幅刪減既有內容;副本不是 git 庫,不要在那裡 commit——程式驗證後替你寫回個人 WIKI、commit 並推送,commit message 照個人 WIKI 的 CLAUDE.md 格式寫進回報的 wiki_commit_message(沒回填就填空字串)。回填的頁面與 commit message 都**不得提到本庫{forbidden}**:只寫去除內部細節後可攜的通用知識;寫不出來就不回填。")
+_BACKFILL_RULE = ("\n   **回填個人 WIKI 照本庫規則做,但只寫在副本裡**:個人 WIKI 的頁面副本在 {stage}(那個庫自己的規則是 {stage}/CLAUDE.md,照它建頁、改頁、登錄它的 index.md)。只能新增或修改 {stage}/Wiki_Pages/ 底下的 .md(知識圖譜/ 除外),不刪檔、不改名、不大幅刪減既有內容;副本不是 git 庫,不要在那裡 commit——程式驗證後替你寫回個人 WIKI、commit 並推送,commit message 照個人 WIKI 的 CLAUDE.md 格式寫進回報的 wiki_commit_message(沒回填就填空字串)。回填的頁面與 commit message 都**不得提到本庫{forbidden}**:只寫去除內部細節後可攜的通用知識;寫不出來就不回填。commit message 連「沒有回填本庫」這種交代也不要寫(個人 WIKI 規則要你寫回填到哪一頁,這裡不適用);提到這些字的行程式會整行刪掉。")
 # 歸屬判斷(有個人庫時才有):拿不準一律公事——公事判成個人,公司內容就進了個人庫、公事庫也查不到;
 # 個人判成公事只是事後要搬(使用者 2026-10-26)
 _SCOPE_RULE = ("\n   **歸屬:先判斷這份該攝入本庫,還是只進個人 WIKI**,寫進回報的 scope。上面說的「跟本庫主題沒有直接關係」"
@@ -1321,7 +1321,7 @@ def prepare_stage(cfg: Config) -> tuple[Path, dict[str, bytes]]:
     return stage, snap
 
 
-def _backfill_problems(wiki: Path, stage: Path, snap: dict[str, bytes], message: str,
+def _backfill_problems(wiki: Path, stage: Path, snap: dict[str, bytes],
                        forbidden: tuple[str, ...]) -> tuple[dict[str, bytes], list[str]]:
     """比對副本:回傳 (要寫回的檔, 不收的理由)。理由不是空的就整筆不收。"""
     changed: dict[str, bytes] = {}
@@ -1359,10 +1359,15 @@ def _backfill_problems(wiki: Path, stage: Path, snap: dict[str, bytes], message:
         target = (wiki / rel).resolve()
         if not target.is_relative_to((wiki / "Wiki_Pages").resolve()) or (wiki / rel).is_symlink():
             problems.append(f"{rel}(寫回的位置不在個人庫的 Wiki_Pages/ 裡)")
-    hits = [w for w in forbidden if w in message]
-    if hits:
-        problems.append(f"commit message 提到「{'」「'.join(hits)}」")
     return changed, problems
+
+
+def _scrub_message(message: str, forbidden: tuple[str, ...]) -> tuple[str, int]:
+    """commit message 提到回填禁字的行整行刪掉,回傳 (刪過的 message, 刪了幾行)。使用者 2026-10-26:以前整筆不收,
+    但那幾行多半是「沒有回填公事庫」這類交代(個人庫自己的規則要寫回填到哪一頁),頁面沒問題卻白做一次攝入。"""
+    lines = message.splitlines()
+    kept = [s for s in lines if not any(w in s for w in forbidden)]
+    return "\n".join(kept).strip(), len(lines) - len(kept)
 
 
 def backfill(cfg: Config, sha: str, stage: Path, snap: dict[str, bytes], result: dict,
@@ -1374,9 +1379,9 @@ def backfill(cfg: Config, sha: str, stage: Path, snap: dict[str, bytes], result:
     import shutil
     rc = cfg.repo(cfg.backfill_repo)
     wiki = rc.repo_dir
-    message = (result.get("wiki_commit_message") or "").strip()
+    message, dropped = _scrub_message((result.get("wiki_commit_message") or "").strip(), cfg.backfill_forbidden)
     try:
-        changed, problems = _backfill_problems(wiki, stage, snap, message, cfg.backfill_forbidden)
+        changed, problems = _backfill_problems(wiki, stage, snap, cfg.backfill_forbidden)
     except OSError as e:
         changed, problems = {}, [f"讀不到副本:{e}"]
     if not changed and not problems:
@@ -1421,7 +1426,8 @@ def backfill(cfg: Config, sha: str, stage: Path, snap: dict[str, bytes], result:
                 (wiki / rel).unlink()
         return refuse([f"個人庫 commit 失敗:{e}"])
     mark_verified(cfg, rc)   # 程式自己檢查過才 commit:記成已驗證,推送與補推才會推它
-    return new_commits(rc, head), _backfill_page_notes(wiki.name, changed, snap, rc.raw_root)
+    scrubbed = [L("回填個人 WIKI 的 commit message 有 {n} 行提到公事庫的字,已整行刪掉再 commit", n=dropped)] if dropped else []
+    return new_commits(rc, head), scrubbed + _backfill_page_notes(wiki.name, changed, snap, rc.raw_root)
 
 
 def _backfill_page_notes(name: str, changed: dict[str, bytes], snap: dict[str, bytes], raw: Path) -> list[str]:
