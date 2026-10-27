@@ -1,5 +1,13 @@
 [
  {
+  "source": "7748137",
+  "date": "2026-10-27",
+  "needs_human": false,
+  "zh-Hant": "- 新安裝的知識庫預設改放家目錄的 LLMWiki(Windows `%USERPROFILE%\\LLMWiki\\WIKI`、Mac `~/LLMWiki/WIKI`),不放「文件」「桌面」,免得被 OneDrive／iCloud 同步弄壞;已安裝的不變",
+  "zh-Hans": "- 新安装的知识库默认改放家目录的 LLMWiki(Windows `%USERPROFILE%\\LLMWiki\\WIKI`、Mac `~/LLMWiki/WIKI`),不放「文档」「桌面」,免得被 OneDrive／iCloud 同步弄坏;已安装的不变",
+  "en": "- New installs now create the knowledge base in LLMWiki in your home folder (Windows `%USERPROFILE%\\LLMWiki\\WIKI`, Mac `~/LLMWiki/WIKI`) rather than Documents or Desktop, where OneDrive/iCloud syncing can corrupt it; existing installs are unchanged"
+ },
+ {
   "source": "4b48dee",
   "date": "2026-10-27",
   "needs_human": false,

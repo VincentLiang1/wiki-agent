@@ -150,8 +150,8 @@ def mail_default(status: dict) -> str:
     return email if email.lower().endswith("@gmail.com") else ""
 
 
-# 知識庫的預設位置:照使用者本人的擺法(SOURCE5\WIKI,旁邊是 Raw_Sources),再找幾個常見的地方
-WIKI_GUESSES = ("SOURCE5/WIKI", "LLMWIKI/WIKI", "Documents/WIKI", "Desktop/WIKI", "WIKI")
+# 找現成的知識庫:先找使用者本人的擺法(SOURCE5\WIKI,他在新機器上安裝才找得到),再找幾個常見的地方
+WIKI_GUESSES = ("SOURCE5/WIKI", "LLMWiki/WIKI", "Documents/WIKI", "Desktop/WIKI", "WIKI")
 
 
 def find_wiki(home: Path, drives: tuple[Path, ...] = ()) -> Path | None:
@@ -164,9 +164,10 @@ def find_wiki(home: Path, drives: tuple[Path, ...] = ()) -> Path | None:
     return None
 
 
-def default_wiki(home: Path, windows: bool) -> Path:
-    """都找不到時的預設:使用者本人的擺法(Windows C:\\SOURCE5\\WIKI、Mac ~/SOURCE5/WIKI),沒有就幫忙建。"""
-    return Path("C:/SOURCE5/WIKI") if windows else home / "SOURCE5" / "WIKI"
+def default_wiki(home: Path) -> Path:
+    """都找不到時新建的預設:家目錄的 LLMWiki\\WIKI(兩個平台同一個),沒有就幫忙建。
+    不放 SOURCE5(使用者本人的擺法)、磁碟根目錄、文件／桌面(會被 OneDrive／iCloud 同步,弄壞 .git)(§10.2)。"""
+    return home / "LLMWiki" / "WIKI"
 
 
 # -- 問答 ------------------------------------------------------------------------------
@@ -735,7 +736,7 @@ def main(argv: list[str] | None = None) -> int:
     while cfg is None:
         say(L("\n=== 設定(每一題都可以貼上路徑;路徑有預設值時直接按 Enter) ==="))
         a = {"lang": lang}
-        a["wiki"], a["raw"], a["folders"] = ask_library(str(default_wiki(home, True)),
+        a["wiki"], a["raw"], a["folders"] = ask_library(str(default_wiki(home)),
                                                         find_wiki(home, (Path("C:/"), Path("D:/"))), claude, True)
         a["icloud"] = ask_inbox(home)
         a["label"] = ask(L("【知識庫名稱】摘要信上顯示的名字"), L("知識庫"))

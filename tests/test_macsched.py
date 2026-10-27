@@ -116,8 +116,8 @@ def test_failed_pull_stops_the_update(tmp_path):
 def test_mac_setup_writes_a_readable_config_and_stores_the_password_in_the_keychain(tmp_path):
     mset = _mod("macsetup")
     home = tmp_path
-    a = {"icloud": str(mset.icloud_drive(home) / "_WikiBox"), "wiki": str(home / "SOURCE5" / "WIKI"),
-         "raw": str(home / "SOURCE5" / "Raw_Sources"), "label": "知識庫", "doc2md": str(mset.scribe2md_doc2md(home)),
+    a = {"icloud": str(mset.icloud_drive(home) / "_WikiBox"), "wiki": str(home / "LLMWiki" / "WIKI"),
+         "raw": str(home / "LLMWiki" / "Raw_Sources"), "label": "知識庫", "doc2md": str(mset.scribe2md_doc2md(home)),
          "mail_from": "amy@gmail.com", "mail_to": "amy@gmail.com", "claude": "/x/claude"}
     text = mset.render_config(a)
     assert text.startswith(mset.HEADER) and "記事本" not in text

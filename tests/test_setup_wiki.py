@@ -34,14 +34,17 @@ def _fake_claude(writes: dict[str, str], seen: list):
     return run
 
 
-def test_defaults_follow_the_owners_layout_and_claude_login(tmp_path):
-    """預設值:找得到有 CLAUDE.md 的 WIKI 就用它,找不到就是使用者本人的擺法;寄件信箱用 claude 登入的 Gmail。"""
+def test_defaults_find_an_existing_wiki_and_build_new_ones_in_home_llmwiki(tmp_path):
+    """預設值:找得到有 CLAUDE.md 的 WIKI 就用它(使用者本人的 SOURCE5 先找),找不到就新建在家目錄的 LLMWiki;
+    寄件信箱用 claude 登入的 Gmail。"""
     assert ws.find_wiki(tmp_path) is None
-    assert ws.default_wiki(tmp_path, False) == tmp_path / "SOURCE5" / "WIKI"
-    assert ws.default_wiki(tmp_path, True) == Path("C:/SOURCE5/WIKI")
-    (tmp_path / "LLMWIKI" / "WIKI").mkdir(parents=True)
-    (tmp_path / "LLMWIKI" / "WIKI" / "CLAUDE.md").write_text("# 規則\n", encoding="utf-8")
-    assert ws.find_wiki(tmp_path) == tmp_path / "LLMWIKI" / "WIKI"
+    assert ws.default_wiki(tmp_path) == tmp_path / "LLMWiki" / "WIKI"
+    (tmp_path / "LLMWiki" / "WIKI").mkdir(parents=True)
+    (tmp_path / "LLMWiki" / "WIKI" / "CLAUDE.md").write_text("# 規則\n", encoding="utf-8")
+    assert ws.find_wiki(tmp_path) == tmp_path / "LLMWiki" / "WIKI"
+    (tmp_path / "SOURCE5" / "WIKI").mkdir(parents=True)
+    (tmp_path / "SOURCE5" / "WIKI" / "CLAUDE.md").write_text("# 規則\n", encoding="utf-8")
+    assert ws.find_wiki(tmp_path) == tmp_path / "SOURCE5" / "WIKI"
     assert ws.mail_default({"email": "Amy@Gmail.com"}) == "Amy@Gmail.com"
     assert ws.mail_default({"email": "amy@example.com"}) == ""      # 不是 Gmail:寄不出去,不當預設
     assert ws.mail_default({}) == ""
@@ -99,9 +102,9 @@ def test_ask_wiki_builds_missing_folders_and_never_rebuilds_an_existing_claude_m
     calls = []
     monkeypatch.setattr(ws, "scaffold_wiki", lambda claude, w, r, windows: (
         calls.append(w), (w / "CLAUDE.md").write_text("# 新規則\n", encoding="utf-8"), (True, "ok"))[-1])
-    wiki = tmp_path / "SOURCE5" / "WIKI"
+    wiki = ws.default_wiki(tmp_path)
     w, r = ws.ask_wiki(str(wiki), Path("/x/claude"), False)
-    assert (w, r) == (str(wiki), str(tmp_path / "SOURCE5" / "Raw_Sources"))
+    assert (w, r) == (str(wiki), str(tmp_path / "LLMWiki" / "Raw_Sources"))
     assert (Path(r) / "_Pending").is_dir() and calls == [wiki]
     assert ws.GIT_HEADING in (wiki / "CLAUDE.md").read_text(encoding="utf-8")
 
@@ -322,8 +325,8 @@ def test_no_wiki_yet_goes_to_the_new_wiki_questions(tmp_path, monkeypatch):
     monkeypatch.setattr(ws, "scaffold_wiki", lambda claude, w, r, windows: (
         (w / "CLAUDE.md").write_text("# 新規則\n", encoding="utf-8"), (True, "ok"))[-1])
     monkeypatch.setattr("builtins.input", lambda *_: "")
-    w, r, names = ws.ask_library(str(tmp_path / "SOURCE5" / "WIKI"), None, Path("/x/claude"), False)
-    assert (w, names) == (str(tmp_path / "SOURCE5" / "WIKI"), None) and (Path(r) / "_Pending").is_dir()
+    w, r, names = ws.ask_library(str(ws.default_wiki(tmp_path)), None, Path("/x/claude"), False)
+    assert (w, names) == (str(tmp_path / "LLMWiki" / "WIKI"), None) and (Path(r) / "_Pending").is_dir()
 
 
 def test_two_possible_originals_folders_are_left_to_claude(tmp_path, monkeypatch):

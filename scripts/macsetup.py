@@ -239,7 +239,7 @@ def _app_permission(home: Path, prefix: str, app: Path, state: Path) -> int:
 def ask_library(home: Path, claude: Path) -> tuple[str, str, dict[str, str] | None]:
     """與 Windows 版同一套問法(先問有沒有知識庫:有就照它的 CLAUDE.md,沒有就新建),但選擇視窗用 Mac 的。"""
     ws.pick = pick
-    return ws.ask_library(str(ws.default_wiki(home, False)), ws.find_wiki(home), claude, windows=False)
+    return ws.ask_library(str(ws.default_wiki(home)), ws.find_wiki(home), claude, windows=False)
 
 
 def ask_mail(default: str) -> tuple[str, str]:

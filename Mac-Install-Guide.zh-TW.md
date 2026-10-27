@@ -97,7 +97,7 @@
 ## 6. 確認真的在動
 
 1. 在 iPhone 打開 **檔案** App → **iCloud 雲碟** → **_WikiBox**,隨便丟一個檔進去(例如用「語音備忘錄」分享一段錄音、或拍一張白板照存到這裡)
-2. 等幾分鐘(錄音越長越久)。在 Mac 的 Finder 打開家目錄的 `SOURCE5/WIKI/Wiki_Pages`(或你選的知識庫),會多出一頁;原檔被歸到 `Raw_Sources` 底下的主題資料夾
+2. 等幾分鐘(錄音越長越久)。在 Mac 的 Finder 打開家目錄的 `LLMWiki/WIKI/Wiki_Pages`(或你選的知識庫),會多出一頁;原檔被歸到 `Raw_Sources` 底下的主題資料夾
 3. 有設摘要信的話,會收到一封「wiki-feeder 攝入摘要」
 
 沒動靜的話看紀錄:Finder 按 **⌘ + Shift + G**,貼上 `~/Library/Application Support/wiki-feeder/logs`,打開 `feeder.log` 看最後幾行。

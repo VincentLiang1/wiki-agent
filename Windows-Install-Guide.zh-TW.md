@@ -82,7 +82,7 @@
 ## 6. 確認真的在動
 
 1. 在 iPhone 打開 **檔案** App → **iCloud 雲碟** → **_WikiBox**,丟一個檔進去
-2. 等幾分鐘。檔案總管打開你的知識庫 `WIKI\Wiki_Pages`,會多出一頁;原檔被歸到 `Raw_Sources` 底下的主題資料夾
+2. 等幾分鐘。檔案總管打開家目錄的 `LLMWiki\WIKI\Wiki_Pages`(或你選的知識庫),會多出一頁;原檔被歸到 `Raw_Sources` 底下的主題資料夾
 3. 有設摘要信的話,會收到一封「wiki-feeder 攝入摘要」
 
 沒動靜的話看紀錄:檔案總管網址列貼上 `%LOCALAPPDATA%\wiki-feeder\logs`,打開 `feeder.log` 看最後幾行。

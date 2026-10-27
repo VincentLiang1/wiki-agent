@@ -99,7 +99,7 @@ When you see `✓ Installation complete.` you can close Terminal.
 ## 6. Check that it really works
 
 1. On the iPhone, open the **Files** app → **iCloud Drive** → **_WikiBox** and drop any file into it (for example, share a recording from Voice Memos, or save a photo of a whiteboard here)
-2. Wait a few minutes (longer recordings take longer). In Finder, open `SOURCE5/WIKI/Wiki_Pages` in your home folder (or the knowledge base you chose): a new page appears, and the original file is filed into a topic folder under `Raw_Sources`
+2. Wait a few minutes (longer recordings take longer). In Finder, open `LLMWiki/WIKI/Wiki_Pages` in your home folder (or the knowledge base you chose): a new page appears, and the original file is filed into a topic folder under `Raw_Sources`
 3. If you set up the summary email, you'll receive one titled `wiki-feeder ingest summary …`
 
 If nothing happens, check the log: in Finder press **⌘ + Shift + G**, paste `~/Library/Application Support/wiki-feeder/logs`, open `feeder.log` and look at the last few lines.

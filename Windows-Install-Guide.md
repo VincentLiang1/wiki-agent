@@ -84,7 +84,7 @@ When you see `✓ Installation complete.` you can close the window. From then on
 ## 6. Check that it really works
 
 1. On the iPhone, open the **Files** app → **iCloud Drive** → **_WikiBox** and drop a file into it
-2. Wait a few minutes. Open your knowledge base `WIKI\Wiki_Pages` in File Explorer: a new page appears, and the original file is filed into a topic folder under `Raw_Sources`
+2. Wait a few minutes. In File Explorer, open `LLMWiki\WIKI\Wiki_Pages` in your home folder (or the knowledge base you chose): a new page appears, and the original file is filed into a topic folder under `Raw_Sources`
 3. If you set up the summary email, you'll receive one titled `wiki-feeder ingest summary …`
 
 If nothing happens, check the log: paste `%LOCALAPPDATA%\wiki-feeder\logs` into File Explorer's address bar, open `feeder.log` and look at the last few lines.
