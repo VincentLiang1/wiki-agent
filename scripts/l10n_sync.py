@@ -85,10 +85,40 @@ DOCS = {"README.zh-TW.md": "README.zh-CN.md", "Mac-Install-Guide.zh-TW.md": "Mac
         "What-is-LLM-Wiki.zh-TW.md": "What-is-LLM-Wiki.zh-CN.md"}   # 〈什麼是 LLM Wiki〉:會議助手 App 連過來(使用者 2026-10-24);簡中手修過「资料／数据」,重轉後看 diff
 
 
-def hans_doc(text: str, cc) -> str:
+# 說明文件專用的用詞修正(自動轉完才套,左邊寫自動轉出來的簡體):使用者只寫繁中,簡中那份一律由 --docs 整份重轉,
+# 不在簡中檔裡手改(2026-10-27:以前手改的字,每次重轉都被蓋回去)。只套說明、不套畫面字串——「数据」「用繁体中文」
+# 這種在畫面上意思不同;要改畫面的字放 ZH_HANS_FIX。帶前後文寫,免得改到不該改的地方
+_GUIDE_FIX = {
+    "手机产生会议草稿": "手机生成会议草稿",
+    "语音辨识": "语音识别",
+    "写错,开 Claude": "写错,打开 Claude",
+}
+DOC_FIX = {
+    "Mac-Install-Guide.zh-CN.md": {
+        **_GUIDE_FIX,
+        "「文档」「桌面」": "「文稿」「桌面」",          # macOS 簡中叫「文稿」;Windows 叫「文档」,不改
+        "想要取用 iCloud": "想要访问 iCloud",            # 照 macOS 簡中的權限視窗
+        "在背景试读": "在后台试读",
+        "`,存盘": "`,保存",
+        "「文字编辑」": "「文本编辑」",                  # macOS 簡中的 App 名
+    },
+    "Windows-Install-Guide.zh-CN.md": _GUIDE_FIX,
+    "What-is-LLM-Wiki.zh-CN.md": {
+        "一定遇过": "一定遇到过", "合约": "合同", "页,连到相关": "页,链接到相关", "一般的文字文件": "一般的文本文件",
+        "整段拷贝": "整段复制", "- 查找:": "- 查询:", "## 品质标准": "## 质量标准", "## 转文件": "## 转换",
+        "逐字稿透过": "逐字稿通过", "归文件": "归档",
+        "- 用繁体中文写": "- 用简体中文写",              # 規則檔範例:簡中讀者的知識庫寫簡中
+        # 資料(素材)≠ 數據;「数据在你自己手上」那句本來就是數據,不改
+        "原始数据": "原始资料", "新数据": "新资料", "数据越多": "资料越多", "公开数据": "公开资料",
+        "整理数据": "整理资料", "把数据丢进": "把资料丢进", "**数据要挑": "**资料要挑", "关的数据丢太": "关的资料丢太",
+    },
+}
+
+
+def hans_doc(text: str, cc, name: str = "") -> str:
     """頁首的語言切換列換成簡中那份的;連到繁中說明的連結換成簡中那份(檔名 2026-10-22 起是英文,
-    OpenCC 不會再順手轉)。`README.md` 是英文那份、不換。"""
-    lines = text.split("\n")
+    OpenCC 不會再順手轉)。`README.md` 是英文那份、不換。name 是簡中那份的檔名:套它的 DOC_FIX。"""
+    lines, head = text.split("\n"), ""
     for i, ln in enumerate(lines):
         if ln.startswith("[English](") and " | **繁體中文** | " in ln:
             hant = next(k for k, v in DOCS.items() if f"]({v})" in ln)
@@ -100,7 +130,10 @@ def hans_doc(text: str, cc) -> str:
     out = to_hans("\n".join(lines).replace(menu + "(Enter = 繁體中文)", "@@MENU@@"), cc)
     for hant_name, hans_name in DOCS.items():
         out = out.replace(hant_name, hans_name)
-    return out.replace("@@HEAD@@", head).replace("@@MENU@@", menu + "(Enter = 简体中文)")
+    out = out.replace("@@HEAD@@", head).replace("@@MENU@@", menu + "(Enter = 简体中文)")
+    for a, b in DOC_FIX.get(name, {}).items():
+        out = out.replace(a, b)
+    return out
 
 
 # 三個 .bat(UTF-8、CRLF):`call :msg "繁中" "簡中" "English"`、`call :pick 變數 "繁中" "簡中" "English"`
@@ -154,14 +187,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--en", action="append", default=[], help="JSON:{繁中原文: 英文}(可以給好幾個)")
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--rehans", action="store_true", help="ZH_HANS_FIX／KEEP 改了之後,自動轉的簡中全部重轉")
-    ap.add_argument("--docs", action="store_true", help="public/ 的繁中說明重轉成簡中那份(改了繁中說明就跑)")
+    ap.add_argument("--docs", action="store_true",
+                    help="public/ 的繁中說明整份重轉成簡中那份(改了繁中說明就跑;用詞修正寫進 DOC_FIX,不手改簡中)")
     a = ap.parse_args(argv)
 
     if a.docs:
         import opencc
         cc = opencc.OpenCC("tw2sp")
         for src, dst in DOCS.items():
-            (PUBLIC / dst).write_text(hans_doc((PUBLIC / src).read_text(encoding="utf-8"), cc), encoding="utf-8")
+            (PUBLIC / dst).write_text(hans_doc((PUBLIC / src).read_text(encoding="utf-8"), cc, dst), encoding="utf-8")
             print(f"{src} → {dst}")
         return 0
     keys = extract()

@@ -314,6 +314,7 @@ def test_pointer_to_another_repo_stops_the_round_without_counting_as_failure(out
     c, wiki = outside["cfg"], outside["wiki"]
     _feed(outside, "a.txt", b"aaa")
     assert ingest(c).ok
+    (wiki / ".git").unlink()     # 先刪再寫:Windows 上 .git 是隱藏檔,不准用 "w" 覆寫
     (wiki / ".git").write_text(f"gitdir: {tmp_path / 'other.git'}\n", encoding="utf-8")
     _feed(outside, "b.txt", b"bbb")
 

@@ -12,6 +12,8 @@ from wiki_feeder import i18n
 from wiki_feeder.config import Config, ConfigError
 
 ROOT = Path(__file__).parents[1]
+# 本 repo 放在 public/,公開 repo 放在根目錄(發佈腳本去掉 public/)
+PUBLIC = ROOT / "public" if (ROOT / "public").is_dir() else ROOT
 _spec = importlib.util.spec_from_file_location("l10n_sync", ROOT / "scripts" / "l10n_sync.py")
 sync = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sync)
@@ -33,6 +35,32 @@ def test_hans_doc_points_links_at_the_simplified_guides():
     head, body = sync.hans_doc(src, Same()).split("\n", 1)
     assert head == "[English](Mac-Install-Guide.md) | [繁體中文](Mac-Install-Guide.zh-TW.md) | **简体中文**"
     assert "[Windows-Install-Guide.zh-CN.md](Windows-Install-Guide.zh-CN.md)" in body and "README.md" in body
+
+
+def test_doc_fixes_apply_only_to_their_own_document():
+    """說明的用詞修正(DOC_FIX)在 --docs 重轉時套上,只套那一份:Mac 的「文稿」不可以跑進 Windows 那份(Windows 叫「文档」)。"""
+    class Same:
+        convert = staticmethod(lambda s: s)
+    src = "被同步的「文档」「桌面」;手机产生会议草稿\n"
+    assert sync.hans_doc(src, Same(), "Mac-Install-Guide.zh-CN.md") == "被同步的「文稿」「桌面」;手机生成会议草稿\n"
+    assert sync.hans_doc(src, Same(), "Windows-Install-Guide.zh-CN.md") == "被同步的「文档」「桌面」;手机生成会议草稿\n"
+
+
+def test_simplified_docs_are_exactly_what_docs_regenerates():
+    """簡中說明一律由 --docs 從繁中整份重轉、不在簡中檔裡手改(使用者 2026-10-27:他只寫繁中;手改的字下一次重轉就被蓋回去)。
+    要改簡中用詞就加進 DOC_FIX。要 OpenCC:用 meeting-scribe-native 的 venv 跑才測得到(wiki-feeder 本身不裝它)。"""
+    opencc = pytest.importorskip("opencc")
+    cc = opencc.OpenCC("tw2sp")
+    for src, dst in sync.DOCS.items():
+        want = sync.hans_doc((PUBLIC / src).read_text(encoding="utf-8"), cc, dst)
+        assert (PUBLIC / dst).read_text(encoding="utf-8") == want, f"{dst} 跟重轉的結果不同:跑 l10n_sync.py --docs"
+
+
+def test_every_doc_fix_is_still_used():
+    """DOC_FIX 每一條的結果都要出現在那份簡中裡:繁中改寫後用不到的修正留著,下一次會改到不相干的字。"""
+    for dst, fixes in sync.DOC_FIX.items():
+        text = (PUBLIC / dst).read_text(encoding="utf-8")
+        assert [b for b in fixes.values() if b not in text] == [], dst
 
 
 def _fields(s: str) -> tuple:

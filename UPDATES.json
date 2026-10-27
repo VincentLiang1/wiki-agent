@@ -1,6 +1,6 @@
 [
  {
-  "source": "2643dfb",
+  "source": "c3b5fd0",
   "date": "2026-10-27",
   "needs_human": false,
   "zh-Hant": "- 安裝時,知識庫或原件資料夾放在 OneDrive、iCloud 雲碟、Dropbox、Google Drive(或被同步的「文件」「桌面」)裡會提醒你、說明原因,建議換到家目錄的 LLMWiki;堅持要放的話,看完後果打 yes,知識庫的版本紀錄(git)會改放在這台電腦、不放在同步資料夾裡;已安裝的不受影響",

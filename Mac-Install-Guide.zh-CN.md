@@ -152,6 +152,6 @@ Claude 会改正页面,同时把这条记进知识库的名词校正表(`memory/
 
 - **信的主旨开头是「⚠️ 需要处理」**:打开终端,打 `cd ~/wiki-agent && claude`,把那封信整封贴给 Claude,请它照 wiki-agent 的规则处理
 - **「Claude Code 没登录或登录过期」**:终端打 `claude` 重新登录,下一轮就会自己接着做
-- **读不到收件箱**:多半是当初按了「不允许」:左上角  → **系统设置** → **隐私与安全性** → **文件和文件夹** → 找到 **wiki-agent**,把 iCloud 云盘(与「文档」「桌面」)的开关打开,再双击一次 wiki-agent 重新检查(用终端那一行装的,是完全磁盘访问权限没加或被关掉)
+- **读不到收件箱**:多半是当初按了「不允许」:左上角  → **系统设置** → **隐私与安全性** → **文件和文件夹** → 找到 **wiki-agent**,把 iCloud 云盘(与「文稿」「桌面」)的开关打开,再双击一次 wiki-agent 重新检查(用终端那一行装的,是完全磁盘访问权限没加或被关掉)
 - **不想让 wiki-agent 重启 iCloud 同步程序**:用「文本编辑」打开 `~/Library/Application Support/wiki-feeder/config.toml`,在 `[inbox]` 那段加一行 `icloud_restart = false`,保存后双击一次 wiki-agent。记录在同一个文件夹的 `logs/icloud.log`
 - **不要自己在知识库里运行 git**(包括请 Claude 帮你 commit):程序只接受它自己验证过的版本,多一笔就会停下来等人

@@ -29,7 +29,7 @@ wiki-agent 是一支在你电脑上常驻的小程序,替你照 Andrej Karpathy 
 
 ## 安装
 
-- **Mac**:看 [Mac-Install-Guide.zh-CN.md](Mac-Install-Guide.zh-CN.md)。下载 [wiki-agent-mac.zip](https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip)、解开,把 wiki-agent 拖进「应用程序」再双击(已签章公证)。备用:打开「终端」粘贴一行:
+- **Mac**:看 [Mac-Install-Guide.zh-CN.md](Mac-Install-Guide.zh-CN.md)。下载 [wiki-agent-mac.zip](https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip)、解开,把 wiki-agent 拖进「应用程序」再双击(已签名公证)。备用:打开「终端」粘贴一行:
   ```bash
   curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash
   ```

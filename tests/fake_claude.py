@@ -191,6 +191,8 @@ if os.environ.get("FAKE_CLAUDE_DIRTY"):
     (repo / "暫存.txt").write_text("x", encoding="utf-8")
 
 if os.environ.get("FAKE_CLAUDE_POINT_GIT"):   # 用 Write 把 .git 指標檔改指別的庫(§5.15)
+    # 先刪再寫:Git for Windows 把 .git 設成隱藏檔,Windows 不准用 "w" 覆寫隱藏檔(PermissionError)
+    (repo / ".git").unlink()
     (repo / ".git").write_text(f"gitdir: {os.environ['FAKE_CLAUDE_POINT_GIT']}\n", encoding="utf-8")
 
 structured = {
