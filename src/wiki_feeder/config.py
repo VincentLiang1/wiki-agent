@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import shutil
 import sys
 import tomllib
@@ -27,6 +28,14 @@ LEGACY = {PENDING: LEGACY_PENDING, DISCARD: LEGACY_DISCARD, INTAKE: LEGACY_INTAK
 SYSTEM_DIRS = tuple(LEGACY) + tuple(LEGACY.values())
 # 安裝說明第 7 節讓朋友在 iCloud 雲碟最上層建的聲紋同步資料夾(每種語言同一個名字):名詞對照表寫在這裡給手機(glossary.py)
 GLOSSARY_SYNC_DIR = "_聲紋同步"
+# 已經有知識庫的朋友,待處理資料夾照他 CLAUDE.md 寫的(使用者 2026-10-27:「已經有 WIKI,目錄本來就不應該限定」):
+# 一層、不是隱藏、沒有 Windows 不准的字元;捨棄、收件區仍只用上面的系統名
+_BAD_DIR = re.compile(r'[\\/<>:"|?*\x00-\x1f]')
+
+
+def custom_dir_ok(name: str) -> bool:
+    return (0 < len(name) <= 60 and name == name.strip() and name not in (".", "..") and not name.startswith(".")
+            and not name.endswith(".") and not _BAD_DIR.search(name))
 
 
 def folder_names(raw: Path) -> dict[str, str]:
@@ -423,13 +432,19 @@ class Config:
         # 沒寫 = 舊版安裝程式寫的設定檔 = 中文舊名(升級不重寫設定檔,舊庫照舊)
         names = {k: wiki.get(k, LEGACY[new]) for k, new in (("pending", PENDING), ("discard", DISCARD), ("intake", INTAKE))}
         for k, v in names.items():
-            if not isinstance(v, str) or v not in SYSTEM_DIRS:
+            if not isinstance(v, str) or not (v in SYSTEM_DIRS or k == "pending" and custom_dir_ok(v)):
                 raise ConfigError(L("設定檔 {path} 的 [wiki] {key} 只能是 {names}:{value}", path=path, key=k,
                                      names=L("、").join(SYSTEM_DIRS), value=repr(v)))
+        # 不分大小寫比:Mac、Windows 的磁碟 _inbox 與 _Inbox 是同一個資料夾
+        if len({v.casefold() for v in names.values()}) < len(names):
+            raise ConfigError(L("設定檔 {path} 的 [wiki] pending、discard、intake 不可以是同一個資料夾:{names}",
+                                 path=path, names=L("、").join(names.values())))
         return cls(
             # 收件區不可與原件樹的待處理同一個:收件區的檔搬進待處理時會把自己改名成 X_2
             pending_dir=raw / names["intake"],
             raw_roots=(raw,),
+            # 自訂的待處理資料夾也不算原件、也不是群組(系統名本來就在 SYSTEM_DIRS 裡)
+            raw_skip_dirs=SYSTEM_DIRS + ((names["pending"],) if names["pending"] not in SYSTEM_DIRS else ()),
             pending_name=names["pending"],
             discard_name=names["discard"],
             state_dir=state,

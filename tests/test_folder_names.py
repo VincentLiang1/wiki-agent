@@ -97,9 +97,33 @@ def test_config_rejects_unknown_folder_names(tmp_path):
     state.mkdir()
     (state / CONFIG_FILE).write_text(
         f"[inbox]\nicloud = '{tmp_path / 'i'}'\n[wiki]\ndir = '{tmp_path / 'W'}'\nraw = '{tmp_path / 'R'}'\n"
-        "pending = '待處理'\n[tools]\ndoc2md = 'x'\n", encoding="utf-8")
-    with pytest.raises(ConfigError, match="pending"):
+        "discard = '捨棄候選'\n[tools]\ndoc2md = 'x'\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="discard"):
         Config.from_file(state / CONFIG_FILE, state)
+
+
+def test_existing_wikis_own_inbox_name_is_accepted_but_not_a_lookalike_of_another_folder(tmp_path):
+    """已經有知識庫的朋友,待處理資料夾照他 CLAUDE.md 寫的(使用者 2026-10-27);不能是多層、隱藏、
+    或跟收件區、捨棄只差大小寫(磁碟上是同一個資料夾)。自訂的入口也不算原件。"""
+    state = tmp_path / "state"
+    state.mkdir()
+
+    def load(pending: str, intake: str = "_Inbox", discard: str = "_Discarded") -> Config:
+        (state / CONFIG_FILE).write_text(
+            f"[inbox]\nicloud = '{tmp_path / 'i'}'\n[wiki]\ndir = '{tmp_path / 'W'}'\nraw = '{tmp_path / 'R'}'\n"
+            f"pending = '{pending}'\ndiscard = '{discard}'\nintake = '{intake}'\n[tools]\ndoc2md = 'x'\n", encoding="utf-8")
+        return Config.from_file(state / CONFIG_FILE, state)
+
+    c = load("inbox")
+    assert c.pending_name == "inbox" and "inbox" in c.raw_skip_dirs and set(SYSTEM_DIRS) <= set(c.raw_skip_dirs)
+    assert load("_Pending").raw_skip_dirs == SYSTEM_DIRS
+    for bad in ("a/b", ".inbox", "..", ""):
+        with pytest.raises(ConfigError, match="pending"):
+            load(bad)
+    with pytest.raises(ConfigError, match="intake"):
+        load("_inbox")
+    with pytest.raises(ConfigError, match="discard"):
+        load("inbox", discard="trash")                         # 捨棄、收件區仍只認系統名
 
 
 def test_owner_mac_keeps_the_chinese_names():
@@ -210,3 +234,25 @@ def test_report_without_a_known_group_says_the_real_pending_folder(english, monk
     assert (english["raw"] / "_Pending" / "a.txt").is_file()
     assert any("_Pending/ 待人搬" in n for n in o.notes) and not any("_待處理" in n for n in o.notes)
     assert git("status", "--porcelain", cwd=english["wiki"]) == ""
+
+
+def test_inbox_without_underscore_carries_a_file_through_and_is_never_a_group(english, monkeypatch):
+    """朋友 CLAUDE.md 的入口叫 inbox(沒有 _):它不是群組——不列進回報的群組清單、回報拿它當新群組也不搬,
+    裡面還沒攝入的檔也不算原件。"""
+    e = english
+    (e["raw"] / "_Pending").rmdir()
+    (e["raw"] / "inbox").mkdir()
+    c = replace(e["cfg"], pending_name="inbox", raw_skip_dirs=SYSTEM_DIRS + ("inbox",))
+    e["cfg"] = c
+    _feed(e, "a.txt", b"aaa")
+    (o,) = ingest(c).outcomes
+    assert o.status == "done", o.error
+    assert (e["raw"] / "會議與月報" / "a.txt").is_file()
+    (prompt,) = e["prompts"]
+    assert "不得處理 inbox 裡的其他檔案" in prompt
+    assert "先從現有群組挑:會議與月報;" in prompt                         # 群組清單裡沒有入口
+
+    monkeypatch.setenv("FAKE_CLAUDE_GROUP", "Inbox")           # 只差大小寫:磁碟上是同一個資料夾
+    _feed(e, "b.txt", b"bbb")
+    (o,) = ingest(c).outcomes
+    assert (e["raw"] / "inbox" / "b.txt").is_file() and "Inbox" in " ".join(o.notes)

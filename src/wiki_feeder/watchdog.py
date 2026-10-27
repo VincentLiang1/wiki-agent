@@ -513,11 +513,14 @@ def _save_kick_state(cfg: Config, st: dict) -> None:
     cfg.icloud_kick_state_path.write_text(json.dumps(st, ensure_ascii=False), encoding="utf-8")
 
 
-def mark_kicked(cfg: Config, now: float) -> None:
-    """記下重啟 bird 的時間(牆上時間)。探針卡住、聲紋橋樑的修理重啟 bird 也記這裡:定時重啟從那時重新計時,
-    不會剛修完又被定時重啟一次。睡醒後第一輪多半就到期,照樣重啟——睡醒的 bird 常常沒接上。"""
+def mark_kicked(cfg: Config, now: float, net: str | None = None) -> None:
+    """記下重啟 bird 的時間(牆上時間)與當時的網路(net_id;None = 查不到、不記)。探針卡住、聲紋橋樑的修理
+    重啟 bird 也記這裡:定時重啟從那時重新計時,不會剛修完又被定時重啟一次;換網路後修理已經重啟過的,也不會再為了
+    換網路砍一次。睡醒後第一輪多半就到期,照樣重啟——睡醒的 bird 常常沒接上。"""
     st = _kick_state(cfg)
     st["kicked"] = now
+    if net is not None:
+        st["net"] = net
     _save_kick_state(cfg, st)
 
 
@@ -538,12 +541,37 @@ def _probe_note(cfg: Config) -> tuple[str, bool]:
 KICK_PROBE_GRACE = 180   # 探針寫入後這麼久內不重啟(看門狗一輪):重啟會打斷它的上傳,修理時又被誤判成卡住
 
 
-def icloud_kick(cfg: Config, now: float, status: str | None, pending: list[str] | None) -> tuple[bool, str]:
-    """這一輪該不該重啟 bird,以及寫進 icloud.log 的那一行(網路由呼叫端在要重啟時才查)。
+def net_id(timeout: float = 10) -> str | None:
+    """這台現在接在哪個網路上:IPv4 與 IPv6 預設路由的介面＋閘道(本機查詢,不連網)。沒有預設路由回 ""(沒接網路);
+    route 跑不起來回 None(查不到,不可當成換了網路)。
+    2026-10-27:筆電從家裡帶到公司接 iPad 熱點,Mac 的 iCloud 很久沒把手機送來的檔載下來,使用者在 Finder 打開
+    收件匣才 2 分鐘就到。IPv4 閘道 iPhone、iPad 熱點都是 172.20.10.1,分不出來;IPv6 的閘道是那台裝置自己的位址,分得出來。"""
+    parts = []
+    for fam in ("-inet", "-inet6"):
+        try:
+            r = subprocess.run(["route", "-n", "get", fam, "default"], capture_output=True, text=True, timeout=timeout)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        info = dict(ln.strip().split(": ", 1) for ln in r.stdout.splitlines() if ": " in ln)
+        if r.returncode == 0 and info.get("interface"):
+            parts.append(f"{info['interface']}/{info.get('gateway', '')}")
+    return "|".join(parts)
+
+
+def icloud_kick(cfg: Config, now: float, status: str | None, pending: list[str] | None,
+                net: str | None = None) -> tuple[bool, str]:
+    """這一輪該不該重啟 bird,以及寫進 icloud.log 的那一行(連不連得上 iCloud 由呼叫端在要重啟時才查)。
     pending:收件匣的佔位檔(None = 讀不到);每個佔位檔記下第一次看到的時間,icloud_busy_max 內算「下載中」、
-    不重啟;超過的就是下載卡住了,照樣重啟。"""
+    不重啟;超過的就是下載卡住了,照樣重啟。
+    net:現在的網路(net_id;None = 查不到)。跟上次重啟時記的不一樣(換了網路,或斷過網又接上)就不等 15 分鐘,
+    其他擋著的條件照舊。沒接網路("")也記下來:接回同一個網路時才看得出「斷過」。"""
     st = _kick_state(cfg)
     kicked = st.get("kicked")
+    old_net = st.get("net")
+    if net == "" and old_net != "":
+        st["net"] = ""
+        _save_kick_state(cfg, st)
+    moved = bool(net) and isinstance(old_net, str) and net != old_net
     last = last_sync(status)
     if last is not None:
         parts = [L("last-sync 距今 {s} 秒", s=f"{now - last:.0f}")]
@@ -567,8 +595,15 @@ def icloud_kick(cfg: Config, now: float, status: str | None, pending: list[str] 
         stuck = len(seen) - len(downloading)
         parts.append(L("收件匣佔位檔 {n} 個(下載中 {d}、超過 {m} 分鐘 {s})", n=len(seen), d=len(downloading),
                        m=f"{cfg.icloud_busy_max / 60:.0f}", s=stuck) if seen else L("收件匣沒有佔位檔"))
+    if net is not None:
+        parts.append(L("網路 {net}", net=net or L("沒接上")))
+    if bool(net) and not isinstance(old_net, str):
+        st["net"] = net   # 第一次看到網路:當基準,不算換了網路
+        _save_kick_state(cfg, st)
     since = now - kicked if isinstance(kicked, (int, float)) else None
-    if since is not None and 0 <= since < cfg.icloud_kick_every:
+    if moved:
+        parts.append(L("網路換了(上次重啟時是 {old})", old=old_net or L("沒接上")))
+    if since is not None and 0 <= since < cfg.icloud_kick_every and not moved:
         return False, L("、").join(parts) + L(";距上次重啟 {m} 分鐘,不重啟", m=f"{since / 60:.0f}")
     if downloading is None:
         return False, L("、").join(parts) + L(";看不到收件匣有沒有檔在下載,這輪不重啟")

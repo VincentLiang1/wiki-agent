@@ -1429,6 +1429,117 @@ def test_icloud_kick_is_off_unless_enabled(env):
     assert bird.kills == [] and not c.icloud_log_path.exists()
 
 
+def test_icloud_kick_restarts_right_away_when_the_network_changes(env, monkeypatch):
+    """2026-10-27:筆電帶到公司接 iPad 熱點,手機送來的檔 Mac 遲遲沒載下來,使用者在 Finder 打開收件匣 2 分鐘就到。
+    換了網路(或斷過網又接回來)不等 15 分鐘,下一輪看門狗就重啟;同一個網路上照舊每 15 分鐘。"""
+    c, clock = _icloud(env["cfg"], monkeypatch)
+    calls, bird, t, net = Calls(), Bird(), [T0], ["家裡"]
+    deps = _kick_deps(c, calls, bird, t)
+    deps.icloud_synced = lambda path, since: (True, "已上傳")
+    deps.net_id = lambda: net[0]
+    _ticks(c, deps, t, 3, clock=clock)            # 0 寫探針、180 定時重啟、360 不動
+    net[0] = "iPad 熱點"
+    _ticks(c, deps, t, 2, clock=clock)            # 540 換了網路就重啟、720 同一個網路不動
+    net[0] = ""
+    _ticks(c, deps, t, 1, clock=clock)            # 900 沒接網路(探針到期重寫)
+    net[0] = "iPad 熱點"
+    _ticks(c, deps, t, 2, clock=clock)            # 1080 接回同一個網路也算換了、1260 不動
+    assert _kicks(bird) == [180, 540, 1080]
+    text = c.icloud_log_path.read_text(encoding="utf-8")
+    assert "網路換了(上次重啟時是 家裡)" in text and "網路 沒接上" in text
+
+
+def test_icloud_kick_after_a_network_change_still_spares_a_download_and_waits_for_icloud(env, monkeypatch):
+    """換網路只免掉 15 分鐘的間隔:收件匣有檔在下載照樣不砍;連不上 iCloud 不砍,連得上的那一輪再砍。"""
+    c, clock = _icloud(env["cfg"], monkeypatch)
+    calls, bird, t, net, online = Calls(), Bird(), [T0], ["家裡"], [True]
+    deps = _kick_deps(c, calls, bird, t)
+    deps.icloud_synced = lambda path, since: (True, "已上傳")
+    deps.net_id = lambda: net[0]
+    deps.icloud_online = lambda: online[0]
+    _ticks(c, deps, t, 2, clock=clock)            # 180 定時重啟
+    (c.icloud_inbox / ".錄音.m4a.icloud").write_text("")
+    net[0] = "iPad 熱點"
+    _ticks(c, deps, t, 1, clock=clock)            # 360 有檔在下載
+    assert _kicks(bird) == [180]
+    (c.icloud_inbox / ".錄音.m4a.icloud").unlink()
+    online[0] = False
+    _ticks(c, deps, t, 1, clock=clock)            # 540 連不上 iCloud
+    online[0] = True
+    _ticks(c, deps, t, 1, clock=clock)            # 720 才重啟(離上次 9 分鐘,是換網路的緣故)
+    assert _kicks(bird) == [180, 720]
+
+
+def test_repair_restart_records_the_network_so_it_is_not_restarted_again(env, monkeypatch):
+    """探針卡住、聲紋橋樑的修理在新網路上重啟過 bird,定時重啟不可再因為「換了網路」砍一次。"""
+    c, _ = _icloud(env["cfg"], monkeypatch)
+    calls, bird, t = Calls(), Bird(), [T0]
+    deps = _kick_deps(c, calls, bird, t)
+    deps.net_id = lambda: "iPad 熱點"
+    from wiki_feeder.watchdog import icloud_kick
+    icloud_kick(c, T0 - 3600, BRCTL, [], "家裡")       # 在家時記下的網路
+    repair._kick_bird(c, deps)                           # 到公司:修理重啟了 bird
+    due, line = icloud_kick(c, T0 + 180, BRCTL, [], "iPad 熱點")
+    assert not due and "網路換了" not in line
+
+
+def _net_down(c, at):
+    """收件、攝入連不上 GitHub 時每分鐘都記(collect.mark_net_down 用的是真的時間,這裡照測試的時鐘寫)。"""
+    from wiki_feeder.collect import net_down_path
+    net_down_path(c).parent.mkdir(parents=True, exist_ok=True)
+    net_down_path(c).write_text(json.dumps({"at": at}))
+
+
+def _ipv4_deps(c, calls, fam, t):
+    deps = _deps(c, calls)
+    deps.ip_families = lambda: fam[0]
+    deps.now = lambda: t[0]
+    return deps
+
+
+def test_ipv4_down_but_ipv6_up_mails_once_per_episode(env):
+    """2026-10-27:Mac 接 iPad 熱點,IPv6 通、IPv4 不通;GitHub 只有 IPv4,取件、攝入整早卡著,看起來卻像有網路。
+    使用者:「像這種 IPv4 不通但 IPv6 卻通,請給我 email 通知,要介入處理」。連續 5 分鐘才寄,同一次只寄一封。"""
+    c = env["cfg"]
+    calls, fam, t = Calls(), [(False, True)], [time.time()]
+    deps = _ipv4_deps(c, calls, fam, t)
+    for i in range(5):
+        _net_down(c, t[0])
+        repair.tick(c, deps)
+        if i < 2:
+            assert not calls.mail                 # 0、180 秒:切換網路的那一下不算
+        t[0] += 180
+    (subject, body), = calls.mail
+    assert "IPv4" in subject and "個人熱點" in body and "不會丟" in body
+    fam[0] = (True, True)                         # 熱點重開,好了
+    repair.tick(c, deps)
+    assert not (c.state_dir / "ipv4_only.json").exists()
+    fam[0] = (False, True)                        # 下午又壞:另一次,再寄
+    for _ in range(3):
+        _net_down(c, t[0])
+        t[0] += 180
+        repair.tick(c, deps)
+    assert len(calls.mail) == 2
+
+
+def test_ipv4_check_stays_quiet_when_simply_offline_or_never_down(env):
+    """整個斷網(兩種都不通)照 §7.2 不寄信;最近沒人記過斷網就不花時間探測。"""
+    c = env["cfg"]
+    calls, t = Calls(), [time.time()]
+
+    probed = []
+    deps = _ipv4_deps(c, calls, [None], t)
+    deps.ip_families = lambda: probed.append(1) or (False, True)   # 例外會被看門狗吞掉,所以記次數
+    repair.tick(c, deps)
+    assert not probed                             # 最近沒斷過網,不該探測
+    deps = _ipv4_deps(c, calls, [(False, False)], t)
+    for _ in range(4):
+        _net_down(c, t[0])
+        repair.tick(c, deps)
+        t[0] += 180
+    assert not calls.mail
+
+
 def test_icloud_log_keeps_only_recent_days_without_rewriting_every_tick(cfg, monkeypatch):
     from wiki_feeder import watchdog
     day = 86400

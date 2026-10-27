@@ -11,7 +11,9 @@
 # ⚠️ 問答要從 /dev/tty 讀鍵盤:`curl … | bash` 的標準輸入是這支腳本本身,直接讀會把腳本吃掉。
 # 不用從網頁下載的 .command 當入口:下載的檔帶著隔離標記、失去執行權限,雙擊打不開;git clone 下來的
 # Update.command／Remove-Schedule.command 沒有這個問題。
-# 訊息照系統語言(Python 還沒裝好,不能用 i18n.py):繁中、簡中、其他一律英文;問答開始後再讓朋友自己選。
+# 訊息語言(Python 還沒裝好,不能用 i18n.py):一開始就請朋友選(使用者 2026-10-27:「一開始時確認語言後,就只用
+# 使用者選定的語言顯示」),直接按 Enter = 設定檔裡的語言,沒有設定檔照系統語言(繁中、簡中、其他一律英文);
+# 選的結果用 WIKI_AGENT_LANG 交給問答(macsetup.py),它就不再問一次。
 
 # `defaults read -g AppleLanguages` 的輸出 → zh-Hant／zh-Hans／en(第一個語言就是系統介面語言)
 detect_lang() {
@@ -22,6 +24,23 @@ detect_lang() {
         zh-Hans* | zh-CN* | zh-SG* | zh_CN* | zh_SG* | zh) echo zh-Hans ;;
         *) echo en ;;
     esac
+}
+
+# 設定檔 [general] language(重跑安裝時沿用上次選的);沒有或認不得就空字串
+config_lang() {
+    local v
+    v=$(sed -n 's/^language *= *"\(.*\)".*/\1/p' "$1" 2>/dev/null | head -n 1)
+    case "$v" in zh-Hant | zh-Hans | en) echo "$v" ;; esac
+}
+
+# 選語言:三種寫法並列(還不知道看得懂哪一種);與 macsetup.py 問的同一行(winsetup.lang_prompt)。
+# 鍵盤從 WA_TTY(預設 /dev/tty:curl … | bash 的標準輸入是腳本本身);讀不到就用預設
+ask_lang() {
+    local name ans=""
+    case "$1" in zh-Hant) name="繁體中文" ;; zh-Hans) name="简体中文" ;; *) name="English" ;; esac
+    printf '語言 / 语言 / Language:1 繁體中文  2 简体中文  3 English(Enter = %s):' "$name" >&2
+    read -r ans 2>/dev/null <"${WA_TTY:-/dev/tty}" || { ans=""; echo >&2; }
+    case "$ans" in 1) echo zh-Hant ;; 2) echo zh-Hans ;; 3) echo en ;; *) echo "$1" ;; esac
 }
 
 # msg 繁中 簡中 英文:照 WA_LANG 印其中一個
@@ -35,7 +54,10 @@ msg() {
 
 main() {
     set -u
-    WA_LANG=$(detect_lang "$(defaults read -g AppleLanguages 2>/dev/null)")
+    WA_LANG=$(config_lang "$HOME/Library/Application Support/wiki-feeder/config.toml")
+    [ -n "$WA_LANG" ] || WA_LANG=$(detect_lang "$(defaults read -g AppleLanguages 2>/dev/null)")
+    WA_LANG=$(ask_lang "$WA_LANG")
+    export WIKI_AGENT_LANG="$WA_LANG"
     local repo_url="https://github.com/VincentLiang1/wiki-agent.git"
     local dest="${WIKI_AGENT_DIR:-$HOME/wiki-agent}"
 

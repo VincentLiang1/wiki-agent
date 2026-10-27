@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -27,8 +28,8 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 from wiki_feeder import i18n  # noqa: E402
-from wiki_feeder.config import (CONFIG_FILE, DISCARD, INTAKE, PENDING, Config, ConfigError,  # noqa: E402
-                                folder_names, state_dir_for)
+from wiki_feeder.config import (CONFIG_FILE, DISCARD, INTAKE, LEGACY, LEGACY_PENDING, PENDING,  # noqa: E402
+                                SYSTEM_DIRS, Config, ConfigError, custom_dir_ok, folder_names, state_dir_for)
 from wiki_feeder.i18n import L, N_  # noqa: E402
 
 SMTP_SERVICE = "wiki-feeder-smtp"
@@ -197,12 +198,31 @@ def config_lang(path: Path) -> str | None:
     return lang if lang in i18n.LANGS else None
 
 
+# 入口(Install.bat、install.sh、App 的 setup.zsh)一開始就問過語言、帶進來(使用者 2026-10-27:「一開始時確認語言後,
+# 就只用使用者選定的語言顯示」):裝 git、uv 那幾步才不會先用系統語言印、問答才換成選的語言
+LANG_ENV = "WIKI_AGENT_LANG"
+
+
+def entry_lang(env=os.environ) -> str | None:
+    """入口帶進來的語言(三種之一才算);開發時直接跑本檔沒有帶,照舊在問答第一題問。"""
+    lang = env.get(LANG_ENV, "")
+    if lang not in LANG_CHOICES:
+        return None
+    i18n.set_lang(lang)
+    return lang
+
+
+def lang_prompt(default: str) -> str:
+    """選語言那一題(還不知道語言,三種寫法並列、不經 L)。三個入口印的是同一行(tests/test_winsetup.py 對照)。"""
+    choices = "  ".join(f"{i} {i18n.NAMES[x]}" for i, x in enumerate(LANG_CHOICES, 1))
+    return f"語言 / 语言 / Language:{choices}(Enter = {i18n.NAMES[default]}):"
+
+
 def ask_lang(default: str) -> str:
     """問答的第一題(還不知道語言,三種寫法並列、不經 L)。選完 set_lang,之後的問答照它。"""
     if default not in LANG_CHOICES:
         default = i18n.SOURCE
-    choices = "  ".join(f"{i} {i18n.NAMES[x]}" for i, x in enumerate(LANG_CHOICES, 1))
-    v = input(f"語言 / 语言 / Language:{choices}(Enter = {i18n.NAMES[default]}):").strip()
+    v = input(lang_prompt(default)).strip()
     lang = LANG_CHOICES[int(v) - 1] if v.isdigit() and 0 < int(v) <= len(LANG_CHOICES) else default
     i18n.set_lang(lang)
     return lang
@@ -441,13 +461,185 @@ def ask_wiki(default: str = "", claude: Path | None = None, windows: bool = True
         if not (w / "CLAUDE.md").is_file():
             say(L("  ⚠ 還是沒有 CLAUDE.md:自動攝入會照不到規則。之後在 Claude 桌面版照講義第三步建好,再重跑安裝"))
             return str(w), str(r)
+    finish_wiki(w, pending)
+    return str(w), str(r)
+
+
+def finish_wiki(w: Path, pending: str) -> None:
+    """CLAUDE.md 已經在了:補代管 git 的一節(問過才補)、.gitignore 排除 .md_cache/。新建、已有的庫共用。"""
     if not has_git_section((w / "CLAUDE.md").read_text(encoding="utf-8-sig", errors="replace")) and yes(
             L("  要在 CLAUDE.md 最後補上「版本紀錄由 wiki-feeder 代管、不要自己執行 git」這一節嗎?(建議要)")):
         add_git_section(w, pending)
         say(L("  ✓ 已補上"))
     if ignore_md_cache(w):
         say(L("  ✓ .gitignore 補上 .md_cache/(轉檔的中間產物不進版本紀錄)"))
-    return str(w), str(r)
+
+
+# -- 已經有知識庫:照它的 CLAUDE.md(使用者 2026-10-27) ----------------------------------------
+# 「已經有 WIKI,那就應該直接讀取他的 CLAUDE.md 設定,不應該像現在問那麼多」;「用程式就可以判斷,不需要 AI,
+# 程式分析不出來才改由 Claude 分析」;「寫的不同時要以 CLAUDE.md 為準……再次確認,使用者還是堅持他的,才以他的為準」。
+# 路徑 token:空白、反引號、括號、中文標點隔開;含 / 或 \ 才算
+_PATH_TOKEN = re.compile(r"[^\s`'\"<>()\[\]{}（）「」『』《》，、。；：！？*|]+")
+# 中文緊貼在路徑前面(「原始資料在../Raw_Sources/」):切掉前面的中文也試一次——「原始資料/會議/」這種本來就是相對路徑,兩個都留
+_GLUED = re.compile(r"^[^\x00-\x7f]+(?=\.\.?[/\\]|~[/\\]|[A-Za-z]:[/\\]|[/\\])")
+_RAW_WORDS = ("raw", "source", "原始", "原件", "素材")
+# 新檔入口的說法:原件資料夾底下名字像這些的資料夾,當成 CLAUDE.md 規定的入口
+_INBOX_WORDS = ("待處理", "待处理", "pending", "inbox", "incoming", "收件", "unprocessed")
+# 知識庫裡不會是原件資料夾的地方(頁面、轉檔的中間產物、版本紀錄)
+_NOT_RAW = ("wiki_pages", "pages", "wiki", ".md_cache", ".git", ".claude")
+
+
+def claude_md_of(p: Path) -> Path:
+    """給的是資料夾就找裡面的 CLAUDE.md。"""
+    return p / "CLAUDE.md" if p.is_dir() else p
+
+
+def mentioned_paths(wiki: Path, text: str) -> list[Path]:
+    """CLAUDE.md 提到的路徑(相對的對知識庫資料夾解析;中文緊貼在路徑前面的切掉)。不看在不在。"""
+    out: list[Path] = []
+    for tok in _PATH_TOKEN.findall(text):
+        if "://" in tok or ("/" not in tok and "\\" not in tok):
+            continue
+        for t in (tok, _GLUED.sub("", tok)):
+            p = Path(t.replace("\\", "/").rstrip(".,:;")).expanduser()
+            try:
+                p = (p if p.is_absolute() else wiki / p).resolve()
+            except (OSError, RuntimeError, ValueError):
+                continue
+            if p not in out:
+                out.append(p)
+    return out
+
+
+def raw_candidates(wiki: Path, text: str) -> list[Path]:
+    """CLAUDE.md 提到、磁碟上真的有的原件資料夾:提到的路徑往上找第一層名字像原件資料夾的(raw、Raw_Sources、原始資料…)。"""
+    wiki = wiki.resolve()
+    found: list[Path] = []
+    for p in mentioned_paths(wiki, text):
+        if p.is_relative_to(wiki) and any(x.lower() in _NOT_RAW for x in p.relative_to(wiki).parts):
+            continue
+        for c in (p, *p.parents):
+            if c == wiki or c in wiki.parents:
+                break
+            if any(w in c.name.lower() for w in _RAW_WORDS):
+                if c.is_dir() and c not in found:
+                    found.append(c)
+                break
+    return found
+
+
+def with_pending(names: dict[str, str], pending: str) -> dict[str, str]:
+    """待處理資料夾換成 pending;捨棄、收件區撞名(不分大小寫,磁碟上是同一個)就換成另一套系統名。"""
+    out = {**names, PENDING: pending}
+    for k in (DISCARD, INTAKE):
+        if out[k].casefold() == pending.casefold():
+            out[k] = LEGACY[k] if out[k] == k else k
+    return out
+
+
+def claude_md_folders(raw: Path, wiki: Path, text: str) -> tuple[dict[str, str], str]:
+    """新檔入口照 CLAUDE.md(使用者 2026-10-27:「已經有 WIKI,目錄本來就不應該限定」):寫的是原件資料夾底下的
+    某個資料夾(raw/inbox/)就用它;寫 _待處理 就三個系統資料夾都用舊名、寫 _Pending 就英文;都沒寫照磁碟(folder_names)。
+    回傳 (系統資料夾名, CLAUDE.md 寫的入口名;沒寫就空字串)。"""
+    raw = raw.resolve()
+    for p in mentioned_paths(wiki.resolve(), text):
+        if (p.parent == raw and p.name not in SYSTEM_DIRS and custom_dir_ok(p.name)
+                and any(w in p.name.lower() for w in _INBOX_WORDS)):
+            return with_pending(folder_names(raw), p.name), p.name
+    old, new = LEGACY_PENDING in text, PENDING in text
+    if old != new:
+        names = {k: LEGACY[k] for k in LEGACY} if old else {k: k for k in LEGACY}
+        return names, names[PENDING]
+    return folder_names(raw), ""
+
+
+# 程式找不到(或找到好幾個)原件資料夾時,才請 claude 讀一次;只給讀檔的工具,回來的路徑一樣要在磁碟上才收
+RAW_PROMPT = N_("""讀這個資料夾裡的 CLAUDE.md,找出它規定的原始資料(原件)資料夾在哪裡。
+只回一行 JSON、不要其他字:{"raw": "原件資料夾的路徑(完整路徑,或相對於這個資料夾);CLAUDE.md 沒寫就空字串"}
+不要建檔、不要改檔、不要執行任何指令。這是安裝程式在背景送的,沒有人能回答問題。""")
+
+
+def claude_find_raw(claude: Path, wiki: Path, run=subprocess.run) -> Path | None:
+    args = [str(claude), "-p", "--output-format", "json", "--no-session-persistence", "--max-budget-usd", "1",
+            "--tools", "Read,Glob,Grep", "--allowedTools", "Read", "Glob", "Grep"]
+    try:
+        r = run(args, cwd=wiki, input=L(RAW_PROMPT), capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=300)
+        said = str(json.loads(r.stdout).get("result") or "")
+        m = re.search(r"\{.*\}", said, re.S)
+        raw = str(json.loads(m.group(0)).get("raw") or "").strip() if m else ""
+    except (OSError, subprocess.TimeoutExpired, ValueError, AttributeError):
+        return None
+    if not raw:
+        return None
+    p = Path(raw.replace("\\", "/")).expanduser()
+    p = (p if p.is_absolute() else wiki / p).resolve()
+    return p if p.is_dir() and p != wiki.resolve() else None
+
+
+def insist(md, mine):
+    """跟 CLAUDE.md 寫的不同:再問一次,預設用 CLAUDE.md 的;回 n 才算堅持、照他的(使用者 2026-10-27)。"""
+    if mine == md:
+        return md
+    say(L("  跟 CLAUDE.md 寫的不同:CLAUDE.md 是 {md},你選的是 {path}。自動攝入照 CLAUDE.md 的規則做,通常它是對的",
+          md=md, path=mine))
+    return md if yes(L("  改用 CLAUDE.md 的 {md} 嗎?(n = 堅持用 {path})", md=md, path=mine)) else mine
+
+
+def ask_existing_wiki(default: str, claude: Path | None) -> tuple[str, str, dict[str, str]] | None:
+    """已經有知識庫:問 CLAUDE.md 在哪,原件資料夾與新檔入口照它寫的(程式看不出來才請 claude 讀)。
+    使用者改的跟 CLAUDE.md 不同時再問一次,預設用 CLAUDE.md 的;還是堅持才照他的。回 None = 改成新建。"""
+    while True:
+        md = claude_md_of(Path(pick(L("【CLAUDE.md】你的知識庫裡的 CLAUDE.md(或知識庫資料夾)"), False, default)))
+        try:
+            text = md.read_text(encoding="utf-8-sig", errors="replace")
+            break
+        except OSError:
+            say(L("  讀不到 {path}", path=md))
+            if not yes(L("  要再選一次嗎?(n = 改成新建一個知識庫)")):
+                return None
+    wiki = md.parent.resolve()
+    found = raw_candidates(wiki, text)
+    md_raw = found[0] if len(found) == 1 else None
+    if md_raw is None and claude:
+        say(L("  程式從 CLAUDE.md 看不出原件資料夾,請 Claude 讀一次(十幾秒,用你的 Claude 額度)…"))
+        md_raw = claude_find_raw(claude, wiki)
+    if md_raw is None:
+        say(L("  CLAUDE.md 裡找不到存在的原件資料夾,請自己選"))
+        raw = Path(pick(L("【原件資料夾】Raw_Sources(主題群組是它底下的資料夾;與 WIKI 並排)"), True,
+                        str(wiki.parent / "Raw_Sources"))).resolve()
+    else:
+        raw = md_raw
+    names, md_pending = claude_md_folders(raw, wiki, text)
+    say(L("  知識庫:{path}", path=wiki))
+    say(L("  原件資料夾:{path}", path=raw))
+    say(L("  新檔入口:{path}", path=raw / names[PENDING]))
+    if not yes(L("  照 CLAUDE.md 這樣設定對嗎?")):
+        v = Path(pick(L("【原件資料夾】Raw_Sources(主題群組是它底下的資料夾;與 WIKI 並排)"), True, str(raw))).resolve()
+        raw = insist(md_raw, v) if md_raw is not None else v
+        while not custom_dir_ok(v := ask(L("【新檔入口】原件資料夾底下放新檔的資料夾"), names[PENDING])):
+            say(L("  {name} 不能當資料夾名(要一層、不可以 . 開頭、不可以有 \\ / : * ? \" < > |)", name=v))
+        names = with_pending(names, insist(md_pending, v) if md_pending else v)
+    if not raw.is_dir():
+        if not yes(L("  {path} 還沒有,要建立嗎?", path=raw)):
+            return None
+        raw.mkdir(parents=True)
+    (raw / names[PENDING]).mkdir(exist_ok=True)
+    finish_wiki(wiki, names[PENDING])
+    return str(wiki), str(raw), names
+
+
+def ask_library(default_new: str, existing: Path | None, claude: Path | None,
+                windows: bool) -> tuple[str, str, dict[str, str] | None]:
+    """設定的第一題(使用者 2026-10-27):已經有知識庫就照它的 CLAUDE.md,沒有才走新建(ask_wiki)。
+    回傳 (知識庫, 原件資料夾, 系統資料夾名);名字是 None 就照磁碟(render_config 用 folder_names)。"""
+    if yes(L("【知識庫】你已經有 LLM Wiki(有 CLAUDE.md 的知識庫資料夾)了嗎?"), existing is not None):
+        got = ask_existing_wiki(str(existing / "CLAUDE.md") if existing else "", claude)
+        if got:
+            return got
+        say(L("  改成新建一個知識庫"))
+    w, r = ask_wiki(default_new, claude, windows)
+    return w, r, None
 
 
 def ask_doc2md(home: Path) -> str:
@@ -527,7 +719,7 @@ def main(argv: list[str] | None = None) -> int:
     state = state_dir_for(sys.platform, home, os.environ)
     path = state / CONFIG_FILE
 
-    lang = ask_lang(config_lang(path) or i18n.detect())
+    lang = entry_lang() or ask_lang(config_lang(path) or i18n.detect())
     say(L("=== 檢查 Claude Code ==="))
     claude = find_claude(home)
     if not claude:
@@ -542,9 +734,10 @@ def main(argv: list[str] | None = None) -> int:
     cfg = reuse_config(path, state, lang)
     while cfg is None:
         say(L("\n=== 設定(每一題都可以貼上路徑;路徑有預設值時直接按 Enter) ==="))
-        a = {"icloud": ask_inbox(home), "lang": lang}
-        a["wiki"], a["raw"] = ask_wiki(str(find_wiki(home, (Path("C:/"), Path("D:/"))) or default_wiki(home, True)),
-                                       claude, True)
+        a = {"lang": lang}
+        a["wiki"], a["raw"], a["folders"] = ask_library(str(default_wiki(home, True)),
+                                                        find_wiki(home, (Path("C:/"), Path("D:/"))), claude, True)
+        a["icloud"] = ask_inbox(home)
         a["label"] = ask(L("【知識庫名稱】摘要信上顯示的名字"), L("知識庫"))
         a["doc2md"] = ask_doc2md(home)
         a["mail_from"], a["mail_to"] = ask_mail(mail_default(status))

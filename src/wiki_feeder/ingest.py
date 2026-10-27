@@ -735,13 +735,15 @@ def _archive_sidecar(path: Path, cfg: Config, sha: str) -> None:
         os.replace(side, cfg.sidecar_archive / f"{sha}.json")
 
 
-def groups_of(raw_root: Path) -> list[str]:
-    return sorted(p.name for p in raw_root.iterdir() if p.is_dir() and not p.name.startswith(("_", ".")))
+def groups_of(raw_root: Path, skip: tuple[str, ...] = ()) -> list[str]:
+    """原件樹的群組:`_`／`.` 開頭的是系統資料夾;skip 另外排除朋友自訂、不以 _ 開頭的待處理資料夾(§5.13)。"""
+    return sorted(p.name for p in raw_root.iterdir()
+                  if p.is_dir() and not p.name.startswith(("_", ".")) and p.name not in skip)
 
 
 def unique_in_tree(raw_root: Path, name: str, pending: str) -> str:
     """在原件樹的所有群組資料夾與待處理資料夾(pending)都沒人用的檔名——之後搬去哪個群組都不會撞名。"""
-    dirs = [raw_root / g for g in groups_of(raw_root)] + [raw_root / pending]
+    dirs = [raw_root / g for g in groups_of(raw_root, (pending,))] + [raw_root / pending]
     n = 1
     while True:
         cand = suffixed(name, n)
@@ -1090,10 +1092,10 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
     shas_before = set(paths_before.values())
 
     stage, stage_snap = prepare_stage(cfg) if cfg.has_backfill else (None, {})
-    groups = groups_of(target.raw_root)
+    groups = groups_of(target.raw_root, cfg.raw_skip_dirs)
     # 歸屬判斷:有個人庫(回填)而且不是代管的庫才有
     personal = cfg.repo(cfg.backfill_repo) if stage is not None and not target.managed else None
-    p_groups = groups_of(personal.raw_root) if personal is not None else None
+    p_groups = groups_of(personal.raw_root, cfg.raw_skip_dirs) if personal is not None else None
     forced = personal is not None and _forced_personal(side)
     schema = _schema(groups, backfill=stage is not None, managed=target.managed, personal_groups=p_groups)
     allowed = [t for t in ALLOWED_TOOLS if not (target.managed and t in MANAGED_DENY)]
@@ -1231,7 +1233,7 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
                                 why=L("、").join(notes) or L("副本裡沒有任何改動")))
         now, place_notes = _place_raw(personal, now, {"group": result.get("personal_group", ""),
                                                       "raw_subpath": result.get("raw_subpath", "")},
-                                      groups_of(personal.raw_root), cfg.pending_name)
+                                      groups_of(personal.raw_root, cfg.raw_skip_dirs), cfg.pending_name)
         notes = place_notes + notes
         if not result:
             # 指定只進個人庫、寫回了卻沒交回報:群組不知道,原件留在 _待處理/——跟公事那邊一樣發警示,不只一行備註
@@ -1445,9 +1447,12 @@ def _backfill_page_notes(name: str, changed: dict[str, bytes], snap: dict[str, b
 _BAD_GROUP = re.compile(r'[\\/<>:"|?*\x00-\x1f]')
 
 
-def new_group_ok(name: str) -> bool:
+def new_group_ok(name: str, reserved: tuple[str, ...] = ()) -> bool:
+    """reserved:朋友自訂的待處理資料夾(可以不以 _ 開頭)——回報拿它當新群組,原件會被「搬進」它自己、永遠在等。
+    不分大小寫比(Mac、Windows 的磁碟 Inbox 與 inbox 是同一個)。"""
     return (0 < len(name) <= 60 and name == name.strip() and not name.startswith(("_", "."))
-            and not name.endswith(".") and not _BAD_GROUP.search(name))
+            and not name.endswith(".") and not _BAD_GROUP.search(name)
+            and name.casefold() not in {r.casefold() for r in reserved})
 
 
 def _place_raw(target: RepoConfig, now: Path, result: dict, groups: list[str],
@@ -1456,7 +1461,7 @@ def _place_raw(target: RepoConfig, now: Path, result: dict, groups: list[str],
     程式代管的庫可以開新群組(new_group_ok 檢查過才建資料夾);其他庫只收原件樹裡已有的群組。"""
     notes = []
     group = result.get("group", "")
-    new = target.managed and group not in groups and new_group_ok(group)
+    new = target.managed and group not in groups and new_group_ok(group, (pending,))
     if (group in groups or new) and now.parent.name == pending:
         if new:
             (target.raw_root / group).mkdir(exist_ok=True)
@@ -1533,7 +1538,7 @@ def finish_stopped(cfg: Config, name: str) -> str:
         # 增刪行數照樣進摘要:大量刪減的 STOP 補完的那筆,事後審核最需要看它。在搬原件之前算:git 出錯時
         # 什麼都還沒動,不會留下「原件搬了、處理紀錄沒記」的半套
         added, deleted, _ = diff_lines(target, before[target.key])
-        now, notes = _place_raw(target, now, result, groups_of(target.raw_root), cfg.pending_name)
+        now, notes = _place_raw(target, now, result, groups_of(target.raw_root, cfg.raw_skip_dirs), cfg.pending_name)
         notes.append(L("STOP 後檢查過 commit,用 finish-stopped 補完(沒有重攝入);commit 要等 resume 之後那一輪才推上 GitHub"))
         ledger.move_item(sha, str(now))
         o = Outcome(name, "done", str(now), commits, result.get("pages", []), result.get("questions", []),

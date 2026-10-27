@@ -46,6 +46,14 @@ The daily summary is sent through Gmail. If you don't want the email you can ski
 3. Open Applications and **double-click wiki-agent**. The first time macOS asks whether you're sure you want to open an app downloaded from the internet — click **Open**
 4. A Terminal window opens on its own; continue below
 
+**First, pick the language** (before anything is installed; from then on the screens, questions, summary emails, alerts and a newly created knowledge base use only that language, and the questions won't ask again):
+
+```
+語言 / 语言 / Language:1 繁體中文  2 简体中文  3 English(Enter = English)
+```
+
+Type `3` and press Enter (if your Mac is set to English, just press Enter; when you run setup again, Enter keeps the language you chose last time).
+
 (Alternative: pasting `curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash` into Terminal installs the same thing with the same questions, but then you also have to add an executable to Full Disk Access; Terminal shows you how.)
 
 ### 5-1. Command line developer tools (first time only)
@@ -59,20 +67,16 @@ It then goes through `=== 2/4 uv (Python environment manager) ===` and `=== 3/4 
 
 ### 5-2. Answer the questions
 
-The first question picks the language for everything that follows (the questions, the summary emails, the alerts and a newly created knowledge base):
-
-```
-語言 / 语言 / Language:1 繁體中文  2 简体中文  3 English(Enter = English)
-```
-
-Type `3` and press Enter (if your Mac is set to English, just press Enter). After that, every question ends with `(Enter = …)` showing the default, and yes/no questions end with `(Y/n)` — **pressing Enter is almost always the right answer**:
+Every question ends with `(Enter = …)` showing the default, and yes/no questions end with `(Y/n)` — **pressing Enter is almost always the right answer**:
 
 | Question on screen | What to do |
 | --- | --- |
 | `=== Checking Claude Code ===` | Automatic. It continues only after showing `✓ … (signed in)`; if it says `✗ Claude Code isn't signed in`, go back to step 2 |
+| `[Knowledge base] Do you already have an LLM Wiki (a knowledge base folder with a CLAUDE.md)?` | If you already have one (its folder contains a `CLAUDE.md`): Enter or `y`. If not: `n` |
+| `[CLAUDE.md] The CLAUDE.md in your knowledge base (or the knowledge base folder)` | (Asked only if you have one) If the program found it, just press Enter; otherwise **drag the knowledge base folder (or its `CLAUDE.md`) from Finder into the Terminal window** and press Enter. The program reads `CLAUDE.md` to find the originals folder and where new files go (only if it can't tell does it ask Claude to read it, a few seconds), shows them, and asks you to confirm — press Enter if they're right (new files go to the folder your `CLAUDE.md` names, whatever it's called). If you pick an originals folder or inbox that differs from `CLAUDE.md`, it asks once more, defaulting to the one in `CLAUDE.md` |
+| `[Knowledge base] The WIKI folder built from the handout (…)` | (Asked only for a new one) Just press Enter, and press Enter again when asked whether to create it |
+| `[Originals folder] Raw_Sources (…)` | (Asked only for a new one) Enter (`Raw_Sources`, next to WIKI) |
 | `[Inbox] The folder the iPhone drops files into (_WikiBox in iCloud Drive)` | Enter. If asked whether to create it, press Enter again |
-| `[Knowledge base] The WIKI folder built from the handout (…)` | If you already have a WIKI folder set up following the handout, **drag it from Finder into the Terminal window** and press Enter. If not, just press Enter, and press Enter again when asked whether to create it |
-| `[Originals folder] Raw_Sources (…)` | Enter (`Raw_Sources`, next to WIKI) |
 | `… has no CLAUDE.md yet. Ask Claude to create the rules file and table of contents from the handout?` | (Asked only for a new knowledge base) Enter. Claude spends 1–3 minutes writing `CLAUDE.md` and the table of contents `index.md` — in the language you picked — using your Claude quota |
 | `Add a section at the end of CLAUDE.md saying "version history is managed by wiki-feeder; don't run git yourself"?` | Enter (yes). Your existing rules are not changed; one section is added at the end |
 | `[Knowledge base name] Name shown in the summary email` | Press Enter (`Knowledge base`), or type a name you like |

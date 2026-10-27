@@ -41,26 +41,31 @@ The daily summary is sent through Gmail. If you don't want the email you can ski
 1. In your browser, open <https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-win.zip> to download **wiki-agent-win.zip** (**no GitHub account is required**). If the browser warns that this kind of file may be harmful, choose **Keep**
 2. In your Downloads folder, right-click the zip → **Extract All** and change the destination to `C:\`; you get `C:\wiki-agent`. ⚠️ Don't extract it to the Desktop or Documents: those are often synced by OneDrive
 3. Open `C:\wiki-agent` and double-click **Install.bat**. If a blue security warning appears ("Windows protected your PC" or similar), click **More info** → **Run anyway**
-4. The black window first lists `Before you start, please do these three things:` (steps 1–3 above); press any key to continue
-5. If Git or uv is missing, it installs them (you may be asked "Do you want to allow this app to make changes?" — click **Yes**; the program uses Git to keep the version history of your knowledge base), then installs the packages it needs
-6. While enabling Windows long path support, a **User Account Control** prompt appears — click **Yes** (this is the only step that needs administrator rights; it isn't asked if already enabled)
 
-### 5-1. Answer the questions
-
-The first question picks the language for everything that follows (the questions, the summary emails, the alerts and a newly created knowledge base):
+**First, pick the language** (before anything is installed; from then on the screens, questions, summary emails, alerts and a newly created knowledge base use only that language, and the questions won't ask again):
 
 ```
 語言 / 语言 / Language:1 繁體中文  2 简体中文  3 English(Enter = English)
 ```
 
-Type `3` and press Enter (if Windows is set to English, just press Enter). After that, every question ends with `(Enter = …)` showing the default, and yes/no questions end with `(Y/n)` — **pressing Enter is almost always the right answer**:
+Type `3` and press Enter (if Windows is set to English, just press Enter; when you run setup again, Enter keeps the language you chose last time).
+
+4. It then lists `Before you start, please do these three things:` (steps 1–3 above); press any key to continue
+5. If Git or uv is missing, it installs them (you may be asked "Do you want to allow this app to make changes?" — click **Yes**; the program uses Git to keep the version history of your knowledge base), then installs the packages it needs
+6. While enabling Windows long path support, a **User Account Control** prompt appears — click **Yes** (this is the only step that needs administrator rights; it isn't asked if already enabled)
+
+### 5-1. Answer the questions
+
+Every question ends with `(Enter = …)` showing the default, and yes/no questions end with `(Y/n)` — **pressing Enter is almost always the right answer**:
 
 | Question on screen | What to do |
 | --- | --- |
 | `=== Checking Claude Code ===` | Automatic. It continues only after showing `✓ … (signed in)`; if it says `✗ Claude Code isn't signed in`, go back to step 2 |
+| `[Knowledge base] Do you already have an LLM Wiki (a knowledge base folder with a CLAUDE.md)?` | If you already have one (its folder contains a `CLAUDE.md`): Enter or `y`. If not: `n` |
+| `[CLAUDE.md] The CLAUDE.md in your knowledge base (or the knowledge base folder)` | (Asked only if you have one) If the program found it, just press Enter; otherwise copy the knowledge base folder's path from File Explorer's address bar, paste it and press Enter. The program reads `CLAUDE.md` to find the originals folder and where new files go (only if it can't tell does it ask Claude to read it, a few seconds), shows them, and asks you to confirm — press Enter if they're right (new files go to the folder your `CLAUDE.md` names, whatever it's called). If you pick an originals folder or inbox that differs from `CLAUDE.md`, it asks once more, defaulting to the one in `CLAUDE.md` |
+| `[Knowledge base] The WIKI folder built from the handout (…)` | (Asked only for a new one) Just press Enter, and press Enter again when asked whether to create it |
+| `[Originals folder] Raw_Sources (…)` | (Asked only for a new one) Enter (`Raw_Sources`, next to WIKI); for a new knowledge base it asks whether to create it — press Enter again |
 | `[Inbox] The folder the iPhone drops files into (_WikiBox in iCloud Drive)` | Enter. If asked whether to create it, press Enter again |
-| `[Knowledge base] The WIKI folder built from the handout (…)` | If you already have a WIKI folder set up following the handout, copy its path from File Explorer's address bar, paste it and press Enter. If not, just press Enter, and press Enter again when asked whether to create it |
-| `[Originals folder] Raw_Sources (…)` | Enter (`Raw_Sources`, next to WIKI); for a new knowledge base it asks whether to create it — press Enter again |
 | `… has no CLAUDE.md yet. Ask Claude to create the rules file and table of contents from the handout?` | (Asked only when there is no `CLAUDE.md` yet) Enter. Claude spends 1–3 minutes writing `CLAUDE.md` and the table of contents `index.md` in the language you picked, then describes in two or three sentences what it created |
 | `Add a section at the end of CLAUDE.md saying "version history is managed by wiki-feeder; don't run git yourself"?` | Enter (yes). Your existing rules are not changed; one section is added at the end |
 | `[Knowledge base name] Name shown in the summary email` | Press Enter (`Knowledge base`), or type a name you like |

@@ -277,3 +277,37 @@ def test_reusing_an_old_config_only_switches_the_language(tmp_path):
     again = m.set_config_lang((tmp_path / CONFIG_FILE).read_text(encoding="utf-8"), "zh-Hans")
     assert again.count("[general]") == 1 and again.count("language =") == 1
     assert m.write_config(again, tmp_path).lang == "zh-Hans"
+
+
+# -- 一開始就選語言(使用者 2026-10-27:「一開始時確認語言後,就只用使用者選定的語言顯示」) --------------------
+
+def test_language_chosen_by_the_entry_script_is_not_asked_again(monkeypatch):
+    """入口(Install.bat、install.sh、App 的 setup.zsh)問過、用 WIKI_AGENT_LANG 帶進來:問答不再問;沒帶或帶錯照舊問。"""
+    from wiki_feeder import i18n
+    m = _mod()
+    monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("問了第二次語言"))
+    assert m.entry_lang({m.LANG_ENV: "en"}) == "en" and i18n.get_lang() == "en"
+    assert m.entry_lang({m.LANG_ENV: "zh-Hans"}) == "zh-Hans" and i18n.get_lang() == "zh-Hans"
+    assert m.entry_lang({}) is None and m.entry_lang({m.LANG_ENV: "fr"}) is None
+    for name in ("winsetup", "macsetup"):
+        assert "entry_lang() or " in (ROOT / "scripts" / f"{name}.py").read_text(encoding="utf-8")
+
+
+def test_install_bat_asks_the_same_language_question_before_anything_else():
+    """Install.bat 的那一行是 base64(中文不可以出現在 :msg／:pick 之外):解出來要跟問答的一字不差,
+    印第一句訊息之前就問,選的結果交給 winsetup.py。"""
+    import base64
+    import re
+    m = _mod()
+    text = _bat("Install.bat")
+    code = [ln for ln in text.splitlines() if not ln.lower().startswith("rem ")]
+    assert code.index("call :asklang") < next(i for i, s in enumerate(code) if "call :msg" in s or "call :pick" in s)
+    lines = {"zh-Hant": next(ln for ln in code if ln.startswith('set "LB='))}
+    for lang in ("zh-Hans", "en"):
+        lines[lang] = next(ln for ln in code if ln.startswith(f'if "%WL%"=="{lang}" set "LB='))
+    for lang, ln in lines.items():
+        b = re.search(r'LB=([A-Za-z0-9+/=]+)"', ln)[1]
+        assert base64.b64decode(b).decode("utf-8") == m.lang_prompt(lang)
+    assert 'set "WIKI_AGENT_LANG=%WL%"' in code and m.LANG_ENV == "WIKI_AGENT_LANG"
+    asked = [ln for ln in code if ln.startswith('if "%LA%"==')]
+    assert asked == ['if "%LA%"=="1" set "WL=zh-Hant"', 'if "%LA%"=="2" set "WL=zh-Hans"', 'if "%LA%"=="3" set "WL=en"']

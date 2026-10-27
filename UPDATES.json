@@ -1,5 +1,13 @@
 [
  {
+  "source": "4b48dee",
+  "date": "2026-10-27",
+  "needs_human": false,
+  "zh-Hant": "- 安裝時先問「你已經有 LLM Wiki 了嗎?」:有的話只要指出 CLAUDE.md,原件資料夾與新檔入口照它寫的自動找出來(入口資料夾叫什麼都可以),確認一次就好,不必一題一題答;已經裝好的不受影響\n- 安裝一開始就先選語言,之後的畫面只用你選的語言(原本裝 git、uv 那幾步照電腦的系統語言,會中英文混在一起)",
+  "zh-Hans": "- 安装时先问「你已经有 LLM Wiki 了吗?」:有的话只要指出 CLAUDE.md,原件文件夹与新文件入口照它写的自动找出来(入口文件夹叫什么都可以),确认一次就好,不必一题一题答;已经装好的不受影响\n- 安装一开始就先选语言,之后的画面只用你选的语言(原本装 git、uv 那几步照电脑的系统语言,会中英文混在一起)",
+  "en": "- Setup now starts by asking whether you already have an LLM Wiki: if so, just point to its CLAUDE.md and the originals folder and inbox are read from it (the inbox folder can have any name) — one confirmation instead of a question for each; existing installs are unaffected\n- Setup asks for the language at the very start, and every screen after that uses only the language you chose (before, the git and uv steps followed the computer's system language, so languages were mixed)"
+ },
+ {
   "source": "d1b4911",
   "date": "2026-10-26",
   "needs_human": false,

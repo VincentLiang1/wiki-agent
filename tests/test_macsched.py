@@ -277,3 +277,33 @@ def test_app_update_does_not_git_pull(tmp_path, monkeypatch, capsys):
     ran = []
     assert ms.update(tmp_path, run=lambda cmd: ran.append(cmd)) == 0
     assert ran == [] and "wiki-agent" in capsys.readouterr().out
+
+
+SH_ASK = 'source <(sed "/^main \\"\\$@\\"$/d" install.sh); WA_TTY="$2" ask_lang "$1"'
+
+
+@pytest.mark.parametrize("answer, default, want", [("", "zh-Hans", "zh-Hans"), ("3", "zh-Hant", "en"),
+                                                   ("2", "en", "zh-Hans"), ("9", "en", "en"), (None, "zh-Hant", "zh-Hant")])
+def test_install_sh_asks_the_language_first_with_the_same_line_as_the_wizard(tmp_path, answer, default, want):
+    """一開始就選語言(使用者 2026-10-27),之後的訊息只用選的語言;問的那一行與問答(winsetup.lang_prompt)相同。
+    讀不到鍵盤(None)就用預設。"""
+    tty = tmp_path / "tty"
+    if answer is not None:
+        tty.write_text(answer + "\n", encoding="utf-8")
+    r = subprocess.run(["bash", "-c", SH_ASK, "_", default, str(tty)], cwd=ROOT, capture_output=True, text=True)
+    assert r.stdout.strip() == want
+    ws = _mod("winsetup")
+    assert r.stderr.startswith(ws.lang_prompt(default))
+
+
+def test_install_sh_defaults_to_the_language_in_the_config_and_hands_the_choice_on(tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('# x\n\n[general]\nlanguage = "zh-Hans"\n', encoding="utf-8")
+    sh = 'source <(sed "/^main \\"\\$@\\"$/d" install.sh); config_lang "$1"'
+    assert subprocess.run(["bash", "-c", sh, "_", str(cfg)], cwd=ROOT, capture_output=True, text=True).stdout == "zh-Hans\n"
+    cfg.write_text('language = "fr"\n', encoding="utf-8")
+    assert subprocess.run(["bash", "-c", sh, "_", str(cfg)], cwd=ROOT, capture_output=True, text=True).stdout == ""
+    body = (ROOT / "install.sh").read_text(encoding="utf-8").split("\nmain() {", 1)[1]
+    first_msg = body.index("    msg ")
+    assert body.index('WA_LANG=$(ask_lang "$WA_LANG")') < first_msg
+    assert body.index('export WIKI_AGENT_LANG="$WA_LANG"') < first_msg

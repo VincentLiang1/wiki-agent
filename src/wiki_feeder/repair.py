@@ -29,7 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from .collect import mark_net_down, run_lock
+from .collect import last_net_down, mark_net_down, run_lock
 from .config import Config
 from .ingest import _API_DOWN, STOP_LEFTOVER, IngestError, unverified_commits
 from .ingest import git as repo_git
@@ -39,8 +39,8 @@ from .proc import run_net
 from .notify import send
 from .osplat import friend_claude_hint, friend_update_hint
 from .watchdog import (BIRD, Problem, _descendants, bird_running, brctl_status, deploying, detect, icloud_kick,
-                       icloud_log, icloud_synced, idle_of, inbox_placeholders, mark_kicked, probe_path, processes,
-                       running, write_probe)
+                       icloud_log, icloud_synced, idle_of, inbox_placeholders, mark_kicked, net_id, probe_path,
+                       processes, running, write_probe)
 
 log = logging.getLogger(__name__)
 
@@ -140,6 +140,8 @@ class Deps:
     brctl_status: Callable[[], str | None] = None   # None = 不做定時重啟、重啟後也不叫醒 bird(測試、非 Mac)
     bird_running: Callable[[], bool] = None
     icloud_online: Callable[[], bool] = None        # 連得上 iCloud(www.icloud.com:443)
+    net_id: Callable[[], str | None] = None         # 現在接在哪個網路(watchdog.net_id);None = 不看換網路(測試、非 Mac)
+    ip_families: Callable[[], tuple[bool, bool]] = None   # (IPv4 通、IPv6 通);None = 不查(測試)
     now: Callable[[], float] = time.time
     sleep: Callable[[float], None] = time.sleep
     extra: dict = field(default_factory=dict)
@@ -241,8 +243,84 @@ def default_deps() -> Deps:
     from .watchdog import agents_not_loaded
     return Deps(online=_online, deploy=_deploy, resume=_resume, mail=_mail, agents_check=agents_not_loaded,
                 icloud_synced=icloud_synced, restart_bird=_restart_bird, vp_kick=_vp_kick, vp_download=_vp_download,
-                icloud_online=_icloud_online,
-                **({"brctl_status": brctl_status, "bird_running": bird_running} if sys.platform == "darwin" else {}))
+                icloud_online=_icloud_online, ip_families=_ip_families,
+                **({"brctl_status": brctl_status, "bird_running": bird_running, "net_id": net_id}
+                   if sys.platform == "darwin" else {}))
+
+
+# 兩種位址都有的主機:同一台主機 IPv4 不通、IPv6 通,才是這條網路的 IPv4 壞了(只有 GitHub 不通是公司擋,不算)
+DUAL_STACK_HOSTS = ("www.icloud.com", "api.anthropic.com")
+
+
+def _ip_families() -> tuple[bool, bool]:
+    """(IPv4 通、IPv6 通):對 DUAL_STACK_HOSTS 分別只用 IPv4、只用 IPv6 連 443 埠,任一台連得上就算通。"""
+    def reach(fam: int) -> bool:
+        for host in DUAL_STACK_HOSTS:
+            try:
+                infos = socket.getaddrinfo(host, 443, fam, socket.SOCK_STREAM)
+            except OSError:
+                continue
+            for *_, addr in infos[:2]:
+                try:
+                    with socket.socket(fam, socket.SOCK_STREAM) as s:
+                        s.settimeout(5)
+                        s.connect(addr)
+                    return True
+                except OSError:
+                    pass
+        return False
+    return reach(socket.AF_INET), reach(socket.AF_INET6)
+
+
+IPV4_ONLY_HUMAN = """這台 Mac 現在的網路:IPv6 通、IPv4 不通。GitHub 只有 IPv4 位址,所以 FUTURES 取件、攝入(要先 pull 知識庫)、
+推送全部停著;iCloud、Claude 走 IPv6 照常。檔案都在,不會丟,網路好了下一輪會自己接著做。
+
+2026-10-27 實例:Mac 接 iPad 的個人熱點,iPad 自己連得上 GitHub,分享給 Mac 的 IPv4 卻壞了;熱點關掉再打開就好。
+請依序試(在 iPad／iPhone 上做):
+1. 「個人熱點」關掉再打開,讓 Mac 重新連上
+2. 不行的話切飛航模式約 10 秒再關掉,等行動網路回來再讓 Mac 連
+3. 還不行就重開 iPad／iPhone
+不是接熱點的話:Mac 的 Wi-Fi 關掉再打開,或重開路由器。"""
+
+
+def _ipv4_state_path(cfg: Config) -> Path:
+    return cfg.state_dir / "ipv4_only.json"
+
+
+def _check_ipv4(cfg: Config, deps: Deps, now: float) -> None:
+    """IPv4 不通、IPv6 通:寄信找人(使用者 2026-10-27:「像這種 IPv4 不通但 IPv6 卻通,請給我 email 通知,要介入處理」)。
+    這不是一般的斷網(§7.2 斷網不寄信):整條網路看起來是通的(iCloud、Claude 都走 IPv6),只有 GitHub 一直連不上,
+    沒人知道就一直卡著;而熱點關掉再打開就好,要人動手。信走 IPv6 寄得出去(Gmail 的 SMTP 有 IPv6 位址)。
+    最近 icloud_kick_every 內有人記過斷網才查(收件、攝入連不上 GitHub 時每分鐘都會記),平常不花探測的時間;
+    連續 IPV4_ONLY_MIN 秒都這樣才寄(切換網路的那一下不算);同一次只寄一封(鍵含開始時間),好了就清掉。"""
+    if deps.ip_families is None:
+        return
+    path = _ipv4_state_path(cfg)
+    if now - last_net_down(cfg) > IPV4_CHECK_AFTER_NET_DOWN:
+        path.unlink(missing_ok=True)
+        return
+    v4, v6 = deps.ip_families()
+    if v4 or not v6:
+        if path.exists():
+            log.info("IPv4 恢復了(或整個斷網),清掉 IPv4 不通的紀錄")
+        path.unlink(missing_ok=True)
+        return
+    try:
+        since = float(json.loads(path.read_text(encoding="utf-8"))["since"])
+    except (OSError, ValueError, KeyError, TypeError):
+        since = now
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"since": now}), encoding="utf-8")
+    log.info("IPv4 不通、IPv6 通(從 %s 起)", datetime.fromtimestamp(since).strftime("%H:%M:%S"))
+    if now - since >= IPV4_ONLY_MIN:
+        net = deps.net_id() if deps.net_id else None
+        _escalate(cfg, deps, now, f"net:ipv4-only:{since:.0f}", "網路的 IPv4 不通(GitHub 連不上)",
+                  f"從 {datetime.fromtimestamp(since).strftime('%m-%d %H:%M')} 起,{IPV4_ONLY_HUMAN}"
+                  + (f"\n\n(網路:{net})" if net else ""))
+
+
+IPV4_ONLY_MIN = 300               # IPv4 不通、IPv6 通連續這麼久才寄信(約兩輪看門狗)
+IPV4_CHECK_AFTER_NET_DOWN = 600   # 最近這麼久內有人記過斷網才查
 
 
 
@@ -260,7 +338,7 @@ def _kick_bird(cfg: Config, deps: Deps) -> tuple[str, bool]:
     記時間失敗不可擋住修理:探針的修理還要重寫探針、確認,寫不進 icloud_kick.json 不代表 iCloud 修不好。"""
     msg = deps.restart_bird()
     try:
-        mark_kicked(cfg, deps.now())
+        mark_kicked(cfg, deps.now(), deps.net_id() if deps.net_id else None)
     except OSError as e:
         log.error(L("記不下重啟 bird 的時間:%s"), e)
         msg += L("(記不下重啟時間:{e})", e=e)
@@ -289,7 +367,8 @@ def _kick_icloud(cfg: Config, deps: Deps, now: float, alert: Callable[[str, str,
         def alert(key: str, subject: str, body: str) -> None:
             _escalate(cfg, deps, now, key, subject, body + f"\n\n{ICLOUD_HUMAN}")
     try:
-        due, line = icloud_kick(cfg, now, deps.brctl_status(), inbox_placeholders(cfg.icloud_inbox))
+        due, line = icloud_kick(cfg, now, deps.brctl_status(), inbox_placeholders(cfg.icloud_inbox),
+                                deps.net_id() if deps.net_id else None)
         if due and not deps.icloud_online():
             mark_net_down(cfg)   # 探針看這個:斷網期間沒傳上去不算卡住
             line += L(";連不上 iCloud,不重啟")
@@ -624,6 +703,10 @@ def _tick(cfg: Config, deps: Deps) -> str:
             # 修理之後才定時重啟 bird:修理(探針卡住、聲紋橋樑)重啟過會記時間,這裡就不會同一輪再砍一次;
             # 也不會在 detect 之前砍,讓同一輪的探針檢查碰上剛重開的 bird
             _kick_icloud(cfg, deps, deps.now())
+            try:
+                _check_ipv4(cfg, deps, deps.now())
+            except Exception:  # noqa: BLE001 —— 查網路出錯不可擋住看門狗;只記 log
+                log.exception("查 IPv4／IPv6 出錯")
 
 
 def _round(cfg: Config, deps: Deps, now: float) -> str:

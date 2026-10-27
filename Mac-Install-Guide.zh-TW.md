@@ -44,6 +44,14 @@
 3. 打開「應用程式」,**雙擊 wiki-agent**。第一次會問「“wiki-agent”是從網際網路下載的 App,確定要打開嗎?」,按**打開**
 4. 會自動打開一個終端機視窗,接著照下面做
 
+**一打開先選語言**(在裝任何東西之前;之後的畫面、問題、摘要信、警示、新建的知識庫都只用這個語言,問答不會再問一次):
+
+```
+語言 / 语言 / Language:1 繁體中文  2 简体中文  3 English(Enter = 繁體中文)
+```
+
+直接按 Enter 用電腦介面的語言(重跑安裝時是上次選的);要換就輸入編號(簡體中文 2、English 3)。
+
 (備用方式:在終端機貼上 `curl -fsSL https://raw.githubusercontent.com/VincentLiang1/wiki-agent/main/install.sh | bash` 也能裝,問答一樣;但這樣裝的要另外把一個執行檔加進「完整磁碟取用權限」,終端機畫面會教你怎麼做。)
 
 ### 5-1. 命令列開發工具(第一次才會有)
@@ -57,20 +65,16 @@
 
 ### 5-2. 回答問題
 
-第一題選語言(之後的問題、摘要信、警示、新建的知識庫都用這個語言):
-
-```
-語言 / 语言 / Language:1 繁體中文  2 简体中文  3 English(Enter = 繁體中文)
-```
-
-直接按 Enter 用電腦介面的語言;要換就輸入編號(簡體中文 2、English 3)。接下來每一題後面都有「(直接按 Enter = …)」,**大多直接按 Enter 就好**:
+每一題後面都有「(直接按 Enter = …)」,**大多直接按 Enter 就好**:
 
 | 題目 | 怎麼答 |
 | --- | --- |
 | 檢查 Claude Code | 自動。看到 `✓ …(已登入)` 才會繼續;說沒登入就回第 2 步 |
+| 【知識庫】你已經有 LLM Wiki 了嗎? | 已經有(資料夾裡有 `CLAUDE.md`):Enter 或 `y`。還沒有:`n` |
+| 【CLAUDE.md】 | (已經有才會問)程式找到的話直接 Enter;不然把知識庫資料夾(或它的 `CLAUDE.md`)從 Finder **拖進終端機視窗**再按 Enter。程式照 `CLAUDE.md` 找出原件資料夾與新檔入口(看不出來才請 Claude 讀一次,十幾秒),列出來讓你確認,對就 Enter(新檔入口用你 `CLAUDE.md` 寫的資料夾,名字不限)。你改的原件資料夾或入口跟 `CLAUDE.md` 寫的不同時會再問一次,預設用 `CLAUDE.md` 的 |
+| 【知識庫】 | (還沒有才會問)直接 Enter,問要不要建立再 Enter |
+| 【原件資料夾】 | (還沒有才會問)Enter(WIKI 旁邊的 `Raw_Sources`) |
 | 【收件匣】 | Enter(iCloud 雲碟裡的 `_WikiBox`);問「還沒有,要建立嗎?」再 Enter |
-| 【知識庫】 | 已經有照講義建的 WIKI 資料夾:把它從 Finder **拖進終端機視窗**再按 Enter。還沒有:直接 Enter,問要不要建立再 Enter |
-| 【原件資料夾】 | Enter(WIKI 旁邊的 `Raw_Sources`) |
 | 要照講義請 Claude 建好規則檔嗎? | (新的知識庫才會問)Enter。Claude 會花 1～3 分鐘寫好 `CLAUDE.md` 與目錄 `index.md`,用的是你的 Claude 額度 |
 | 要在 CLAUDE.md 最後補上「版本紀錄由 wiki-feeder 代管」嗎? | Enter(要)。原本的規則不會被改,只在最後加一節 |
 | 【知識庫名稱】 | 摘要信上顯示的名字,Enter 或打一個你喜歡的 |

@@ -140,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     state = state_dir_for("darwin", home, os.environ)
     path = state / CONFIG_FILE
 
-    lang = ws.ask_lang(ws.config_lang(path) or i18n.detect())
+    lang = ws.entry_lang() or ws.ask_lang(ws.config_lang(path) or i18n.detect())
     say(L("=== 檢查 Claude Code ==="))
     claude = find_claude(home)
     if not claude:
@@ -156,8 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     cfg = ws.reuse_config(path, state, lang)
     while cfg is None:
         say(L("\n=== 設定(每一題都可以貼上路徑;有預設值時直接按 Enter) ==="))
-        a = {"icloud": ask_inbox(home), "lang": lang}
-        a["wiki"], a["raw"] = ask_wiki(str(ws.find_wiki(home) or ws.default_wiki(home, False)), claude)
+        a = {"lang": lang}
+        a["wiki"], a["raw"], a["folders"] = ask_library(home, claude)
+        a["icloud"] = ask_inbox(home)
         a["label"] = ask(L("【知識庫名稱】摘要信上顯示的名字"), L("知識庫"))
         a["doc2md"] = ask_doc2md(home)
         a["mail_from"], a["mail_to"] = ask_mail(ws.mail_default(status))
@@ -235,10 +236,10 @@ def _app_permission(home: Path, prefix: str, app: Path, state: Path) -> int:
     return 0
 
 
-def ask_wiki(default: str, claude: Path) -> tuple[str, str]:
-    """與 Windows 版同一套問法(不存在就建、沒有 CLAUDE.md 照講義請 claude 建),但選擇視窗用 Mac 的。"""
+def ask_library(home: Path, claude: Path) -> tuple[str, str, dict[str, str] | None]:
+    """與 Windows 版同一套問法(先問有沒有知識庫:有就照它的 CLAUDE.md,沒有就新建),但選擇視窗用 Mac 的。"""
     ws.pick = pick
-    return ws.ask_wiki(default, claude, windows=False)
+    return ws.ask_library(str(ws.default_wiki(home, False)), ws.find_wiki(home), claude, windows=False)
 
 
 def ask_mail(default: str) -> tuple[str, str]:
