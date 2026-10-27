@@ -63,6 +63,7 @@
 | 【CLAUDE.md】 | (已经有才会问)程序找到的话直接 Enter;不然在文件总管的网址列拷贝知识库文件夹的路径、粘贴再按 Enter。程序照 `CLAUDE.md` 找出原件文件夹与新文件入口(看不出来才请 Claude 读一次,十几秒),列出来让你确认,对就 Enter(新文件入口用你 `CLAUDE.md` 写的文件夹,名字不限)。你改的原件文件夹或入口跟 `CLAUDE.md` 写的不同时会再问一次,默认用 `CLAUDE.md` 的 |
 | 【知识库】 | (还没有才会问)直接 Enter,问要不要创建再 Enter |
 | 【原件文件夹】 | (还没有才会问)Enter(WIKI 旁边的 `Raw_Sources`);新的知识库会问「还没有,要创建吗?」再 Enter |
+| ⚠ ……在 iCloud 云盘(或 OneDrive、Dropbox……)里 | 知识库或原件文件夹放在同步文件夹里才会出现。**不要放在 OneDrive、iCloud 云盘、Dropbox、Google Drive 这类同步文件夹**(含被同步的「文稿」「桌面」):文件可能只留在云端、别台设备同时改会冒出冲突副本,知识库的版本记录被同步也会坏。直接 Enter 换一个位置(建议家目录的 `LLMWiki`);已经有的知识库要自己搬过去再重跑安装。坚持要放:打 `2`,看完后果打 `yes`,版本记录(git)改放在这台电脑的 wiki-feeder 文件夹、不放在同步文件夹——冲突副本、只在云端的文件不会因此消失 |
 | 【收件箱】 | Enter(iCloud 云盘里的 `_WikiBox`);问「还没有,要创建吗?」再 Enter |
 | 要照讲义请 Claude 建好规则文件与目录索引吗? | (还没有 `CLAUDE.md` 才会问)Enter。Claude 会花 1～3 分钟写好 `CLAUDE.md` 与目录 `index.md`,好了会用两三句话说它建了什么 |
 | 要在 CLAUDE.md 最后补上「版本记录由 wiki-feeder 代管」吗? | Enter(要)。原本的规则不会被改,只在最后加一节 |
@@ -130,7 +131,7 @@ Claude 会改正页面,同时把这条记进知识库的名词校正表(`memory/
 ## 移除
 
 - **只停掉自动处理**:双击 `C:\wiki-agent` 里的 **Remove-Schedule.bat**。设置、记录、知识库都不动;要再开,重跑 **Install.bat**
-- **整个拿掉**:先做上面那步,再删掉 `C:\wiki-agent` 与 `%LOCALAPPDATA%\wiki-feeder`。**你的知识库(`WIKI`、`Raw_Sources`)不在这两个地方,不会被删**
+- **整个拿掉**:先做上面那步,再删掉 `C:\wiki-agent` 与 `%LOCALAPPDATA%\wiki-feeder`。**你的知识库(`WIKI`、`Raw_Sources`)不在这两个地方,不会被删**。例外:安装时选了「照样用同步文件夹」的,知识库的版本记录在 `wiki-feeder` 文件夹的 `wiki-git` 里,丢掉就没了,要留的话先搬出来
 
 ## 出状况时
 

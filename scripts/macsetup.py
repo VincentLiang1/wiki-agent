@@ -157,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
     while cfg is None:
         say(L("\n=== 設定(每一題都可以貼上路徑;有預設值時直接按 Enter) ==="))
         a = {"lang": lang}
-        a["wiki"], a["raw"], a["folders"] = ask_library(home, claude)
+        a["wiki"], a["raw"], a["folders"] = ask_library(home, claude, a)
         a["icloud"] = ask_inbox(home)
         a["label"] = ask(L("【知識庫名稱】摘要信上顯示的名字"), L("知識庫"))
         a["doc2md"] = ask_doc2md(home)
@@ -236,10 +236,11 @@ def _app_permission(home: Path, prefix: str, app: Path, state: Path) -> int:
     return 0
 
 
-def ask_library(home: Path, claude: Path) -> tuple[str, str, dict[str, str] | None]:
-    """與 Windows 版同一套問法(先問有沒有知識庫:有就照它的 CLAUDE.md,沒有就新建),但選擇視窗用 Mac 的。"""
+def ask_library(home: Path, claude: Path, out: dict | None = None) -> tuple[str, str, dict[str, str] | None]:
+    """與 Windows 版同一套問法(先問有沒有知識庫:有就照它的 CLAUDE.md,沒有就新建),但選擇視窗用 Mac 的。
+    雲端同步資料夾的提醒也在裡面(§5.15),照樣用的話 out 記下原因。"""
     ws.pick = pick
-    return ws.ask_library(str(ws.default_wiki(home)), ws.find_wiki(home), claude, windows=False)
+    return ws.ask_library(str(ws.default_wiki(home)), ws.find_wiki(home), claude, windows=False, out=out)
 
 
 def ask_mail(default: str) -> tuple[str, str]:

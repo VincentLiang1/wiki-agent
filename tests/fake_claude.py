@@ -190,6 +190,9 @@ if os.environ.get("FAKE_CLAUDE_BREAK_WIKI_REMOTE"):   # 攝入到一半斷網:�
 if os.environ.get("FAKE_CLAUDE_DIRTY"):
     (repo / "暫存.txt").write_text("x", encoding="utf-8")
 
+if os.environ.get("FAKE_CLAUDE_POINT_GIT"):   # 用 Write 把 .git 指標檔改指別的庫(§5.15)
+    (repo / ".git").write_text(f"gitdir: {os.environ['FAKE_CLAUDE_POINT_GIT']}\n", encoding="utf-8")
+
 structured = {
     "pages": [{"repo": "FWIKI", "path": f"Wiki_Pages/會議與月報/{src.stem}.md", "action": "new",
                "summary": "測試頁"}],

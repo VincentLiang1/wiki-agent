@@ -257,3 +257,81 @@ def test_lost_git_with_existing_origin_waits_for_a_person(single):
 
     assert not r.outcomes and any("git clone" in a for a in r.alerts)
     assert not (single["wiki"] / ".git").exists()
+
+
+# -- 知識庫在雲端同步資料夾裡:git 的資料放執行狀態目錄(使用者 2026-10-27,spec §5.15) --------------------------
+
+@pytest.fixture
+def outside(single):
+    c = single["cfg"]
+    rc = replace(c.repos[0], git_outside=True)
+    single["cfg"] = replace(c, repos=(rc,))
+    return single
+
+
+def test_synced_wiki_keeps_git_data_outside_and_ingests_as_usual(outside):
+    """庫裡只有 .git 指標檔、git 的資料在 outside_git_dir;攝入、代為 commit、推送照舊。"""
+    c, wiki = outside["cfg"], outside["wiki"]
+    _feed(outside, "會議紀錄.txt", "今天討論".encode())
+
+    r = ingest(c)
+
+    assert r.ok, r.alerts
+    assert (wiki / ".git").is_file() and (c.outside_git_dir / "HEAD").is_file()
+    assert (wiki / ".git").read_text(encoding="utf-8").startswith("gitdir:")
+    assert _log(wiki) == ["攝入:會議紀錄.txt——測試頁", "wiki-feeder 開始代管前的內容"]
+    assert _log(c.local_origin)[0] == "攝入:會議紀錄.txt——測試頁"
+
+
+def test_existing_git_folder_in_a_synced_wiki_is_moved_out_with_its_history(outside):
+    c, wiki = outside["cfg"], outside["wiki"]
+    git("init", "-q", "-b", "master", cwd=wiki)
+    git("add", "-A", cwd=wiki)
+    git("-c", "user.name=a", "-c", "user.email=friend", "commit", "-q", "-m", "朋友自己的歷史", cwd=wiki)
+    _feed(outside, "a.txt", b"aaa")
+
+    ingest(c)
+
+    assert (wiki / ".git").is_file() and (c.outside_git_dir / "HEAD").is_file()
+    assert "朋友自己的歷史" in _log(wiki)
+
+
+def test_pointer_deleted_by_the_sync_app_is_put_back(outside):
+    c, wiki = outside["cfg"], outside["wiki"]
+    _feed(outside, "a.txt", b"aaa")
+    assert ingest(c).ok
+    (wiki / ".git").unlink()
+    _feed(outside, "b.txt", b"bbb")
+
+    r = ingest(c)
+
+    assert r.ok, r.alerts
+    assert (wiki / ".git").is_file() and _log(wiki)[0].startswith("攝入:b.txt")
+
+
+def test_pointer_to_another_repo_stops_the_round_without_counting_as_failure(outside, tmp_path):
+    """別台電腦的指標檔同步過來(指到別的地方):整輪不攝入、說明怎麼處理,不另起一段歷史。"""
+    c, wiki = outside["cfg"], outside["wiki"]
+    _feed(outside, "a.txt", b"aaa")
+    assert ingest(c).ok
+    (wiki / ".git").write_text(f"gitdir: {tmp_path / 'other.git'}\n", encoding="utf-8")
+    _feed(outside, "b.txt", b"bbb")
+
+    r = ingest(c)
+
+    assert not r.outcomes and any(".git" in a and "改名" in a for a in r.alerts)
+    assert not c.ingest_stop_path.exists()
+
+
+def test_ingest_that_repoints_the_git_pointer_stops(outside, monkeypatch, tmp_path):
+    """攝入的 claude 用 Write 把 .git 改指別的庫:之後的 git 全看那個庫,驗證不算數 → STOP、不代為 commit。"""
+    c, wiki = outside["cfg"], outside["wiki"]
+    other = tmp_path / "other"
+    git("init", "-q", str(other), cwd=tmp_path)
+    monkeypatch.setenv("FAKE_CLAUDE_POINT_GIT", str(other / ".git"))
+    _feed(outside, "a.txt", b"aaa")
+
+    r = ingest(c)
+
+    assert c.ingest_stop_path.exists() and ".git 指標檔" in r.outcomes[0].error
+    assert _log(c.local_origin) == ["wiki-feeder 開始代管前的內容"]

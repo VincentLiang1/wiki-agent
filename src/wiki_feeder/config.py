@@ -111,6 +111,9 @@ class RepoConfig:
     # 程式代管 git(朋友的 Windows 版,使用者 2026-10-19):庫本來不是 git 庫,程式 git init、遠端是執行狀態目錄裡
     # 的本機 bare repo;攝入的 claude 只改檔不 commit,程式驗證後代為 commit,人手動改的攝入前另存快照
     managed: bool = False
+    # 知識庫在雲端同步資料夾裡、朋友堅持照用(使用者 2026-10-27,§5.15):git 的資料放執行狀態目錄(Config.outside_git_dir),
+    # 庫裡只留 `.git` 指標檔——同步程式不懂 git 的鎖檔與寫入順序,.git 被同步會壞
+    git_outside: bool = False
 
 
 @dataclass(frozen=True)
@@ -259,6 +262,11 @@ class Config:
         return self.state_dir / "wiki-origin.git"
 
     @property
+    def outside_git_dir(self) -> Path:
+        # [wiki] git_outside 的庫:git 的資料放這裡(不在同步資料夾裡),庫裡的 .git 只是指過來的小檔
+        return self.state_dir / "wiki-git"
+
+    @property
     def has_backfill(self) -> bool:
         return any(r.key == self.backfill_repo for r in self.repos)
 
@@ -402,7 +410,8 @@ class Config:
         except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
             raise ConfigError(L("設定檔 {path} 讀不了:{e}", path=path, e=e)) from e
         known = {"inbox": {"icloud", "onedrive", "icloud_restart"},
-                 "wiki": {"dir", "raw", "label", "github", "branch", "pending", "discard", "intake"},
+                 "wiki": {"dir", "raw", "label", "github", "branch", "pending", "discard", "intake",
+                          "git_outside", "git_outside_reason"},
                  "mail": {"from", "to"}, "tools": {"doc2md", "claude", "ffmpeg"}, "general": {"language", "auto_update"}}
         problems = [f"[{k}]" for k in data if k not in known]
         problems += [f"[{k}] {x}" for k, keys in known.items() for x in data.get(k, {}) if x not in keys]
@@ -422,6 +431,8 @@ class Config:
             raise ConfigError(L("設定檔 {path} 沒有任何收件匣([inbox] icloud 或 onedrive)", path=path))
         if not isinstance(inbox.get("icloud_restart", True), bool):
             raise ConfigError(L("設定檔 {path} 的 [inbox] icloud_restart 只能是 true 或 false", path=path))
+        if not isinstance(wiki.get("git_outside", False), bool):
+            raise ConfigError(L("設定檔 {path} 的 [wiki] git_outside 只能是 true 或 false", path=path))
         if not isinstance(data.get("general", {}).get("auto_update", True), bool):
             raise ConfigError(L("設定檔 {path} 的 [general] auto_update 只能是 true 或 false", path=path))
 
@@ -457,7 +468,8 @@ class Config:
             glossary_dir=Path(inbox["icloud"]).parent / GLOSSARY_SYNC_DIR if inbox.get("icloud") else None,
             futures=None,
             repos=(RepoConfig("main", wiki.get("label", L("知識庫", lang)), Path(wiki["dir"]), raw,
-                              wiki.get("github", ""), wiki.get("branch", "master"), managed=True),),
+                              wiki.get("github", ""), wiki.get("branch", "master"), managed=True,
+                              git_outside=wiki.get("git_outside", False)),),
             target_repo="main",
             backfill_repo="",
             claude_cmd=(tools.get("claude") or shutil.which("claude") or "claude",),

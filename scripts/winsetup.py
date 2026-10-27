@@ -22,12 +22,13 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+from datetime import date
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from wiki_feeder import i18n  # noqa: E402
+from wiki_feeder import i18n, syncdirs  # noqa: E402
 from wiki_feeder.config import (CONFIG_FILE, DISCARD, INTAKE, LEGACY, LEGACY_PENDING, PENDING,  # noqa: E402
                                 SYSTEM_DIRS, Config, ConfigError, custom_dir_ok, folder_names, state_dir_for)
 from wiki_feeder.i18n import L, N_  # noqa: E402
@@ -63,7 +64,11 @@ def render_config(a: dict) -> str:
     lines += ["", "[wiki]", f"dir = {toml_path(a['wiki'])}", f"raw = {toml_path(a['raw'])}",
               f"label = {toml_text(a.get('label') or L('知識庫'))}",
               f"pending = {toml_text(names[PENDING])}", f"discard = {toml_text(names[DISCARD])}",
-              f"intake = {toml_text(names[INTAKE])}",
+              f"intake = {toml_text(names[INTAKE])}"]
+    if a.get("git_outside_reason"):
+        # 知識庫在同步資料夾裡、朋友堅持照用(§5.15):git 的資料放執行狀態目錄;原因留著,之後才知道為什麼這樣設
+        lines += ["git_outside = true", f"git_outside_reason = {toml_text(a['git_outside_reason'])}"]
+    lines += [
               "", "[mail]", f"from = {toml_text(a.get('mail_from', ''))}", f"to = {toml_text(a.get('mail_to', ''))}",
               "", "[tools]", f"doc2md = {toml_path(a['doc2md'])}"]
     if a.get("claude"):
@@ -168,6 +173,65 @@ def default_wiki(home: Path) -> Path:
     """都找不到時新建的預設:家目錄的 LLMWiki\\WIKI(兩個平台同一個),沒有就幫忙建。
     不放 SOURCE5(使用者本人的擺法)、磁碟根目錄、文件／桌面(會被 OneDrive／iCloud 同步,弄壞 .git)(§10.2)。"""
     return home / "LLMWiki" / "WIKI"
+
+
+# -- 雲端同步資料夾(使用者 2026-10-27,spec §5.15) ------------------------------------------
+# 「不用擋下來、只需要提醒,說明原因,建議朋友換一個位置。如果硬要安裝,則必須關閉GIT,但是要告知關閉GIT的後果」;
+# 關掉的做法定案為「git 的資料移出同步資料夾」(同日)。後果這幾句與 spec §5.15 的清單一字相同
+# (tests/test_docs_index.py::test_sync_folder_effects_shown_to_friends_match_the_spec_word_for_word 守著)
+WIKI_SYNC_WHY = N_("  同步程式會一直動這個資料夾裡的檔:檔案可能只留在雲端(程式要等它下載,或判成原件少一份而停下來),"
+                   "別台裝置同時改會冒出衝突副本,知識庫的版本紀錄(git)被同步也會壞掉。建議換到家目錄的 LLMWiki。")
+RAW_SYNC_WHY = N_("  同步程式會一直動這個資料夾裡的檔:檔案可能只留在雲端(程式要等它下載,或判成原件少一份而停下來),"
+                  "別台裝置同時改會冒出衝突副本。建議換到家目錄的 LLMWiki。")
+GIT_OUTSIDE_EFFECTS = (
+    N_("版本紀錄(git)改放在這台電腦的 wiki-feeder 資料夾,知識庫裡只留一個叫 .git 的小檔指過去:不要刪它、不要改它"),
+    N_("別台電腦同步到這個知識庫,看不到版本紀錄;那邊的 git 工具會說 .git 壞了,不用理它,也不要在別台電腦對這個資料夾用 git"),
+    N_("備份或換電腦時,知識庫資料夾裡沒有版本紀錄,要另外備份這台電腦的 wiki-feeder 資料夾"),
+    N_("只能有一台電腦的 wiki-agent 攝入這個知識庫:兩台都裝的話,兩邊的版本紀錄對不上,攝入會停住"),
+    N_("同步資料夾的另外兩個問題不會因此消失:檔案只留在雲端時,程式要等它下載,或判成原件少一份而停下來;"
+       "別台裝置同時改會冒出衝突副本,程式會當成你手動改的收進版本紀錄"),
+)
+CONFIRM_WORD = "yes"     # 三種語言同一個字;只按 Enter 不算(使用者 2026-10-27)
+_PROBE: list = []
+
+
+def sync_kind_of(p: Path) -> str | None:
+    """p 在哪一種雲端同步資料夾裡(路徑先 resolve,含符號連結);系統只查一次。"""
+    if not _PROBE:
+        _PROBE.append(syncdirs.probe(sys.platform))
+    try:
+        p = Path(p).expanduser().resolve()
+    except (OSError, RuntimeError):
+        p = Path(p).expanduser()
+    return syncdirs.sync_kind(p, sys.platform, Path.home(), dict(os.environ), _PROBE[0])
+
+
+def keep_synced(p: Path, kind: str, wiki: bool) -> bool:
+    """提醒 p 在同步資料夾裡、問要換位置還是照樣用;回 True = 照樣用。知識庫要照樣用,先列後果、打 yes 才算。"""
+    say(L("  ⚠ {path} 在 {kind} 裡。", path=p, kind=L(kind)))
+    say(L(WIKI_SYNC_WHY if wiki else RAW_SYNC_WHY))
+    say(L("    1 = 換一個位置(建議)"))
+    say(L("    2 = 照樣用這個位置,版本紀錄(git)的資料改放在這台電腦、不放在同步資料夾") if wiki
+        else L("    2 = 照樣用這個位置"))
+    if input(L("  選 1 或 2(直接按 Enter = 1):")).strip() != "2":
+        return False
+    if not wiki:
+        return True
+    say(L("  照樣用的話會這樣:"))
+    for e in GIT_OUTSIDE_EFFECTS:
+        say(f"  - {L(e)}")
+    say(L("  (版本紀錄放在 {path})", path=state_dir_for(sys.platform, Path.home(), os.environ) / "wiki-git"))
+    return input(L("  確定照樣用就打 {word} 後按 Enter(其他 = 換位置):", word=CONFIRM_WORD)).strip().lower() == CONFIRM_WORD
+
+
+def outside_reason(p: Path, kind: str) -> str:
+    return L("{kind}:{path}({day})", kind=L(kind), path=p, day=date.today().isoformat())
+
+
+def move_first(p: Path) -> None:
+    """已經有的知識庫要換位置:安裝程式不自己搬檔,教他搬、重跑。"""
+    say(L("  請把 {path}(連同旁邊的原件資料夾)整個搬到家目錄的 LLMWiki 裡,再重跑一次安裝、貼新的位置。", path=p))
+    raise SystemExit(1)
 
 
 # -- 問答 ------------------------------------------------------------------------------
@@ -432,20 +496,30 @@ def scaffold_wiki(claude: Path, wiki: Path, raw: Path, windows: bool, run=subpro
     return True, said
 
 
-def ask_wiki(default: str = "", claude: Path | None = None, windows: bool = True) -> tuple[str, str]:
-    """知識庫與原件資料夾;不存在就建,沒有 CLAUDE.md 就照講義請 claude 建(使用者 2026-10-20)。"""
+def ask_wiki(default: str = "", claude: Path | None = None, windows: bool = True,
+             out: dict | None = None) -> tuple[str, str]:
+    """知識庫與原件資料夾;不存在就建,沒有 CLAUDE.md 就照講義請 claude 建(使用者 2026-10-20)。
+    在雲端同步資料夾裡就提醒(§5.15):知識庫照樣用的話 out["git_outside_reason"] 記下原因。"""
+    out = {} if out is None else out
     while True:
+        out.pop("git_outside_reason", None)     # 換了位置:上一個的原因不算
         w = Path(pick(L("【知識庫】照講義建的 WIKI 資料夾(還沒有就直接用預設、會幫你建)"), True, default))
+        kind = sync_kind_of(w)
+        if kind:
+            if not keep_synced(w, kind, wiki=True):
+                continue
+            out["git_outside_reason"] = outside_reason(w, kind)
         if not w.is_dir():
             if not yes(L("  {path} 還沒有,要建立嗎?", path=w)):
                 continue
             w.mkdir(parents=True)
-        if "onedrive" in str(w).lower():
-            say(L("  ⚠ 知識庫在 OneDrive 裡:OneDrive 同步會跟程式的 git 打架,建議搬出來"))
         break
     guess = w.parent / "Raw_Sources"
     while True:
         r = Path(pick(L("【原件資料夾】Raw_Sources(主題群組是它底下的資料夾;與 WIKI 並排)"), True, str(guess)))
+        kind = sync_kind_of(r)
+        if kind and not keep_synced(r, kind, wiki=False):
+            continue
         if r.is_dir():
             break
         if yes(L("  {path} 還沒有,要建立嗎?", path=r)):
@@ -587,7 +661,8 @@ def insist(md, mine):
     return md if yes(L("  改用 CLAUDE.md 的 {md} 嗎?(n = 堅持用 {path})", md=md, path=mine)) else mine
 
 
-def ask_existing_wiki(default: str, claude: Path | None) -> tuple[str, str, dict[str, str]] | None:
+def ask_existing_wiki(default: str, claude: Path | None,
+                      out: dict | None = None) -> tuple[str, str, dict[str, str]] | None:
     """已經有知識庫:問 CLAUDE.md 在哪,原件資料夾與新檔入口照它寫的(程式看不出來才請 claude 讀)。
     使用者改的跟 CLAUDE.md 不同時再問一次,預設用 CLAUDE.md 的;還是堅持才照他的。回 None = 改成新建。"""
     while True:
@@ -611,6 +686,15 @@ def ask_existing_wiki(default: str, claude: Path | None) -> tuple[str, str, dict
                         str(wiki.parent / "Raw_Sources"))).resolve()
     else:
         raw = md_raw
+    out = {} if out is None else out
+    kind = sync_kind_of(wiki)
+    if kind:
+        # 已經有的知識庫:換位置要他自己搬(安裝程式不搬檔)
+        if not keep_synced(wiki, kind, wiki=True):
+            move_first(wiki)
+        out["git_outside_reason"] = outside_reason(wiki, kind)
+        if (wiki / ".git").is_dir():
+            say(L("  知識庫裡原本的 .git 會在第一次攝入時整個搬過去(歷史照留)"))
     names, md_pending = claude_md_folders(raw, wiki, text)
     say(L("  知識庫:{path}", path=wiki))
     say(L("  原件資料夾:{path}", path=raw))
@@ -621,6 +705,9 @@ def ask_existing_wiki(default: str, claude: Path | None) -> tuple[str, str, dict
         while not custom_dir_ok(v := ask(L("【新檔入口】原件資料夾底下放新檔的資料夾"), names[PENDING])):
             say(L("  {name} 不能當資料夾名(要一層、不可以 . 開頭、不可以有 \\ / : * ? \" < > |)", name=v))
         names = with_pending(names, insist(md_pending, v) if md_pending else v)
+    kind = sync_kind_of(raw)
+    if kind and not keep_synced(raw, kind, wiki=False):
+        move_first(raw)
     if not raw.is_dir():
         if not yes(L("  {path} 還沒有,要建立嗎?", path=raw)):
             return None
@@ -631,15 +718,15 @@ def ask_existing_wiki(default: str, claude: Path | None) -> tuple[str, str, dict
 
 
 def ask_library(default_new: str, existing: Path | None, claude: Path | None,
-                windows: bool) -> tuple[str, str, dict[str, str] | None]:
+                windows: bool, out: dict | None = None) -> tuple[str, str, dict[str, str] | None]:
     """設定的第一題(使用者 2026-10-27):已經有知識庫就照它的 CLAUDE.md,沒有才走新建(ask_wiki)。
     回傳 (知識庫, 原件資料夾, 系統資料夾名);名字是 None 就照磁碟(render_config 用 folder_names)。"""
     if yes(L("【知識庫】你已經有 LLM Wiki(有 CLAUDE.md 的知識庫資料夾)了嗎?"), existing is not None):
-        got = ask_existing_wiki(str(existing / "CLAUDE.md") if existing else "", claude)
+        got = ask_existing_wiki(str(existing / "CLAUDE.md") if existing else "", claude, out)
         if got:
             return got
         say(L("  改成新建一個知識庫"))
-    w, r = ask_wiki(default_new, claude, windows)
+    w, r = ask_wiki(default_new, claude, windows, out)
     return w, r, None
 
 
@@ -737,7 +824,7 @@ def main(argv: list[str] | None = None) -> int:
         say(L("\n=== 設定(每一題都可以貼上路徑;路徑有預設值時直接按 Enter) ==="))
         a = {"lang": lang}
         a["wiki"], a["raw"], a["folders"] = ask_library(str(default_wiki(home)),
-                                                        find_wiki(home, (Path("C:/"), Path("D:/"))), claude, True)
+                                                        find_wiki(home, (Path("C:/"), Path("D:/"))), claude, True, a)
         a["icloud"] = ask_inbox(home)
         a["label"] = ask(L("【知識庫名稱】摘要信上顯示的名字"), L("知識庫"))
         a["doc2md"] = ask_doc2md(home)

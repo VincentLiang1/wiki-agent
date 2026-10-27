@@ -272,12 +272,39 @@ def ensure_managed_repo(cfg: Config, rc: RepoConfig) -> None:
     """程式代管 git 的庫第一次用:git init、遠端設成執行狀態目錄裡的本機 bare repo、現有內容 commit 成第一筆。
 
     朋友的庫照桌面版講義建,不是 git 庫(使用者 2026-10-19)。驗證、補推、「已驗證」全靠 git,所以由程式建一個;
-    遠端放本機 bare repo,推送、補推照雙庫那套走,也多一份本機備份。"""
+    遠端放本機 bare repo,推送、補推照雙庫那套走,也多一份本機備份。
+
+    git_outside(庫在雲端同步資料夾裡,§5.15):git 的資料放 cfg.outside_git_dir,庫裡只留 `.git` 指標檔;
+    庫裡原本就有 .git 資料夾就整個搬過去(git 自己搬,歷史照留),指標檔不見了(同步程式刪掉、誤刪)就補回。"""
     repo = rc.repo_dir
-    if (repo / ".git").exists():
-        return
+    dot = repo / ".git"
     if not repo.is_dir():
         raise IngestEnvError(L("知識庫資料夾不存在:{repo}", repo=repo))
+
+    def g(*a: str, cwd: Path = repo) -> None:
+        r = subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, encoding="utf-8")
+        if r.returncode != 0:
+            raise IngestEnvError(L("建立代管 git 失敗(git {args}):{err}", args=' '.join(a), err=r.stderr.strip()))
+
+    gitdir = cfg.outside_git_dir if rc.git_outside else None
+    if gitdir is None:
+        if dot.exists():
+            return
+    elif dot.is_dir() and not dot.is_symlink():
+        if gitdir.exists():
+            raise IngestEnvError(L("{repo} 裡有 .git 資料夾,{gitdir} 也已經有內容:要人決定留哪一份",
+                                   repo=repo, gitdir=gitdir))
+        g("init", "-q", f"--separate-git-dir={gitdir}")
+        log.info(L("%s:git 的資料搬到 %s(知識庫在同步資料夾裡)"), repo.name, gitdir)
+        return
+    elif dot.exists() or dot.is_symlink():
+        if git_pointer(repo) != gitdir.resolve():
+            raise IngestEnvError(L(POINTER_WRONG, repo=repo.name, gitdir=gitdir))
+        return
+    elif (gitdir / "HEAD").is_file():
+        dot.write_text(f"gitdir: {gitdir.as_posix()}\n", encoding="utf-8")
+        log.warning(L("%s:.git 指標檔不見了(同步程式刪掉或誤刪),已補回、指到 %s"), repo.name, gitdir)
+        return
     if rc.github:
         raise IngestEnvError(L("{repo} 不是 git 庫:設定了 GitHub 遠端就要先自己 clone", repo=repo))
     origin = cfg.local_origin
@@ -286,15 +313,9 @@ def ensure_managed_repo(cfg: Config, rc: RepoConfig) -> None:
         raise IngestEnvError(L("{repo} 不是 git 庫,但代管的遠端 {origin} 已經有內容:"
                                "要接回舊歷史就 git clone {origin} 回來,要重來就先把那個資料夾改名",
                                repo=repo, origin=origin))
-
-    def g(*a: str, cwd: Path = repo) -> None:
-        r = subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, encoding="utf-8")
-        if r.returncode != 0:
-            raise IngestEnvError(L("建立代管 git 失敗(git {args}):{err}", args=' '.join(a), err=r.stderr.strip()))
-
     origin.mkdir(parents=True, exist_ok=True)
     g("init", "--bare", "-q", "-b", rc.branch, str(origin), cwd=origin)
-    g("init", "-q", "-b", rc.branch)
+    g("init", "-q", "-b", rc.branch, *([f"--separate-git-dir={gitdir}"] if gitdir else []))
     # 朋友的電腦多半沒設 git 身分;autocrlf 關掉:Git for Windows 預設會轉換行尾,大量刪減的行數比對會失準
     for k, v in (("user.name", "wiki-feeder"), ("user.email", "wiki-feeder@localhost"),
                  ("core.autocrlf", "false"), ("core.quotePath", "false")):
@@ -305,6 +326,22 @@ def ensure_managed_repo(cfg: Config, rc: RepoConfig) -> None:
     g("push", "-q", "-u", "origin", rc.branch)
     mark_verified(cfg, rc)
     log.info(L("%s:建好代管 git,遠端 %s"), repo.name, origin)
+
+
+POINTER_WRONG = N_("{repo} 的 .git 不是指到 {gitdir} 的指標檔(被改掉、或從別台電腦同步過來):"
+                   "確認 {gitdir} 還在之後,把知識庫裡的 .git 改名移開,下一輪程式會自己補回")
+
+
+def git_pointer(repo: Path) -> Path | None:
+    """庫裡的 .git 指標檔(`gitdir: 路徑`)指到哪裡;不是指標檔、讀不了就 None。"""
+    try:
+        text = (repo / ".git").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    if not text.startswith("gitdir:"):
+        return None
+    p = Path(text[len("gitdir:"):].strip())
+    return (p if p.is_absolute() else repo / p).resolve()
 
 
 def _managed_commit(rc: RepoConfig, before: str, result: dict, name: str) -> None:
@@ -1149,6 +1186,10 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
     # 先存下回報與攝入前的 HEAD:這筆若 STOP,人(或自動修理)檢查後用 finish-stopped 照同一份回報補完
     ledger.ingest_set(sha, "ingesting", raw_path=str(raw),
                       result=json.dumps({"claude": result, "before": before}, ensure_ascii=False))
+    if target.git_outside and git_pointer(target.repo_dir) != cfg.outside_git_dir.resolve():
+        # 指標檔被改掉:之後的 git 全看別的庫,驗證就不算數了(§5.15)
+        raise IngestError(L("STOP:攝入後 {repo} 的 .git 指標檔被改掉或刪掉了,驗證不了這一筆,停止後續攝入待人檢查",
+                            repo=target.repo_dir.name))
     if target.managed and result and not out.get("is_error"):
         # 出錯結束(花完預算、API 錯誤)或沒交回報:頁面可能寫到一半,不代為 commit,照「留有沒 commit 的修改」STOP
         _managed_commit(target, before[target.key], result, raw.name)

@@ -74,6 +74,7 @@
 | 【CLAUDE.md】 | (已經有才會問)程式找到的話直接 Enter;不然把知識庫資料夾(或它的 `CLAUDE.md`)從 Finder **拖進終端機視窗**再按 Enter。程式照 `CLAUDE.md` 找出原件資料夾與新檔入口(看不出來才請 Claude 讀一次,十幾秒),列出來讓你確認,對就 Enter(新檔入口用你 `CLAUDE.md` 寫的資料夾,名字不限)。你改的原件資料夾或入口跟 `CLAUDE.md` 寫的不同時會再問一次,預設用 `CLAUDE.md` 的 |
 | 【知識庫】 | (還沒有才會問)直接 Enter,問要不要建立再 Enter |
 | 【原件資料夾】 | (還沒有才會問)Enter(WIKI 旁邊的 `Raw_Sources`) |
+| ⚠ ……在 iCloud 雲碟(或 OneDrive、Dropbox……)裡 | 知識庫或原件資料夾放在同步資料夾裡才會出現。**不要放在 OneDrive、iCloud 雲碟、Dropbox、Google Drive 這類同步資料夾**(含被同步的「文件」「桌面」):檔案可能只留在雲端、別台裝置同時改會冒出衝突副本,知識庫的版本紀錄被同步也會壞。直接 Enter 換一個位置(建議家目錄的 `LLMWiki`);已經有的知識庫要自己搬過去再重跑安裝。堅持要放:打 `2`,看完後果打 `yes`,版本紀錄(git)改放在這台電腦的 wiki-feeder 資料夾、不放在同步資料夾——衝突副本、只在雲端的檔不會因此消失 |
 | 【收件匣】 | Enter(iCloud 雲碟裡的 `_WikiBox`);問「還沒有,要建立嗎?」再 Enter |
 | 要照講義請 Claude 建好規則檔嗎? | (新的知識庫才會問)Enter。Claude 會花 1～3 分鐘寫好 `CLAUDE.md` 與目錄 `index.md`,用的是你的 Claude 額度 |
 | 要在 CLAUDE.md 最後補上「版本紀錄由 wiki-feeder 代管」嗎? | Enter(要)。原本的規則不會被改,只在最後加一節 |
@@ -145,7 +146,7 @@ Claude 會改正頁面,同時把這條記進知識庫的名詞校正表(`memory/
 ## 移除
 
 - **只停掉自動處理**:Finder 打開家目錄的 **wiki-agent** 資料夾,雙擊 **Remove-Schedule.command**。設定、紀錄、知識庫都不動;要再開,雙擊「應用程式」裡的 wiki-agent
-- **整個拿掉**:先做上面那步,再把「應用程式」裡的 wiki-agent、家目錄的 `wiki-agent` 資料夾,和 `~/Library/Application Support/wiki-feeder`(⌘⇧G 貼上這個路徑)丟到垃圾桶。**你的知識庫(`WIKI`、`Raw_Sources`)不在這些地方,不會被刪**
+- **整個拿掉**:先做上面那步,再把「應用程式」裡的 wiki-agent、家目錄的 `wiki-agent` 資料夾,和 `~/Library/Application Support/wiki-feeder`(⌘⇧G 貼上這個路徑)丟到垃圾桶。**你的知識庫(`WIKI`、`Raw_Sources`)不在這些地方,不會被刪**。例外:安裝時選了「照樣用同步資料夾」的,知識庫的版本紀錄在 `wiki-feeder` 資料夾的 `wiki-git` 裡,丟掉就沒了,要留的話先搬出來
 
 ## 出狀況時
 
