@@ -1,5 +1,13 @@
 [
  {
+  "source": "9c7b0ca",
+  "date": "2026-10-28",
+  "needs_human": false,
+  "zh-Hant": "- 安裝問答與安裝說明不再提「講義」(你手上沒有那份講義):問知識庫位置時直接說明 `WIKI` 資料夾是什麼——知識庫本體,放規則檔 `CLAUDE.md` 與整理好的筆記,旁邊並排的 `Raw_Sources` 放原始資料;資料夾長什麼樣子,看〈什麼是 LLM Wiki〉的「知識庫長什麼樣子?」。Windows 與 Mac 都一樣;已安裝的不受影響,不必做任何事",
+  "zh-Hans": "- 安装问答与安装说明不再提「讲义」(你手上没有那份讲义):问知识库位置时直接说明 `WIKI` 文件夹是什么——知识库本体,放规则文件 `CLAUDE.md` 与整理好的笔记,旁边并排的 `Raw_Sources` 放原始资料;文件夹长什么样子,看〈什么是 LLM Wiki〉的「知识库长什么样子?」。Windows 与 Mac 都一样;已安装的不受影响,不必做任何事",
+  "en": "- The setup questions and install guides no longer mention the \"handout\" (you don't have it): when asking where the knowledge base goes, setup now explains what the `WIKI` folder is — the knowledge base itself, holding the rules file `CLAUDE.md` and the organized notes, with `Raw_Sources` beside it for the original material; to see the folder layout, read \"What does the knowledge base look like?\" in What is LLM Wiki. Same on Windows and Mac; existing installs are unaffected, nothing to do"
+ },
+ {
   "source": "03a784b",
   "date": "2026-10-28",
   "needs_human": false,

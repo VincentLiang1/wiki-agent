@@ -27,7 +27,7 @@ You do just two things: **drop files** and **read the summary**. If something is
 | Transcription | Mac version of [scribe2md](https://github.com/VincentLiang1/scribe2md/releases/latest) | Windows version of scribe2md |
 | Summary email (optional) | Gmail + an app password | Same |
 
-The knowledge base follows the layout of the "LLM Wiki beginner's handout (desktop edition)": one folder containing `WIKI/` (with a `CLAUDE.md` inside) and `Raw_Sources/` side by side. **Don't have one yet? No problem**: just press Enter during setup and the installer creates the folders and asks Claude to write a `CLAUDE.md` following the handout. An existing knowledge base is used as-is and never overwritten.
+The knowledge base layout: one folder containing `WIKI/` (the knowledge base itself, with the rules file `CLAUDE.md` and the notes) and `Raw_Sources/` (the originals) side by side; see "What does the knowledge base look like?" in [What is an LLM Wiki?](What-is-LLM-Wiki.md) for a diagram. **Don't have one yet? No problem**: just press Enter during setup and the installer creates the folders and asks Claude to write a `CLAUDE.md`. An existing knowledge base is used as-is and never overwritten.
 
 ## Installation
 

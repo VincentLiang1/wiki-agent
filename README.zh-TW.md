@@ -25,7 +25,7 @@ wiki-agent 是一支在你電腦上常駐的小程式,替你照 Andrej Karpathy 
 | 轉寫 | [scribe2md](https://github.com/VincentLiang1/scribe2md/releases/latest) 的 Mac 版 | scribe2md 的 Windows 版 |
 | 摘要信(可不設) | Gmail + 應用程式密碼 | 同左 |
 
-知識庫照〈LLM Wiki 新手教學講義-桌面版〉的擺法:一個資料夾底下並排 `WIKI/`(裡面有 `CLAUDE.md`)與 `Raw_Sources/`。**還沒有也沒關係**:安裝時直接按 Enter,程式會幫你建好資料夾,並請 Claude 照講義寫好 `CLAUDE.md`;已經有的知識庫照原本的用,不會覆蓋。
+知識庫的擺法:一個資料夾底下並排 `WIKI/`(知識庫本體,裡面有規則檔 `CLAUDE.md` 與筆記)與 `Raw_Sources/`(原始資料),圖解見〈[什麼是 LLM Wiki](What-is-LLM-Wiki.zh-TW.md)〉的「知識庫長什麼樣子?」。**還沒有也沒關係**:安裝時直接按 Enter,程式會幫你建好資料夾,並請 Claude 寫好 `CLAUDE.md`;已經有的知識庫照原本的用,不會覆蓋。
 
 ## 安裝
 

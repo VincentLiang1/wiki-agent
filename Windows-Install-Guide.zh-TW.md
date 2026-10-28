@@ -61,11 +61,11 @@
 | 檢查 Claude Code | 自動。看到 `✓ …(已登入)` 才會繼續;說沒登入就回第 2 步 |
 | 【知識庫】你已經有 LLM Wiki 了嗎? | 已經有(資料夾裡有 `CLAUDE.md`):Enter 或 `y`。還沒有:`n` |
 | 【CLAUDE.md】 | (已經有才會問)程式找到的話直接 Enter;不然在檔案總管的網址列複製知識庫資料夾的路徑、貼上再按 Enter。程式照 `CLAUDE.md` 找出原件資料夾與新檔入口(看不出來才請 Claude 讀一次,十幾秒),列出來讓你確認,對就 Enter(新檔入口用你 `CLAUDE.md` 寫的資料夾,名字不限)。你改的原件資料夾或入口跟 `CLAUDE.md` 寫的不同時會再問一次,預設用 `CLAUDE.md` 的 |
-| 【知識庫】 | (還沒有才會問)直接 Enter,問要不要建立再 Enter |
+| 【知識庫】WIKI 資料夾 | (還沒有才會問)直接 Enter,問要不要建立再 Enter。`WIKI` 是知識庫本體,放規則檔 `CLAUDE.md` 與 AI 整理好的筆記;旁邊並排的 `Raw_Sources` 放原始資料。資料夾長什麼樣子見〈[什麼是 LLM Wiki](What-is-LLM-Wiki.zh-TW.md)〉的「知識庫長什麼樣子?」 |
 | 【原件資料夾】 | (還沒有才會問)Enter(WIKI 旁邊的 `Raw_Sources`);新的知識庫會問「還沒有,要建立嗎?」再 Enter |
 | ⚠ ……在 iCloud 雲碟(或 OneDrive、Dropbox……)裡 | 知識庫或原件資料夾放在同步資料夾裡才會出現。**不要放在 OneDrive、iCloud 雲碟、Dropbox、Google Drive 這類同步資料夾**(含被同步的「文件」「桌面」;開了 OneDrive 備份時它們的實際位置在 `C:\Users\<帳號>\OneDrive\` 底下,跟 `C:\Users\<帳號>\Documents` 是兩個不同的資料夾。知識庫在哪裡,在知識庫資料夾裡點檔案總管的網址列,看完整路徑有沒有 `OneDrive`):檔案可能只留在雲端、別台裝置同時改會冒出衝突副本,知識庫的版本紀錄被同步也會壞。直接 Enter 換一個位置(建議家目錄的 `LLMWiki`);已經有的知識庫要自己搬過去再重跑安裝。堅持要放:打 `2`,看完後果打 `yes`,版本紀錄(git)改放在這台電腦的 wiki-feeder 資料夾、不放在同步資料夾——衝突副本、只在雲端的檔不會因此消失 |
 | 【收件匣】 | Enter(iCloud 雲碟裡的 `_WikiBox`);問「還沒有,要建立嗎?」再 Enter |
-| 要照講義請 Claude 建好規則檔與目錄索引嗎? | (還沒有 `CLAUDE.md` 才會問)Enter。Claude 會花 1～3 分鐘寫好 `CLAUDE.md` 與目錄 `index.md`,好了會用兩三句話說它建了什麼 |
+| 要請 Claude 建好規則檔與目錄索引嗎? | (還沒有 `CLAUDE.md` 才會問)Enter。Claude 會花 1～3 分鐘寫好 `CLAUDE.md` 與目錄 `index.md`,好了會用兩三句話說它建了什麼 |
 | 要在 CLAUDE.md 最後補上「版本紀錄由 wiki-feeder 代管」嗎? | Enter(要)。原本的規則不會被改,只在最後加一節 |
 | 【知識庫名稱】 | Enter 或打一個你喜歡的 |
 | 【轉寫】 | 列出找到的 doc2md,Enter 選第 1 個;它會試轉一個小檔,看到「可以用」就過了。說「找不到 meeting-scribe」時,貼上第 3 步資料夾裡 `.venv\Scripts\doc2md.exe` 的完整路徑 |

@@ -503,7 +503,8 @@ def ask_wiki(default: str = "", claude: Path | None = None, windows: bool = True
     out = {} if out is None else out
     while True:
         out.pop("git_outside_reason", None)     # 換了位置:上一個的原因不算
-        w = Path(pick(L("【知識庫】照講義建的 WIKI 資料夾(還沒有就直接用預設、會幫你建)"), True, default))
+        w = Path(pick(L("【知識庫】WIKI 資料夾:知識庫本體,放規則檔 CLAUDE.md 與整理好的筆記(還沒有就直接用預設、會幫你建)"),
+                      True, default))
         kind = sync_kind_of(w)
         if kind:
             if not keep_synced(w, kind, wiki=True):
@@ -529,12 +530,13 @@ def ask_wiki(default: str = "", claude: Path | None = None, windows: bool = True
     pending = folder_names(r)[PENDING]
     (r / pending).mkdir(exist_ok=True)
     if not (w / "CLAUDE.md").is_file():
-        if claude and yes(L("  {path} 裡還沒有 CLAUDE.md:要照講義請 Claude 建好規則檔與目錄索引嗎?(約 1～3 分鐘,用你的 Claude 額度)", path=w)):
+        if claude and yes(L("  {path} 裡還沒有 CLAUDE.md:要請 Claude 建好規則檔與目錄索引嗎?(約 1～3 分鐘,用你的 Claude 額度)", path=w)):
             say(L("  Claude 正在建……"))
             ok, said = scaffold_wiki(claude, w, r, windows)
             say(f"  {'✓' if ok else '✗'} {said}")
         if not (w / "CLAUDE.md").is_file():
-            say(L("  ⚠ 還是沒有 CLAUDE.md:自動攝入會照不到規則。之後在 Claude 桌面版照講義第三步建好,再重跑安裝"))
+            say(L("  ⚠ 還是沒有 CLAUDE.md:自動攝入會照不到規則。之後重跑安裝(問「沿用這份」時打 n),"
+                  "知識庫選同一個資料夾,就會再問一次要不要請 Claude 建"))
             return str(w), str(r)
     finish_wiki(w, pending)
     return str(w), str(r)
