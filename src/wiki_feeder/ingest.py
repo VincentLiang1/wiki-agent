@@ -20,7 +20,7 @@
        FWIKI 規則要求子資料夾、描述性檔名(例如請款單放 費用請款/YYYY-MM/)時,照回報的 raw_subpath 放;
        副本裡的回填檢查過才寫回個人庫、由程式 commit(backfill)。純個人的:先寫回個人庫(沒寫成就算失敗、
        原件留在 _待處理/ 重試),成功了才把原件搬進個人庫的原件樹(Raw_Sources/<群組>/)
-    7. 程式自己推送(被拒就 pull --rebase,絕不 --force)
+    7. 程式自己推送(被拒就 fetch + rebase origin/<branch>,暫時性失敗等一下重試;絕不 --force)
     8. 結果寫進當日摘要(本機 summaries/ 留一份、寄信)
 
 搬檔為什麼由程式做:Claude Code 對「搬動工作目錄以外的檔案」另要人工核准,白名單放不行
@@ -46,7 +46,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from . import glossary, toolgaps
+from . import gitsync, glossary, toolgaps
 from .collect import _alert, _forget_alerts, heartbeat, run_lock
 from .config import LEGACY_DISCARD, LEGACY_PENDING, Config, RepoConfig
 from .doc2md import SIDECAR_EXT
@@ -391,27 +391,88 @@ def ensure_clean_and_current(cfg: Config, rc: RepoConfig) -> None:
     if git(rc.repo_dir, "status", "--porcelain"):
         raise IngestEnvError(L("{repo} 有沒 commit 的修改,為免捲進自動攝入的 commit,這輪不攝入", repo=rc.repo_dir.name))
     try:
-        git(rc.repo_dir, "pull", "--ff-only", "-q", "origin", rc.branch)
+        # 不用 pull:它照 FETCH_HEAD 合併,同時有別的 fetch 在跑就失敗(gitsync 開頭的 2026-10-28 實例)
+        git(rc.repo_dir, "fetch", "-q", "origin", rc.branch)
+        git(rc.repo_dir, "merge", "--ff-only", "-q", f"origin/{rc.branch}")
     except IngestEnvError:
         raise
     except IngestError as e:
         raise IngestEnvError(str(e)) from e
 
 
+def _net_git(rc: RepoConfig):
+    """給 gitsync 用的 git:連網、有逾時。執行時才找 run_net(測試換掉它來模擬別處同時推送)。"""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    return lambda *a: run_net(["git", *a], NET_TIMEOUT, cwd=rc.repo_dir, text=True, env=env)
+
+
 def push(cfg: Config, rc: RepoConfig) -> None:
-    """絕不 --force:被拒就 pull --rebase 再推。只在本機的 commit 全都驗證過時呼叫。"""
-    for _ in range(cfg.push_retries):
-        if run_net(["git", "push", "-q", "origin", f"HEAD:{rc.branch}"], NET_TIMEOUT,
-                   cwd=rc.repo_dir).returncode == 0:
+    """絕不 --force:被拒就 fetch + rebase origin/<branch> 再推。只在本機的 commit 全都驗證過時呼叫。
+
+    暫時性失敗(斷網、鎖檔、rebase 還沒開始就失敗)等一下重試,次數用完只是「下一輪再推」;
+    停在 rebase 中、index.md 最近異動也接不住的才是真正的衝突,中止 rebase、等人(gitsync)。"""
+    err = ""
+    for i in range(cfg.push_retries):
+        if i:
+            heartbeat(cfg.ingest_lock_path)
+        p = run_net(["git", "push", "-q", "origin", f"HEAD:{rc.branch}"], NET_TIMEOUT,
+                    cwd=rc.repo_dir, text=True)
+        if p.returncode == 0:
             return
-        r = run_net(["git", "pull", "--rebase", "-q", "origin", rc.branch], NET_TIMEOUT, cwd=rc.repo_dir, text=True)
-        if r.returncode != 0 and not _finish_rebase_on_recent(rc):
-            subprocess.run(["git", "rebase", "--abort"], cwd=rc.repo_dir, capture_output=True)
+        err = (p.stderr or "").strip()
+        state, why = gitsync.rebase_onto_remote(rc.repo_dir, rc.branch, _net_git(rc),
+                                                lambda: _finish_rebase_on_recent(rc))
+        if state == gitsync.CONFLICT:
             raise IngestError(L("{repo} rebase 失敗,commit 留在本機待人處理:{err}", repo=rc.repo_dir.name,
-                                err=r.stderr.strip()))
-        # rebase 換掉了 commit 的雜湊:不跟著記,推不成的話下一輪會把這些驗證過的 commit 當成沒驗證過而 STOP
+                                err=why))
+        if state == gitsync.OK:
+            # rebase 換掉了 commit 的雜湊:不跟著記,推不成的話下一輪會把這些驗證過的 commit 當成沒驗證過而 STOP
+            mark_verified(cfg, rc)
+            continue
+        err = why
+        if i + 1 < cfg.push_retries:
+            log.info(L("%s:推送被拒後跟上遠端失敗(暫時性,第 %d 次),稍候重試:%s"), rc.repo_dir.name, i + 1, why)
+            gitsync.wait(i)
+    # 附上最後的錯誤:斷網的話 collect.network_down 認得出來,不寄信
+    raise IngestError(L("{repo} 推送 {n} 次都被拒,commit 留在本機下一輪再推:{err}", repo=rc.repo_dir.name,
+                        n=cfg.push_retries, err=err))
+
+
+MANUAL_REBASE_ALERT = 3600   # 人開始的 rebase 停著超過這麼久(秒)才警示:攝入一直暫停,別讓它安靜地停一整天
+
+
+def recover_rebase(cfg: Config, rc: RepoConfig) -> bool:
+    """每輪開頭看庫是不是停在 rebase 中途。回傳 True = 有人正在處理,這輪整輪不碰(不補推、不攝入)。
+
+    wiki-feeder 自己做到一半被砍的(gitsync 的記號還在):收拾掉,不讓半途的 rebase 卡住之後每一輪
+    (停在 rebase 中 HEAD 是游離的,會被當成「有沒驗證過的 commit」而 STOP、或「庫不乾淨」每輪不攝入)。
+    rebase 之前的 HEAD 是驗證過的,才試著照自動合併的規則做完、跟著記已驗證;其他情形一律中止 rebase,
+    回到原本的 commit。STOP 中也收拾(使用者 2026-10-28 選定)。
+
+    沒有記號的是人開始的:2026-10-28 使用者按桌面的 pull-all 撞到衝突、貼給 Mac 的 Claude 解,常駐程式
+    每 60 秒一輪,中止它的話解到一半的衝突就被還原。不碰、不寄信;停超過 MANUAL_REBASE_ALERT 才警示。
+    """
+    repo = rc.repo_dir
+    if not gitsync.rebasing(repo):
+        gitsync.clear_mark(repo)
+        return False
+    if not gitsync.ours(repo):
+        if gitsync.rebase_age(repo) >= MANUAL_REBASE_ALERT:
+            raise IngestError(L("{repo} 停在 rebase 中途超過一小時(不是 wiki-feeder 開始的),攝入暫停到 rebase 做完",
+                                repo=repo.name))
+        log.info(L("%s:有人正在 rebase,這輪不攝入、不推送"), repo.name)
+        return True
+    orig = gitsync.orig_head(repo)
+    if orig and orig == _verified(cfg).get(rc.key) and _finish_rebase_on_recent(rc):
+        gitsync.clear_mark(repo)
         mark_verified(cfg, rc)
-    raise IngestError(L("{repo} 推送 {n} 次都被拒,commit 留在本機下一輪再推", repo=rc.repo_dir.name, n=cfg.push_retries))
+        log.info(L("%s:上一輪停在 rebase 中途,已照最近異動合併做完"), repo.name)
+        return False
+    if not gitsync.abort(repo, _net_git(rc)):
+        raise IngestError(L("{repo} 停在 rebase 中途、中止也失敗,待人處理", repo=repo.name))
+    gitsync.clear_mark(repo)
+    log.warning(L("%s:上一輪停在 rebase 中途,已中止、回到原本的 commit"), repo.name)
+    return False
 
 
 RECENT_INDEX = "Wiki_Pages/index.md"
@@ -465,11 +526,32 @@ def merge_recent(base: str, upstream: str, mine: str) -> str | None:
     return r.stdout.replace(_RECENT_MARK, "\n" + "".join(merged) + "\n")
 
 
+APPEND_ONLY = "memory/asr-name-corrections.md"
+
+
+def merge_appended(base: str, upstream: str, mine: str) -> str | None:
+    """只在檔尾加行的檔三方合併:兩邊都是「base 原封不動 + 後面加幾行」才接手,遠端的在前、這邊多的接在後
+    (去重)。動到 base 任何一行 → None。"""
+    def lines(t: str) -> list[str]:
+        return [x if x.endswith("\n") else x + "\n" for x in t.splitlines(keepends=True)]
+
+    b, u, m = lines(base), lines(upstream), lines(mine)
+    if u[:len(b)] != b or m[:len(b)] != b:
+        return None
+    return "".join(u + [x for x in m[len(b):] if x not in u[len(b):]])
+
+
+MERGERS = {RECENT_INDEX: merge_recent, APPEND_ONLY: merge_appended}
+
+
 def _finish_rebase_on_recent(rc: RepoConfig) -> bool:
-    """pull --rebase 停在衝突上:衝突只有 index.md、且合得起來(merge_recent)就自己解掉、繼續 rebase。
+    """rebase 停在衝突上:衝突的檔全都合得起來(MERGERS)就自己解掉、繼續 rebase。
 
     兩邊各自推新頁時,index.md 的最近異動一定撞在同一處(每次都是頂端加一筆、尾巴擠一筆)。2026-10-19 實例:
-    Windows 改講義與 Mac 攝入履歷同一分鐘推,履歷那筆卡在本機三個小時等人解。其他檔、其他段落衝突照舊等人。
+    Windows 改講義與 Mac 攝入履歷同一分鐘推,履歷那筆卡在本機三個小時等人解。
+    音譯對照 asr-name-corrections.md 每場會議在檔尾加一行,兩邊同時攝入一定撞在檔尾。2026-10-28 12:55 實例:
+    Windows 攝入 PQC 研討會、Mac 攝入集團AI 進度報告同一分鐘推,寄了「待人處理」,人解的結果就是兩行都留。
+    其他檔、其他段落、改到既有行的衝突照舊等人。
     """
     repo = rc.repo_dir
 
@@ -477,27 +559,25 @@ def _finish_rebase_on_recent(rc: RepoConfig) -> bool:
         return subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True, encoding="utf-8",
                               env=dict(os.environ, GIT_EDITOR="true"))
 
-    def rebasing() -> bool:
-        return any((repo / g("rev-parse", "--git-path", x).stdout.strip()).exists()
-                   for x in ("rebase-merge", "rebase-apply"))
-
     for _ in range(REBASE_MAX_STEPS):
-        if not rebasing():
-            return False       # 不是停在 rebase 上(斷網、pull 本身失敗)
-        if g("diff", "--name-only", "--diff-filter=U").stdout.splitlines() != [RECENT_INDEX]:
+        if not gitsync.rebasing(repo):
+            return False       # 不是停在 rebase 上
+        conflicted = g("diff", "--name-only", "--diff-filter=U").stdout.splitlines()
+        if not conflicted or any(f not in MERGERS for f in conflicted):
             return False
-        blobs = [g("show", f":{n}:{RECENT_INDEX}") for n in (1, 2, 3)]
-        if any(b.returncode != 0 for b in blobs):
-            return False
-        # rebase 時 :2: 是遠端(加上已經重放好的),:3: 是正在重放的這一筆
-        merged = merge_recent(blobs[0].stdout, blobs[1].stdout, blobs[2].stdout)
-        if merged is None:
-            return False
-        (repo / RECENT_INDEX).write_text(merged, encoding="utf-8", newline="\n")   # Windows 預設寫 CRLF
-        if g("add", "--", RECENT_INDEX).returncode != 0:
-            return False
+        for f in conflicted:
+            blobs = [g("show", f":{n}:{f}") for n in (1, 2, 3)]
+            if any(b.returncode != 0 for b in blobs):
+                return False
+            # rebase 時 :2: 是遠端(加上已經重放好的),:3: 是正在重放的這一筆
+            merged = MERGERS[f](blobs[0].stdout, blobs[1].stdout, blobs[2].stdout)
+            if merged is None:
+                return False
+            (repo / f).write_text(merged, encoding="utf-8", newline="\n")   # Windows 預設寫 CRLF
+            if g("add", "--", f).returncode != 0:
+                return False
         if g("rebase", "--continue").returncode == 0:
-            log.info(L("%s:推送被拒、pull --rebase 只撞在 index.md 的最近異動,已自動合併"), repo.name)
+            log.info(L("%s:rebase 只撞在可以自動合併的地方(%s),已自動合併"), repo.name, "、".join(conflicted))
             return True
     return False
 
@@ -622,7 +702,16 @@ def ingest(cfg: Config) -> IngestReport:
             except IngestError as e:
                 report.alerts.append(L("這輪不攝入,待攝入的都不算失敗:{e}", e=e))
                 not_ready = True
-            halted = not_ready or _stopped(cfg, ledger, report)
+            busy = False
+            if not not_ready:
+                # 在算「沒驗證過的 commit」與補推之前:停在 rebase 中途的話 HEAD 是游離的,兩者都會誤判
+                for rc in cfg.repos:
+                    try:
+                        busy = recover_rebase(cfg, rc) or busy
+                    except IngestError as e:
+                        report.alerts.append(str(e))
+                        busy = True
+            halted = not_ready or busy or _stopped(cfg, ledger, report)
             if halted:
                 cands = []
             else:

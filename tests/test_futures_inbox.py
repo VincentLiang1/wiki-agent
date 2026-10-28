@@ -73,6 +73,60 @@ def test_file_arriving_after_pull_is_not_removed(cfg, futures_cfg, fake_futures,
     assert "PROCESS/late.txt" not in fake_futures.remote_files()
 
 
+def test_transient_fetch_failure_after_rejected_push_is_retried(cfg, futures_cfg, fake_futures, monkeypatch, backoff):
+    """推送被拒後跟上遠端,fetch 一時失敗(斷網、鎖檔):等一下重試、照常推上去,不是放棄這輪。"""
+    import subprocess
+
+    from wiki_feeder import inboxes
+
+    fake_futures.write("PROCESS/first.txt", "第一個")
+    fake_futures.push()
+    real_finish, real_run = FuturesInbox.finish, inboxes.run_net
+    failed = []
+
+    def finish_with_race(self):
+        fake_futures.write("PROCESS/late.txt", "晚到的")
+        fake_futures.push("company pushes during our run")
+        real_finish(self)
+
+    def fetch_fails_once(cmd, *a, **k):
+        if "fetch" in cmd and not failed:
+            failed.append(cmd)
+            return subprocess.CompletedProcess(cmd, 1, "", "fatal: Cannot rebase onto multiple branches.")
+        return real_run(cmd, *a, **k)
+
+    monkeypatch.setattr(FuturesInbox, "finish", finish_with_race)
+    monkeypatch.setattr(inboxes, "run_net", fetch_fails_once)
+    r = _run(cfg, futures_cfg)
+
+    assert r.ok, r.alerts
+    assert failed and backoff == [5]
+    files = fake_futures.remote_files()
+    assert "PROCESS/late.txt" in files and "PROCESS/first.txt" not in files
+
+
+def test_new_remote_files_are_fetched_without_pull(cfg, futures_cfg, fake_futures, monkeypatch):
+    """遠端有新檔:fetch + merge --ff-only origin/<分支> 跟上,不用 pull(照 FETCH_HEAD 合併,同時有別的 fetch 就失敗)。"""
+    from wiki_feeder import inboxes
+
+    _run(cfg, futures_cfg)                       # 先建好本機副本
+    fake_futures.write("PROCESS/new.txt", "新來的")
+    fake_futures.push()
+    cmds = []
+    real_run = inboxes.run_net
+
+    def record(cmd, *a, **k):
+        cmds.append(cmd)
+        return real_run(cmd, *a, **k)
+
+    monkeypatch.setattr(inboxes, "run_net", record)
+    r = _run(cfg, futures_cfg)
+
+    assert r.ok, r.alerts
+    assert [Path(p).name for p in r.moved] == ["new.txt"]
+    assert not [c for c in cmds if "pull" in c]
+
+
 def test_same_content_already_taken_is_only_removed(cfg, futures_cfg, fake_futures):
     (cfg.icloud_inbox / "x.txt").write_text("同一份", encoding="utf-8")
     collect(replace(cfg, onedrive_inbox=None))

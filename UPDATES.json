@@ -1,5 +1,13 @@
 [
  {
+  "source": "c6f56f4",
+  "date": "2026-10-28",
+  "needs_human": false,
+  "zh-Hant": "- 推送知識庫更穩:推送被拒時改成先 `fetch` 再 `rebase` 到遠端分支(不再用 `git pull`),網路閃斷、檔案鎖住這類暫時的失敗會等幾秒自動重試,用完次數也只是下一輪再推,不再寄「待人處理」;你自己正在處理 rebase 時程式不會打斷你。只有把知識庫接到 GitHub、又在別台電腦也會推的才碰得到;只用本機的不受影響,不必做任何事",
+  "zh-Hans": "- 推送知识库更稳:推送被拒时改成先 `fetch` 再 `rebase` 到远端分支(不再用 `git pull`),网络闪断、文件锁住这类暂时的失败会等几秒自动重试,用完次数也只是下一轮再推,不再寄「待人处理」;你自己正在处理 rebase 时程序不会打断你。只有把知识库接到 GitHub、又在别台电脑也会推的才碰得到;只用本机的不受影响,不必做任何事",
+  "en": "- More reliable knowledge-base pushes: when a push is rejected, the program now runs `fetch` and then `rebase` onto the remote branch (no more `git pull`). Temporary failures such as a network blip or a locked file are retried automatically after a few seconds, and if the retries run out the push simply happens next round instead of mailing \"needs attention\"; a rebase you are doing yourself is never interrupted. This only matters if your knowledge base is connected to GitHub and also pushed from another computer; local-only setups are unaffected, nothing to do"
+ },
+ {
   "source": "9c7b0ca",
   "date": "2026-10-28",
   "needs_human": false,

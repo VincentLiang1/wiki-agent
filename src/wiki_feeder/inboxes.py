@@ -18,6 +18,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import gitsync
 from .config import FuturesConfig
 from .i18n import L
 from .mover import is_dataless
@@ -174,10 +175,16 @@ class FuturesInbox:
         try:
             if not (self.repo / ".git").exists():
                 self._clone()
+            if gitsync.rebasing(self.repo):
+                # 上一輪 rebase 做到一半被砍:中止、回到原本的 commit,不讓它卡住之後每一輪
+                log.warning(L("FUTURES:上一輪停在 rebase 中途,先中止"))
+                gitsync.abort(self.repo, self._try)
             self._push_pending()
             remote_head = self._remote_head()
             if remote_head != self._rev(f"origin/{self.cfg.branch}") or remote_head != self._rev("HEAD"):
-                self._git("pull", "--ff-only", "origin", self.cfg.branch)
+                # 不用 pull:它照 FETCH_HEAD 合併,同時有別的 fetch 在跑就失敗(見 gitsync)
+                self._git("fetch", "origin", self.cfg.branch)
+                self._git("merge", "--ff-only", "-q", f"origin/{self.cfg.branch}")
             self._head = self._rev("HEAD")
         except GitError as e:
             raise InboxUnavailable(L("FUTURES 取件準備失敗:{e}", e=e)) from e
@@ -243,14 +250,20 @@ class FuturesInbox:
         if not self._push_with_retry():
             raise InboxUnavailable(L("FUTURES 推送失敗,已取走的檔留待下一輪重推(已複製,不會重複攝入)"))
 
+    def _try(self, *args: str) -> subprocess.CompletedProcess:
+        return self._git(*args, check=False)
+
     def _push_with_retry(self) -> bool:
+        """被拒就 fetch + rebase origin/<branch> 再推(gitsync);暫時性失敗等一下重試,真正的衝突放棄這輪。"""
         for i in range(self.cfg.push_retries):
             if self._git("push", "origin", f"HEAD:{self.cfg.branch}", check=False).returncode == 0:
                 return True
-            log.info(L("FUTURES:推送被拒(第 %d 次),pull --rebase 後重試"), i + 1)
-            r = self._git("pull", "--rebase", "origin", self.cfg.branch, check=False)
-            if r.returncode != 0:
-                self._git("rebase", "--abort", check=False)
-                log.warning(L("FUTURES:rebase 失敗:%s"), r.stderr.strip())
+            log.info(L("FUTURES:推送被拒(第 %d 次),跟上遠端後重試"), i + 1)
+            state, err = gitsync.rebase_onto_remote(self.repo, self.cfg.branch, self._try)
+            if state == gitsync.CONFLICT:
+                log.warning(L("FUTURES:rebase 失敗:%s"), err)
                 return False
+            if state == gitsync.TRANSIENT and i + 1 < self.cfg.push_retries:
+                log.info(L("FUTURES:跟上遠端失敗(暫時性),稍候重試:%s"), err)
+                gitsync.wait(i)
         return False

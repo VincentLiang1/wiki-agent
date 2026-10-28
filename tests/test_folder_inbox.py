@@ -340,7 +340,7 @@ def test_network_down_is_not_an_alert(cfg):
         "這輪不攝入,待攝入的都不算失敗:git pull --ff-only -q origin master(FWIKI)失敗:fatal: unable to "
         "access 'https://github.com/me/FWIKI.git/': Failed to connect to github.com port 443 "
         "after 75002 ms: Couldn't connect to server",
-        "FWIKI rebase 失敗,commit 留在本機待人處理:fatal: unable to access 'https://github.com/me/FWIKI.git/': "
+        "FWIKI 推送 3 次都被拒,commit 留在本機下一輪再推:fatal: unable to access 'https://github.com/me/FWIKI.git/': "
         "Could not resolve host: github.com",
         futures.format("Could not resolve hostname github.com: nodename nor servname provided, or not known"),
         futures.format("connect to host github.com port 22: Operation timed out"),

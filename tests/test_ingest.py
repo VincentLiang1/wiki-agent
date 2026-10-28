@@ -572,6 +572,276 @@ def test_push_rejected_is_rebased_never_forced(env, monkeypatch):
     assert log[:2] == ["docs(ingest): g", "windows backfill"]   # 兩邊都在,沒有人被蓋掉
 
 
+def _windows_pushes_first(env, monkeypatch, fail):
+    """第一次推送前另一台搶先推一筆;之後 fail(cmd) 回傳 stderr 字串的那一次 git 指令當成失敗
+    (攝入前跟上遠端的 fetch 不受影響)。"""
+    other = env["tmp"] / "other"
+    git("clone", "-q", str(env["f_remote"]), str(other), cwd=env["tmp"])
+    real_run = run_net
+
+    def run_with_race(cmd, *a, **k):
+        if cmd[:2] == ["git", "push"] and not (other / "race.md").exists():
+            (other / "race.md").write_text("windows 剛好推了", encoding="utf-8")
+            git("add", "-A", cwd=other)
+            git("commit", "-q", "-m", "windows backfill", cwd=other)
+            git("push", "-q", "origin", "master", cwd=other)
+        if (other / "race.md").exists() and (err := fail(cmd)) is not None:
+            return subprocess.CompletedProcess(cmd, 1, "", err)
+        return real_run(cmd, *a, **k)
+
+    monkeypatch.setattr("wiki_feeder.ingest.run_net", run_with_race)
+
+
+def test_rebase_failing_before_it_starts_is_retried_not_left_for_a_person(env, monkeypatch, backoff):
+    """2026-10-28 13:32:推送被拒後 pull --rebase 回「Cannot rebase onto multiple branches」(FETCH_HEAD 有多筆),
+    沒有任何衝突,卻寄了「待人處理」、commit 卡在 Mac 上。還沒進入 rebase 就失敗是暫時性的:等一下重試、照常推上去。"""
+    seen = []
+
+    def first_rebase_fails(cmd):
+        if cmd[:3] == ["git", "rebase", "-q"] and not seen:
+            seen.append(cmd)
+            return "fatal: Cannot rebase onto multiple branches.\n"
+        return None
+
+    _windows_pushes_first(env, monkeypatch, first_rebase_fails)
+    _feed(env, "g.txt", b"ggg")
+
+    r = ingest(env["cfg"])
+
+    assert r.ok, r.alerts
+    assert seen and backoff == [5]
+    assert not any("待人處理" in a for a in r.alerts)
+    assert _remote_log(env["f_remote"])[:2] == ["docs(ingest): g", "windows backfill"]
+
+
+def test_fetch_failing_every_time_leaves_commit_for_next_round_not_for_a_person(env, monkeypatch, backoff):
+    """fetch 一直失敗(斷網、鎖檔):重試次數用完,警示是「下一輪再推」並附上原因,不是「待人處理」;
+    下一輪網路好了就自己補推上去。"""
+    from wiki_feeder.collect import network_down
+
+    lock = "fatal: Unable to create '/x/FWIKI/.git/index.lock': File exists."
+    broken = [True]
+    _windows_pushes_first(env, monkeypatch, lambda cmd: lock if broken[0] and cmd[:2] == ["git", "fetch"] else None)
+    _feed(env, "h.txt", b"hhh")
+
+    r = ingest(env["cfg"])
+
+    assert r.outcomes[0].status == "done"
+    msgs = [a for a in r.alerts if "FWIKI" in a]
+    assert msgs == [f"FWIKI 推送 3 次都被拒,commit 留在本機下一輪再推:{lock}"], r.alerts
+    assert backoff == [5, 15]                       # 最後一次之後不等
+    assert not network_down(msgs[0])                # 鎖檔不是斷網:要報
+    assert "windows backfill" in _remote_log(env["f_remote"])
+    broken[0] = False
+
+    r = ingest(env["cfg"])
+
+    assert not env["cfg"].ingest_stop_path.exists(), r.alerts
+    assert _remote_log(env["f_remote"])[:2] == ["docs(ingest): h", "windows backfill"]
+
+
+def test_catching_up_before_ingest_never_uses_pull(env, monkeypatch):
+    """攝入前跟上遠端用 fetch + merge --ff-only origin/<分支>、不用 pull:pull 照 FETCH_HEAD 合併,
+    同時有別的 fetch 在跑(FETCH_HEAD 多筆)就失敗,整輪不攝入(2026-10-28 推送那次的同一個原因)。"""
+    other = env["tmp"] / "other"
+    git("clone", "-q", str(env["f_remote"]), str(other), cwd=env["tmp"])
+    (other / "race.md").write_text("windows 先推了", encoding="utf-8")
+    git("add", "-A", cwd=other)
+    git("commit", "-q", "-m", "windows backfill", cwd=other)
+    git("push", "-q", "origin", "master", cwd=other)
+    cmds = []
+    real_run = run_net
+
+    def record(cmd, *a, **k):
+        cmds.append(cmd)
+        return real_run(cmd, *a, **k)
+
+    monkeypatch.setattr("wiki_feeder.ingest.run_net", record)
+    _feed(env, "k.txt", b"kkk")
+
+    r = ingest(env["cfg"])
+
+    assert r.ok, r.alerts
+    assert _remote_log(env["f_remote"])[:2] == ["docs(ingest): k", "windows backfill"]
+    assert not [c for c in cmds if c[:2] == ["git", "pull"]]
+
+
+def test_rebase_left_half_done_is_cleaned_up_before_pushing(env, monkeypatch):
+    """上一輪 rebase 做到一半被砍(停在 rebase 中、HEAD 游離、gitsync 的記號還在):這輪先收拾——中止、
+    回到驗證過的 commit——再照常補推。不可因為 HEAD 游離就 STOP,也不可每輪都「庫不乾淨」。"""
+    from wiki_feeder.ingest import mark_verified
+
+    c = env["cfg"]
+    fwiki = env["fwiki"]
+    other = env["tmp"] / "other"
+    git("clone", "-q", str(env["f_remote"]), str(other), cwd=env["tmp"])
+    (other / "race.md").write_text("windows 剛好推了", encoding="utf-8")
+    git("add", "-A", cwd=other)
+    git("commit", "-q", "-m", "windows backfill", cwd=other)
+    git("push", "-q", "origin", "master", cwd=other)
+    (fwiki / "local.md").write_text("驗證過、還沒推", encoding="utf-8")
+    git("add", "-A", cwd=fwiki)
+    git("commit", "-q", "-m", "docs(ingest): local", cwd=fwiki)
+    mark_verified(c, c.repos[0])
+    git("fetch", "-q", "origin", "master", cwd=fwiki)
+    # 重放完第一筆就停下(模擬被砍在半途):rebase-merge 還在、HEAD 游離在新雜湊上
+    (fwiki / ".git" / "wiki-feeder-rebasing").write_text("", encoding="utf-8")   # 是 wiki-feeder 開始的
+    subprocess.run(["git", "rebase", "-x", "false", "origin/master"], cwd=fwiki, capture_output=True)
+    assert (fwiki / ".git" / "rebase-merge").exists()
+
+    r = ingest(c)
+
+    assert not c.ingest_stop_path.exists(), r.alerts
+    assert not (fwiki / ".git" / "rebase-merge").exists()
+    assert _remote_log(env["f_remote"])[:2] == ["docs(ingest): local", "windows backfill"]
+    assert not git("status", "--porcelain", cwd=fwiki)
+    assert not (fwiki / ".git" / "wiki-feeder-rebasing").exists()
+
+
+def _diverge(env, path: str, base: str, theirs, mine) -> Path:
+    """FWIKI 的 path 先有 base;另一台改成 theirs(base) 推上去,本機改成 mine(base) commit、記成已驗證、沒推。"""
+    from wiki_feeder.ingest import mark_verified
+
+    c, fwiki = env["cfg"], env["fwiki"]
+    f = fwiki / path
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(base, encoding="utf-8")
+    git("add", "-A", cwd=fwiki)
+    git("commit", "-q", "-m", "base", cwd=fwiki)
+    git("push", "-q", "origin", "master", cwd=fwiki)
+    other = env["tmp"] / "other"
+    git("clone", "-q", str(env["f_remote"]), str(other), cwd=env["tmp"])
+    (other / path).write_text(theirs(base), encoding="utf-8")
+    git("commit", "-q", "-am", "windows 攝入", cwd=other)
+    git("push", "-q", "origin", "master", cwd=other)
+    f.write_text(mine(base), encoding="utf-8")
+    git("commit", "-q", "-am", "docs(ingest): mac", cwd=fwiki)
+    mark_verified(c, c.repos[0])
+    return fwiki
+
+
+def test_rebase_a_person_is_doing_is_left_alone(env):
+    """2026-10-28:使用者按桌面的 pull-all 撞到衝突、貼給 Mac 的 Claude 解。常駐程式每 60 秒一輪,
+    不可把人解到一半的 rebase 中止掉,也不可當成沒驗證過的 commit 而 STOP;這輪整輪不攝入、不寄信。
+    停超過一小時才警示(攝入一直暫停)。"""
+    import os
+    import time
+
+    c = env["cfg"]
+    fwiki = _diverge(env, "x.md", "原本\n", lambda b: "windows 改的\n", lambda b: "mac 改的\n")
+    git("fetch", "-q", "origin", "master", cwd=fwiki)
+    subprocess.run(["git", "rebase", "origin/master"], cwd=fwiki, capture_output=True)   # 人開始的,停在衝突上
+    (fwiki / "x.md").write_text("人解到一半\n", encoding="utf-8")
+    _feed(env, "m.txt", b"mmm")
+
+    r = ingest(c)
+
+    assert (fwiki / ".git" / "rebase-merge").exists()
+    assert (fwiki / "x.md").read_text(encoding="utf-8") == "人解到一半\n"
+    assert r.outcomes == [] and r.alerts == []
+    assert not c.ingest_stop_path.exists()
+    assert _remote_log(env["f_remote"])[0] == "windows 攝入"
+
+    old = time.time() - 7200
+    os.utime(fwiki / ".git" / "rebase-merge", (old, old))
+    r = ingest(c)
+
+    assert (fwiki / ".git" / "rebase-merge").exists()
+    assert any("停在 rebase 中途超過一小時" in a for a in r.alerts)
+    assert not c.ingest_stop_path.exists()
+
+
+def test_own_rebase_killed_halfway_is_recognized_next_round(env, monkeypatch):
+    """wiki-feeder 自己的 rebase 做到一半行程被砍:記號留著,下一輪認得出是自己的、收拾掉照常補推
+    (沒記號的話會被當成人在處理,攝入從此暫停)。"""
+    from wiki_feeder.ingest import mark_verified
+
+    c, fwiki = env["cfg"], env["fwiki"]
+    other = env["tmp"] / "other"
+    git("clone", "-q", str(env["f_remote"]), str(other), cwd=env["tmp"])
+    (other / "w.md").write_text("windows\n", encoding="utf-8")
+    git("add", "-A", cwd=other)
+    git("commit", "-q", "-m", "windows 攝入", cwd=other)
+    git("push", "-q", "origin", "master", cwd=other)
+    (fwiki / "m.md").write_text("mac\n", encoding="utf-8")
+    git("add", "-A", cwd=fwiki)
+    git("commit", "-q", "-m", "docs(ingest): mac", cwd=fwiki)
+    mark_verified(c, c.repos[0])
+    real_run = run_net
+
+    def killed_mid_rebase(cmd, *a, **k):
+        if cmd[:3] == ["git", "rebase", "-q"]:
+            real_run(["git", "rebase", "-x", "false", *cmd[3:]], *a, **k)   # 重放完第一筆就停
+            raise KeyboardInterrupt  # 模擬行程在這裡被砍
+        return real_run(cmd, *a, **k)
+
+    monkeypatch.setattr("wiki_feeder.ingest.run_net", killed_mid_rebase)
+    with pytest.raises(KeyboardInterrupt):
+        ingest(c)
+    assert (fwiki / ".git" / "rebase-merge").exists()
+    monkeypatch.setattr("wiki_feeder.ingest.run_net", real_run)
+
+    r = ingest(c)
+
+    assert not c.ingest_stop_path.exists(), r.alerts
+    assert not (fwiki / ".git" / "rebase-merge").exists()
+    assert _remote_log(env["f_remote"])[0] == "docs(ingest): mac"
+
+
+def test_push_never_touches_a_rebase_someone_else_started(env):
+    """推送被拒要跟上遠端時,庫已經停在別人開始的 rebase 上:當成暫時性、原封不動,不中止它。"""
+    from wiki_feeder import gitsync
+    from wiki_feeder.ingest import _net_git
+
+    rc = env["cfg"].repos[0]
+    fwiki = _diverge(env, "x.md", "原本\n", lambda b: "windows 改的\n", lambda b: "mac 改的\n")
+    git("fetch", "-q", "origin", "master", cwd=fwiki)
+    subprocess.run(["git", "rebase", "origin/master"], cwd=fwiki, capture_output=True)
+
+    calls = []
+    run = _net_git(rc)
+
+    def record(*a):
+        calls.append(a)
+        return run(*a)
+
+    state, _ = gitsync.rebase_onto_remote(fwiki, rc.branch, record, lambda: True)
+
+    assert state == gitsync.TRANSIENT
+    assert not [a for a in calls if a[0] == "rebase"]     # 一條 rebase 指令都不對它下(含 --abort)
+    assert (fwiki / ".git" / "rebase-merge").exists() and not gitsync.ours(fwiki)
+
+
+ASR = "memory/asr-name-corrections.md"
+
+
+def test_both_sides_appending_name_corrections_is_merged(env):
+    """2026-10-28 12:55:Windows 攝入 PQC 研討會、Mac 攝入集團AI 進度報告同一分鐘推,兩邊都在音譯對照檔尾
+    加一行,寄了「待人處理」;人解的結果就是兩行都留。兩邊都只在檔尾加行時自己合併、照常推上去。"""
+    base = "# 音譯對照\n\n- 舊場次\n"
+    _diverge(env, ASR, base, lambda b: b + "- PQC 研討會\n", lambda b: b + "- 集團AI 1028\n")
+
+    r = ingest(env["cfg"])
+
+    assert not any("待人處理" in a for a in r.alerts), r.alerts
+    assert _remote_log(env["f_remote"])[:2] == ["docs(ingest): mac", "windows 攝入"]
+    assert git("show", f"master:{ASR}", cwd=env["f_remote"]) == base + "- PQC 研討會\n- 集團AI 1028\n"
+
+
+def test_name_corrections_edited_in_the_middle_still_waits_for_a_person(env):
+    """另一邊改了既有的行(不是只在檔尾加):程式分不出要留哪個,照舊中止 rebase、等人,絕不 --force。"""
+    base = "# 音譯對照\n\n- 舊場次\n"
+    fwiki = _diverge(env, ASR, base, lambda b: b.replace("舊場次", "舊場次(更正)") + "- PQC\n",
+                     lambda b: b + "- 集團AI\n")
+
+    r = ingest(env["cfg"])
+
+    assert any("待人處理" in a for a in r.alerts)
+    assert _remote_log(env["f_remote"])[0] == "windows 攝入"
+    assert git("log", "-1", "--format=%s", cwd=fwiki).strip() == "docs(ingest): mac"
+    assert not (fwiki / ".git" / "rebase-merge").exists()
+
+
 INDEX = ("# index\n\n## 最近異動\n\n- [甲/a](甲/a.md)\n- [甲/b](甲/b.md)\n- [甲/c](甲/c.md)\n\n"
          "## 頁面列表\n\n- [a](甲/a.md) — a\n- [b](甲/b.md) — b\n\n## 互動工具\n\n- 工具一\n")
 

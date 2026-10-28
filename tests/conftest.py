@@ -71,6 +71,14 @@ def _isolate_logging():
     root.setLevel(level)
 
 
+@pytest.fixture(autouse=True)
+def backoff(monkeypatch) -> list[float]:
+    """推送暫時性失敗後的等待(gitsync.wait)不真的睡:記下每次要等幾秒,測試要看的自己取這個 fixture。"""
+    waits: list[float] = []
+    monkeypatch.setattr("wiki_feeder.gitsync._sleep", waits.append)
+    return waits
+
+
 def git(*args: str, cwd: Path) -> str:
     r = subprocess.run(
         ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main", *args],
