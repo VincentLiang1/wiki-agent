@@ -896,11 +896,29 @@ def test_push_conflict_only_in_recent_changes_is_merged(env, monkeypatch):
     assert not git("status", "--porcelain", cwd=env["fwiki"])
 
 
-def test_push_conflict_outside_recent_changes_still_waits_for_a_person(env, monkeypatch):
-    """頁面列表也撞在同一處:程式分不出要怎麼合,照舊中止 rebase、commit 留在本機等人,絕不 --force。"""
+def test_push_conflict_where_both_add_pages_to_the_list_is_merged(env, monkeypatch):
+    """兩邊各在頁面列表同一處加了一頁(Windows 攝入講義、Mac 攝入履歷):兩行都留、遠端的在前,照常推上去。"""
     c = env["cfg"]
     _race_on_index(env, monkeypatch, lambda t: _windows_recent(t).replace(
         "## 頁面列表\n\n", "## 頁面列表\n\n- [講義](乙/講義.md) — 講義\n"))
+    _feed(env, "履歷.txt", b"resume")
+
+    r = ingest(c)
+
+    assert r.ok, r.alerts
+    assert _remote_log(env["f_remote"])[:2] == ["docs(ingest): 履歷", "windows 改講義"]
+    idx = git("show", "master:Wiki_Pages/index.md", cwd=env["f_remote"])
+    assert "## 頁面列表\n\n- [講義](乙/講義.md) — 講義\n- [履歷](會議與月報/履歷.md) — 新頁\n- [a](甲/a.md) — a\n" in idx
+    assert "- [會議與月報/履歷](會議與月報/履歷.md)\n- [乙/講義](乙/講義.md)\n" in idx
+    assert "<<<<<<<" not in idx and not c.ingest_stop_path.exists()
+
+
+def test_push_conflict_outside_recent_changes_still_waits_for_a_person(env, monkeypatch):
+    """另一邊改了頁面列表既有的摘要、這邊在它旁邊加了一頁:程式分不出要怎麼合,照舊中止 rebase、
+    commit 留在本機等人,絕不 --force。"""
+    c = env["cfg"]
+    _race_on_index(env, monkeypatch, lambda t: _windows_recent(t).replace(
+        "- [a](甲/a.md) — a\n", "- [a](甲/a.md) — a(改寫過的摘要)\n"))
     _feed(env, "履歷.txt", b"resume")
 
     r = ingest(c)
@@ -925,6 +943,23 @@ def test_merge_recent_keeps_moved_up_entry_and_refuses_unknown_layout():
     odd = INDEX.replace("- [甲/c](甲/c.md)\n", "- [甲/c](甲/c.md)\n說明文字\n")
     assert merge_recent(INDEX, up, odd) is None
     assert merge_recent(INDEX, up, mine + "\n## 最近異動\n") is None
+
+
+def test_merge_recent_page_list_inserts_dedupe_and_refuse_two_summaries_of_one_page():
+    from wiki_feeder.ingest import merge_recent
+
+    def add(text: str, line: str) -> str:
+        return text.replace("## 頁面列表\n\n", f"## 頁面列表\n\n{line}", 1)
+
+    same = add(INDEX, "- [x](乙/x.md) — x\n")
+    # 兩邊加了一模一樣的行:只留一行
+    out = merge_recent(INDEX, same, add(same, "- [y](乙/y.md) — y\n").replace("- [x](乙/x.md) — x\n", "", 1)
+                       .replace("## 頁面列表\n\n", "## 頁面列表\n\n- [x](乙/x.md) — x\n", 1))
+    assert out is not None and out.count("- [x](乙/x.md) — x\n") == 1 and "- [y](乙/y.md) — y\n" in out
+    # 同一頁兩邊各寫了不同的摘要:不接手
+    assert merge_recent(INDEX, same, add(INDEX, "- [x](乙/x.md) — 另一種摘要\n")) is None
+    # 一邊刪了撞在一起那段既有的行:不接手
+    assert merge_recent(INDEX, same, add(INDEX, "- [y](乙/y.md) — y\n").replace("- [a](甲/a.md) — a\n", "")) is None
 
 
 def test_push_failure_after_commit_is_not_reingested(env, monkeypatch):

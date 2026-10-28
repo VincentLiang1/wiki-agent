@@ -1,5 +1,13 @@
 [
  {
+  "source": "afc5d86",
+  "date": "2026-10-28",
+  "needs_human": false,
+  "zh-Hant": "- 內部調整,單一知識庫沒有變化:兩台電腦同時推送、索引頁撞在一起時的自動合併多收了一種情形,只用在有「最近異動」區塊的兩庫設定;你的設定照舊運作,不必做任何事",
+  "zh-Hans": "- 内部调整,单一知识库没有变化:两台电脑同时推送、索引页撞在一起时的自动合并多收了一种情形,只用在有「最近异动」区块的两库设定;你的设定照旧运作,不必做任何事",
+  "en": "- Internal change, nothing changes for a single knowledge base: automatic merging when two computers push at the same time and the index page collides now covers one more case, used only by two-library setups that keep a \"recent changes\" section; your setup works as before, nothing to do"
+ },
+ {
   "source": "c6f56f4",
   "date": "2026-10-28",
   "needs_human": false,

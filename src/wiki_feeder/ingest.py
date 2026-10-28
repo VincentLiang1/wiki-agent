@@ -35,6 +35,7 @@ Bash 只開放 git add／commit／status;推送一律由程式做——白名單
 """
 from __future__ import annotations
 
+import difflib
 import json
 import logging
 import os
@@ -504,26 +505,94 @@ def _pushed(entries: list[str], base: list[str]) -> list[str]:
     return entries
 
 
+def _inserts(base: list[str], other: list[str]) -> dict[int, list[str]] | None:
+    """other 只是在 base 裡插入幾行(一行都沒改、沒刪)→ {插在 base 第幾行之前: 插入的行};否則 None。"""
+    added: dict[int, list[str]] = {}
+    sm = difflib.SequenceMatcher(None, base, other, autojunk=False)
+    for op, i1, _, j1, j2 in sm.get_opcodes():
+        if op == "insert":
+            added[i1] = other[j1:j2]
+        elif op != "equal":
+            return None
+    return added
+
+
+_LINK = re.compile(r"\]\(([^)]+)\)")
+
+
+def _merge_inserts(base: str, upstream: str, mine: str) -> str | None:
+    """一段衝突裡兩邊都只插入新行(頁面列表同一處各加了一頁):遠端的在前、這邊的接在後(去重)。
+    改到、刪到既有任何一行,或兩邊各加了指向同一頁的不同行(同一頁兩種摘要)→ None。"""
+    def lines(t: str) -> list[str]:
+        return [x if x.endswith("\n") else x + "\n" for x in t.splitlines(keepends=True)]
+
+    b = lines(base)
+    u_add, m_add = _inserts(b, lines(upstream)), _inserts(b, lines(mine))
+    if u_add is None or m_add is None:
+        return None
+    u_new = {x for v in u_add.values() for x in v}
+    m_new = [x for v in m_add.values() for x in v if x not in u_new]
+    u_links = {m.group(1) for x in u_new for m in _LINK.finditer(x)}
+    if any(m.group(1) in u_links for x in m_new for m in _LINK.finditer(x)):
+        return None
+    out: list[str] = []
+    for i in range(len(b) + 1):
+        out += u_add.get(i, []) + [x for x in m_add.get(i, []) if x not in u_new]
+        out += b[i:i + 1]
+    return "".join(out)
+
+
+_CONFLICT = ("<<<<<<< upstream\n", "||||||| base\n", "=======\n", ">>>>>>> mine\n")
+
+
+def _merge_rest(base: str, upstream: str, mine: str) -> str | None:
+    """index.md 最近異動以外的部分:git merge-file 合,撞在同一處的每一段都要兩邊只插入新行才接手(_merge_inserts)。"""
+    with tempfile.TemporaryDirectory() as d:
+        paths = []
+        for name, text in zip(("base", "upstream", "mine"), (base, upstream, mine)):
+            p = Path(d) / name
+            p.write_text(text, encoding="utf-8", newline="\n")
+            paths.append(str(p))
+        r = subprocess.run(["git", "merge-file", "-p", "-q", "--diff3", "-L", "upstream", "-L", "base", "-L", "mine",
+                            paths[1], paths[0], paths[2]], capture_output=True, text=True, encoding="utf-8")
+    if r.returncode < 0 or r.returncode > 127:
+        return None
+    out: list[str] = []
+    chunk: list[list[str]] | None = None     # 衝突中:[遠端, base, 這邊]
+    part = 0
+    for line in r.stdout.splitlines(keepends=True):
+        k = _CONFLICT.index(line) if line in _CONFLICT else -1
+        if k == 0 and chunk is None:
+            chunk, part = [[], [], []], 0
+        elif k in (1, 2) and chunk is not None and part == k - 1:
+            part = k
+        elif k == 3 and chunk is not None and part == 2:
+            merged = _merge_inserts("".join(chunk[1]), "".join(chunk[0]), "".join(chunk[2]))
+            if merged is None:
+                return None
+            out.append(merged)
+            chunk = None
+        elif chunk is None:
+            out.append(line)
+        else:
+            chunk[part].append(line)
+    return None if chunk is not None else "".join(out)
+
+
 def merge_recent(base: str, upstream: str, mine: str) -> str | None:
-    """index.md 三方合併,只在衝突全落在「最近異動」時接手:其餘部分要 git merge-file 合得乾淨,
-    最近異動 = 這一筆推上去的幾筆在上、遠端的清單接在後面(去重),筆數照兩邊較多的那邊。合不了 → None。"""
+    """index.md 三方合併,只在衝突全落在「最近異動」、或其餘撞在同一處的地方兩邊都只插入新行時接手
+    (_merge_rest);最近異動 = 這一筆推上去的幾筆在上、遠端的清單接在後面(去重),筆數照兩邊較多的那邊。
+    合不了 → None。"""
     parts = [_split_recent(t) for t in (base, upstream, mine)]
     if any(p is None for p in parts):
         return None
     (_, b_list, _), (_, u_list, _), (_, m_list, _) = parts
-    with tempfile.TemporaryDirectory() as d:
-        paths = []
-        for name, (head, _, tail) in zip(("base", "upstream", "mine"), parts):
-            p = Path(d) / name
-            p.write_text(head + _RECENT_MARK + tail, encoding="utf-8", newline="\n")
-            paths.append(str(p))
-        r = subprocess.run(["git", "merge-file", "-p", "-q", paths[1], paths[0], paths[2]],
-                           capture_output=True, text=True, encoding="utf-8")
-    if r.returncode != 0 or r.stdout.count(_RECENT_MARK) != 1:
+    merged_rest = _merge_rest(*(head + _RECENT_MARK + tail for head, _, tail in parts))
+    if merged_rest is None or merged_rest.count(_RECENT_MARK) != 1:
         return None
     top = _pushed(m_list, b_list)
     merged = (top + [x for x in u_list if x not in top])[:max(len(u_list), len(m_list))]
-    return r.stdout.replace(_RECENT_MARK, "\n" + "".join(merged) + "\n")
+    return merged_rest.replace(_RECENT_MARK, "\n" + "".join(merged) + "\n")
 
 
 APPEND_ONLY = "memory/asr-name-corrections.md"
