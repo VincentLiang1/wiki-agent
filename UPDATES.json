@@ -1,5 +1,13 @@
 [
  {
+  "source": "03a784b",
+  "date": "2026-10-28",
+  "needs_human": false,
+  "zh-Hant": "- 只跟 Windows 有關:「文件」「桌面」被 OneDrive 接管(開了 OneDrive 資料夾備份)時,放在本機 `C:\\Users\\<帳號>\\Documents` 的知識庫不會再被提醒成在同步資料夾裡——那時檔案總管的「文件」其實在 `OneDrive\\文件`,`C:\\Users\\<帳號>\\Documents` 是另一個不會被同步的本機資料夾;安裝說明補上怎麼從檔案總管的網址列看完整路徑、確認資料夾在不在 OneDrive。Mac 沒有變化。不必做任何事",
+  "zh-Hans": "- 只跟 Windows 有关:「文档」「桌面」被 OneDrive 接管(开了 OneDrive 文件夹备份)时,放在本机 `C:\\Users\\<账号>\\Documents` 的知识库不会再被提醒成在同步文件夹里——那时文件总管的「文档」其实在 `OneDrive\\文档`,`C:\\Users\\<账号>\\Documents` 是另一个不会被同步的本机文件夹;安装说明补上怎么从文件总管的网址列看完整路径、确认文件夹在不在 OneDrive。Mac 没有变化。不必做任何事",
+  "en": "- Windows only: when OneDrive has taken over Documents and Desktop (OneDrive folder backup is on), a knowledge base in the local `C:\\Users\\<name>\\Documents` is no longer flagged as being in a sync folder — in that case File Explorer's Documents actually lives at `OneDrive\\Documents`, and `C:\\Users\\<name>\\Documents` is a different local folder that is not synced; the install guide now explains how to check the full path in File Explorer's address bar to see whether a folder is in OneDrive. Nothing changes on a Mac. Nothing to do"
+ },
+ {
   "source": "c3b5fd0",
   "date": "2026-10-27",
   "needs_human": false,

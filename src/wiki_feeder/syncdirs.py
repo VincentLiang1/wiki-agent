@@ -84,9 +84,10 @@ def sync_kind(path, platform: str, home, env: dict[str, str], probe: Probe) -> s
                 return ONEDRIVE
         for name in ("Desktop", "Documents"):
             real = probe.known.get(name)
-            # 被 OneDrive 接管:實際位置在 OneDrive 底下。貼的是字面上的 %USERPROFILE%\Documents 也提醒(多半就是指那裡)
-            if real and any(x.startswith("onedrive") for x in _parts(platform, real)) and (
-                    _under(platform, path, real) or _under(platform, path, home / name)):
+            # 被 OneDrive 接管:實際位置在 OneDrive 底下,只比實際位置。字面上的 %USERPROFILE%\Documents 這時是
+            # 另一個本機資料夾、不會被同步(2026-10-28 在 Windows 11 實測,不是 junction);若是指過去的連結,
+            # 呼叫的人 resolve 之後本來就落在實際位置
+            if real and any(x.startswith("onedrive") for x in _parts(platform, real)) and _under(platform, path, real):
                 return ONEDRIVE_DESKTOP
         if any(_under(platform, path, home / n) for n in ("iCloudDrive", "iCloud Drive")):
             return ICLOUD

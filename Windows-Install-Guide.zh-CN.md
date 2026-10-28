@@ -37,7 +37,7 @@
 ## 5. 安装 wiki-agent
 
 1. 浏览器打开 <https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-win.zip>,下载 **wiki-agent-win.zip**(**不需要 GitHub 账号**)。浏览器说这类文件可能有害的话,选**保留**
-2. 在「下载」文件夹对 zip 按右键 →「**全部解压缩**」,目的地改成 `C:\`,解出来就是 `C:\wiki-agent`。⚠️ 不要解到桌面或「文档」:这两个地方常被 OneDrive 同步
+2. 在「下载」文件夹对 zip 按右键 →「**全部解压缩**」,目的地改成 `C:\`,解出来就是 `C:\wiki-agent`。⚠️ 不要解到桌面或「文档」:这两个地方常被 OneDrive 同步。开了 OneDrive 的文件夹备份之后,文件总管里的「文档」「桌面」实际位置是 `C:\Users\<账号>\OneDrive\文档`、`OneDrive\Desktop` 这类(文件夹名依 Windows 的语言而不同);`C:\Users\<账号>\Documents` 这时是另一个本机文件夹,看起来一样、其实不同。要确认某个文件夹在哪里,打开它、点文件总管上方的网址列,看完整路径里有没有 `OneDrive`
 3. 打开 `C:\wiki-agent`,双击 **Install.bat**。跳出蓝色的安全性警告(「Windows 已保护您的电脑」之类)的话,按**其他信息** → **仍要运行**
 
 **一打开先选语言**(在装任何东西之前;之后的画面、问题、摘要信、警示、新建的知识库都只用这个语言,问答不会再问一次):
@@ -63,7 +63,7 @@
 | 【CLAUDE.md】 | (已经有才会问)程序找到的话直接 Enter;不然在文件总管的网址列拷贝知识库文件夹的路径、粘贴再按 Enter。程序照 `CLAUDE.md` 找出原件文件夹与新文件入口(看不出来才请 Claude 读一次,十几秒),列出来让你确认,对就 Enter(新文件入口用你 `CLAUDE.md` 写的文件夹,名字不限)。你改的原件文件夹或入口跟 `CLAUDE.md` 写的不同时会再问一次,默认用 `CLAUDE.md` 的 |
 | 【知识库】 | (还没有才会问)直接 Enter,问要不要创建再 Enter |
 | 【原件文件夹】 | (还没有才会问)Enter(WIKI 旁边的 `Raw_Sources`);新的知识库会问「还没有,要创建吗?」再 Enter |
-| ⚠ ……在 iCloud 云盘(或 OneDrive、Dropbox……)里 | 知识库或原件文件夹放在同步文件夹里才会出现。**不要放在 OneDrive、iCloud 云盘、Dropbox、Google Drive 这类同步文件夹**(含被同步的「文档」「桌面」):文件可能只留在云端、别台设备同时改会冒出冲突副本,知识库的版本记录被同步也会坏。直接 Enter 换一个位置(建议家目录的 `LLMWiki`);已经有的知识库要自己搬过去再重跑安装。坚持要放:打 `2`,看完后果打 `yes`,版本记录(git)改放在这台电脑的 wiki-feeder 文件夹、不放在同步文件夹——冲突副本、只在云端的文件不会因此消失 |
+| ⚠ ……在 iCloud 云盘(或 OneDrive、Dropbox……)里 | 知识库或原件文件夹放在同步文件夹里才会出现。**不要放在 OneDrive、iCloud 云盘、Dropbox、Google Drive 这类同步文件夹**(含被同步的「文档」「桌面」;开了 OneDrive 备份时它们的实际位置在 `C:\Users\<账号>\OneDrive\` 底下,跟 `C:\Users\<账号>\Documents` 是两个不同的文件夹。知识库在哪里,在知识库文件夹里点文件总管的网址列,看完整路径有没有 `OneDrive`):文件可能只留在云端、别台设备同时改会冒出冲突副本,知识库的版本记录被同步也会坏。直接 Enter 换一个位置(建议家目录的 `LLMWiki`);已经有的知识库要自己搬过去再重跑安装。坚持要放:打 `2`,看完后果打 `yes`,版本记录(git)改放在这台电脑的 wiki-feeder 文件夹、不放在同步文件夹——冲突副本、只在云端的文件不会因此消失 |
 | 【收件箱】 | Enter(iCloud 云盘里的 `_WikiBox`);问「还没有,要创建吗?」再 Enter |
 | 要照讲义请 Claude 建好规则文件与目录索引吗? | (还没有 `CLAUDE.md` 才会问)Enter。Claude 会花 1～3 分钟写好 `CLAUDE.md` 与目录 `index.md`,好了会用两三句话说它建了什么 |
 | 要在 CLAUDE.md 最后补上「版本记录由 wiki-feeder 代管」吗? | Enter(要)。原本的规则不会被改,只在最后加一节 |
@@ -83,7 +83,7 @@
 ## 6. 确认真的在动
 
 1. 在 iPhone 打开 **文件** App → **iCloud 云盘** → **_WikiBox**,丢一个文件进去
-2. 等几分钟。文件总管打开家目录的 `LLMWiki\WIKI\Wiki_Pages`(或你选的知识库),会多出一页;原文件被归到 `Raw_Sources` 底下的主题文件夹
+2. 等几分钟。在文件总管上方的网址列粘贴 `%USERPROFILE%\LLMWiki\WIKI\Wiki_Pages` 按 Enter(或你选的知识库的完整路径;不要从左边栏的「文档」去找,那里可能是 OneDrive 里的另一个文件夹),会多出一页;原文件被归到 `Raw_Sources` 底下的主题文件夹
 3. 有设摘要信的话,会收到一封「wiki-feeder 摄入摘要」
 
 没动静的话看记录:文件总管网址列粘贴 `%LOCALAPPDATA%\wiki-feeder\logs`,打开 `feeder.log` 看最后几行。

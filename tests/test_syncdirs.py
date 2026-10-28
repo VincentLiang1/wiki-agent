@@ -61,10 +61,11 @@ def test_mac_documents_and_desktop_count_unless_icloud_says_no():
     (r"c:\users\AMY\onedrive - 公司\WIKI", {"OneDriveCommercial": r"C:\Users\amy\OneDrive - 公司"}, Probe(), ONEDRIVE),
     (r"D:\OD\WIKI", {"OneDriveConsumer": r"D:\OD"}, Probe(), ONEDRIVE),
     (r"D:\OD\WIKI", {"ONEDRIVE": r"D:\OD"}, Probe(), ONEDRIVE),       # Windows 上 dict(os.environ) 的鍵是全大寫
-    # 「文件」被 OneDrive 接管:選擇視窗給的實際位置、或字面上的 %USERPROFILE%\Documents 都提醒
+    # 「文件」「桌面」被 OneDrive 接管:實際位置(選擇視窗、檔案總管左邊欄給的)提醒;資料夾名照 Windows 的語言
     (r"C:\Users\amy\OneDrive\文件\WIKI", {}, Probe(known={"Documents": r"C:\Users\amy\OneDrive\文件"}), ONEDRIVE_DESKTOP),
-    (r"C:\Users\amy\Documents\WIKI", {}, Probe(known={"Documents": r"C:\Users\amy\OneDrive\文件"}), ONEDRIVE_DESKTOP),
-    (r"C:\Users\amy\Desktop\WIKI", {}, Probe(known={"Desktop": r"C:\Users\amy\OneDrive\Desktop"}), ONEDRIVE_DESKTOP),
+    (r"C:\Users\amy\OneDrive\Documents\WIKI", {}, Probe(known={"Documents": r"C:\Users\amy\OneDrive\Documents"}),
+     ONEDRIVE_DESKTOP),
+    (r"C:\Users\amy\OneDrive\Desktop\WIKI", {}, Probe(known={"Desktop": r"C:\Users\amy\OneDrive\Desktop"}), ONEDRIVE_DESKTOP),
     (r"C:\Users\amy\iCloudDrive\WIKI", {}, Probe(), ICLOUD),
     (r"E:\Dropbox (公司)\WIKI", {}, Probe(dropbox=(r"E:\Dropbox (公司)",)), DROPBOX),
     (r"C:\Users\amy\Dropbox\WIKI", {}, Probe(), DROPBOX),
@@ -85,6 +86,14 @@ def test_every_kind_of_windows_sync_folder_is_noticed(path, env, probe, kind):
      Probe(known={"Documents": r"C:\Users\amy\OneDrive\文件"})),
     # 「文件」沒被接管:字面上的 Documents 就是本機的
     ("win32", WIN_HOME, r"C:\Users\amy\Documents\WIKI", {}, Probe(known={"Documents": r"C:\Users\amy\Documents"})),
+    # 被接管了:字面上的 %USERPROFILE%\Documents、Desktop 是另一個本機資料夾,不會被同步(2026-10-28 Windows 11 實測)。
+    # 英文版 Windows 兩邊都叫 Documents,更容易看成同一個
+    ("win32", WIN_HOME, r"C:\Users\amy\Documents\WIKI", {"OneDrive": r"C:\Users\amy\OneDrive"},
+     Probe(known={"Documents": r"C:\Users\amy\OneDrive\文件"})),
+    ("win32", WIN_HOME, r"C:\Users\amy\Documents\WIKI", {"OneDrive": r"C:\Users\amy\OneDrive"},
+     Probe(known={"Documents": r"C:\Users\amy\OneDrive\Documents"})),
+    ("win32", WIN_HOME, r"C:\Users\amy\Desktop\WIKI", {"OneDrive": r"C:\Users\amy\OneDrive"},
+     Probe(known={"Desktop": r"C:\Users\amy\OneDrive\Desktop"})),
     ("win32", WIN_HOME, r"C:\Users\amy\OneDriveBackup\WIKI", {"OneDrive": r"C:\Users\amy\OneDrive"}, Probe()),
 ])
 def test_ordinary_folders_are_not_flagged(platform, home, path, env, probe):
