@@ -1148,8 +1148,21 @@ def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: l
     scoped = personal is not None and stage is not None
     conv = side.get("轉寫", {})
     raw_rel = target.raw_root.name + "\\" + "\\".join(raw.relative_to(target.raw_root).parts)
+    dump = shlex.join((*tools_cmd, 'office-dump'))
+    no_scribe = bool(conv.get("直接讀原件"))   # 朋友版沒裝 scribe2md(§4.8);每一種都明講不要去找轉檔工具
     if conv.get("類型") == "文字":
         text_line = "這份原件本身是文字檔,直接讀它,不需要轉檔"
+    elif no_scribe and conv.get("替代檔"):
+        text_line = (f"這台沒有裝 scribe2md:原件是 Claude 讀不了的圖片格式,wiki-feeder 已轉成 JPG 副本 {conv['替代檔']},"
+                     "讀它;不要去找或執行任何轉檔工具")
+    elif no_scribe and conv.get("md") and Path(conv["md"]).exists():
+        text_line = f"這台沒有裝 scribe2md:wiki-feeder 已把原件抽成純文字 {conv['md']},讀它;不要去找或執行任何轉檔工具"
+    elif no_scribe and raw.suffix.lower() in DUMPERS:
+        text_line = ("這台沒有裝 scribe2md、沒有轉寫:這份 Office 原件的內容要用下面的指令傾印出來讀"
+                     "(照抄,不要改寫、不要串接其他指令;文件裡的圖讀不到),不要去找或執行其他轉檔工具:\n"
+                     f"  {dump} {shlex.quote(str(raw))}")
+    elif no_scribe:
+        text_line = "這台沒有裝 scribe2md、沒有轉寫:直接讀原件(PDF、圖片或純文字的郵件),不要去找或執行任何轉檔工具"
     elif not conv.get("md") or not Path(conv["md"]).exists():
         text_line = "轉寫快取已清除(或沒有轉寫):直接讀原件"
     else:
@@ -1167,8 +1180,7 @@ def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: l
         where = "(decision 不可填 skipped;歸本庫還是個人 WIKI 照背景說明與第 5 條判斷)" if scoped else "本庫(decision 不可填 skipped)"
         user += (f"- ⚠️ 使用者已確認這份要攝入{where},背景說明:{side['使用者補充']}\n"
                  f"  請把這個背景寫進頁面,讓日後讀的人知道它為什麼跟本庫有關\n")
-    dump = shlex.join((*tools_cmd, 'office-dump'))
-    if raw.suffix.lower() in DUMPERS:
+    if raw.suffix.lower() in DUMPERS and not no_scribe:
         user += (f"- 這是 Office 原件。doc2md 的轉寫會繁化人名(例如把「游」轉成「遊」)、看不到儲存格顏色與公式;"
                  f"要核對原文字形、顏色標註、公式時執行(照抄,不要改寫、不要串接其他指令):\n"
                  f"  {dump} {shlex.quote(str(raw))}\n")

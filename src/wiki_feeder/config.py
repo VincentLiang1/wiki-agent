@@ -427,8 +427,10 @@ class Config:
         for k in ("dir", "raw"):
             if not wiki.get(k):
                 raise ConfigError(L("設定檔 {path} 沒有 [wiki] {key}", path=path, key=k))
-        if not tools.get("doc2md"):
-            raise ConfigError(L("設定檔 {path} 沒有 [tools] doc2md(meeting-scribe 安裝資料夾裡的 doc2md)", path=path))
+        # [tools] doc2md 選填(使用者 2026-10-29:「scribe2md 是可以節省 TOKEN 不安裝也OK」):沒填 = 沒裝 scribe2md,
+        # PDF 與圖片攝入時直接讀原件、其餘留在待處理提醒(§4.8);使用者本人的設定永遠有
+        if "doc2md" in tools and not isinstance(tools["doc2md"], str):
+            raise ConfigError(L("設定檔 {path} 的 [tools] doc2md 要是路徑字串", path=path))
         if not inbox.get("icloud") and not inbox.get("onedrive"):
             raise ConfigError(L("設定檔 {path} 沒有任何收件匣([inbox] icloud 或 onedrive)", path=path))
         if not isinstance(inbox.get("icloud_restart", True), bool):
@@ -483,7 +485,7 @@ class Config:
             ingest_tools_cmd=INGEST_TOOLS_CMD,
             mail_from=mail.get("from", ""),
             mail_to=mail.get("to", ""),
-            doc2md_cmd=(tools["doc2md"],),
-            ffmpeg=tools.get("ffmpeg") or find_ffmpeg(Path(tools["doc2md"])),
+            doc2md_cmd=(tools["doc2md"],) if tools.get("doc2md") else (),
+            ffmpeg=tools.get("ffmpeg") or (find_ffmpeg(Path(tools["doc2md"])) if tools.get("doc2md") else ""),
             lang=lang,
         )

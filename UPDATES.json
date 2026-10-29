@@ -1,5 +1,13 @@
 [
  {
+  "source": "ae65b4e",
+  "date": "2026-10-29",
+  "needs_human": false,
+  "zh-Hant": "- scribe2md 改成選裝(它是省 token 用的):沒裝時 PDF、照片、Word／Excel／PowerPoint、EPUB、TIFF／BMP 攝入時由 Claude 直接讀(較花 token;Office 文件裡的圖讀不到);錄音、影片(以及舊版 .doc／.xls／.ppt、Outlook .msg、Windows 上的 HEIC)留在待處理資料夾、摘要信每天提醒一次「要裝 scribe2md 才會處理」,裝好後再跑一次安裝程式填路徑,下一輪自動處理。安裝程式找不到 scribe2md 時改問「有裝嗎?」,沒裝直接 Enter。已經裝好 scribe2md 的不必做任何事\n- 建庫提示詞裡「我的電腦裝了 doc2md 轉檔 Skill」那一條改成「二進位檔由 wiki-feeder 先轉、它說沒有轉寫的才直接讀原件」,只影響新建的知識庫",
+  "zh-Hans": "- scribe2md 改成选装(它是省 token 用的):没装时 PDF、照片、Word／Excel／PowerPoint、EPUB、TIFF／BMP 摄入时由 Claude 直接读(较花 token;Office 文件里的图读不到);录音、视频(以及旧版 .doc／.xls／.ppt、Outlook .msg、Windows 上的 HEIC)留在待处理文件夹、摘要邮件每天提醒一次「要装 scribe2md 才会处理」,装好后再跑一次安装程序填路径,下一轮自动处理。安装程序找不到 scribe2md 时改问「有装吗?」,没装直接 Enter。已经装好 scribe2md 的不必做任何事\n- 建库提示词里「我的电脑装了 doc2md 转换 Skill」那一条改成「二进制文件由 wiki-feeder 先转、它说没有转写的才直接读原件」,只影响新建的知识库",
+  "en": "- scribe2md is now optional (it is there to save tokens): without it, Claude reads PDFs, photos, Word/Excel/PowerPoint, EPUB and TIFF/BMP directly at ingest time (using more tokens; pictures inside Office files are not seen); recordings and video (and old .doc/.xls/.ppt, Outlook .msg, HEIC on Windows) wait in the pending folder and the daily summary reminds you once a day that scribe2md is needed; install it, run the installer again to give the path, and the next round handles them. When the installer cannot find scribe2md it now asks whether it is installed; just press Enter if not. If you already have scribe2md, nothing to do\n- In the knowledge-base setup prompt, the line \"my computer has the doc2md conversion Skill\" became \"binary files are converted first by wiki-feeder; read the original only when it says there is no transcription\"; affects newly created knowledge bases only"
+ },
+ {
   "source": "59ae6cb",
   "date": "2026-10-29",
   "needs_human": false,

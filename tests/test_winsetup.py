@@ -67,6 +67,27 @@ def test_mail_can_be_left_empty(tmp_path):
     assert cfg.mail_from == ""
 
 
+def test_scribe2md_is_optional_in_the_config(tmp_path):
+    """scribe2md 選裝(使用者 2026-10-29):沒裝就不寫 [tools] doc2md,設定讀得了、轉寫指令是空的。"""
+    m = _mod()
+    text = m.render_config({**ANSWERS, "doc2md": ""})
+    assert "doc2md =" not in text and "[tools]" in text
+    cfg = m.write_config(text, tmp_path)
+    assert cfg.doc2md_cmd == () and cfg.ffmpeg == ""
+
+
+def test_transcription_question_lets_the_friend_skip_scribe2md(monkeypatch, tmp_path):
+    """找不到 scribe2md 時問「有裝嗎?」,直接 Enter(預設 n)就跳過;找得到就照舊試轉、不問。"""
+    m = _mod()
+    monkeypatch.setattr(m, "find_doc2md", lambda roots: [])
+    prompts = []
+    monkeypatch.setattr("builtins.input", lambda p="": prompts.append(p) or "")
+    assert m.ask_doc2md(tmp_path) == "" and len(prompts) == 1 and "scribe2md" in prompts[0]
+    monkeypatch.setattr(m, "find_doc2md", lambda roots: [tmp_path / "doc2md.exe"])
+    monkeypatch.setattr(m, "check_doc2md", lambda exe: (True, "ok"))
+    assert m.ask_doc2md(tmp_path) == str(tmp_path / "doc2md.exe")
+
+
 def test_path_with_a_single_quote_is_refused():
     """TOML 字面字串跳脫不了單引號:寫進去整份設定檔就讀不了,所以當場請朋友改資料夾名。"""
     with pytest.raises(ValueError):

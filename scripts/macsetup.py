@@ -104,13 +104,18 @@ def ask_inbox(home: Path) -> str:
 
 
 def ask_doc2md(home: Path) -> str:
+    """【轉寫】scribe2md 選裝(§4.8):App 沒裝就問有沒有裝,沒裝回空字串;路徑問答裡打 - 也是先不裝。"""
     exe = scribe2md_doc2md(home)
+    if not exe.is_file() and not yes(L(ws.SCRIBE2MD_QUESTION), default=False):
+        return ""
     while True:
         if not exe.is_file():
             say(L("【轉寫】找不到 scribe2md 的 doc2md({path})。", path=exe))
             say(L("  請先到 {url} 下載 scribe2md-mac.zip、解壓縮,把 App 拖進「應用程式」、打開一次", url=SCRIBE2MD))
             say(L("  (第一次打開會自己裝好),關掉它再回到這裡。"))
-            v = input(L("  裝好了按 Enter;doc2md 在別的地方就貼上路徑:")).strip().strip("'\"").replace("\\ ", " ")
+            v = input(L("  裝好了按 Enter;doc2md 在別的地方就貼上路徑;打 - 先不裝 scribe2md:")).strip().strip("'\"").replace("\\ ", " ")
+            if v == "-":
+                return ""
             if v:
                 exe = Path(v).expanduser()
             continue
@@ -119,7 +124,9 @@ def ask_doc2md(home: Path) -> str:
         say(L("  {path}:{msg}", path=exe, msg=msg))
         if ok:
             return str(exe)
-        v = input(L("  換一個路徑(直接按 Enter 再試一次):")).strip().strip("'\"").replace("\\ ", " ")
+        v = input(L("  換一個路徑(直接按 Enter 再試一次;打 - 先不裝 scribe2md):")).strip().strip("'\"").replace("\\ ", " ")
+        if v == "-":
+            return ""
         if v:
             exe = Path(v).expanduser()
 

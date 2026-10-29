@@ -9,7 +9,7 @@
 wiki-agent is a small background program on your computer that maintains a personal knowledge base for you, following Andrej Karpathy's "LLM Wiki" pattern (new to LLM Wiki? See [What is an LLM Wiki?](What-is-LLM-Wiki.md)):
 
 1. On your iPhone, drop a voice memo, whiteboard photo, scanned document or Office file into the `_WikiBox` folder on iCloud Drive
-2. Every minute, wiki-agent on your computer checks that folder: it moves the file into your originals folder `Raw_Sources`, and turns recordings and documents into text first (using [scribe2md](https://github.com/VincentLiang1/scribe2md))
+2. Every minute, wiki-agent on your computer checks that folder: it moves the file into your originals folder `Raw_Sources`, and turns recordings and documents into text first (using [scribe2md](https://github.com/VincentLiang1/scribe2md), optional: without it Claude reads documents and photos directly, and recordings and video wait until it is installed)
 3. It asks *your own* Claude Code to compile the material into `WIKI/Wiki_Pages/` according to the rules in your wiki's `CLAUDE.md`: creating a new page or adding to an existing one, and updating the table of contents `index.md`
 4. Only after the program has checked the result is it recorded as a version (git, managed by the program — you don't need to learn it). A daily summary email tells you what was processed
 
@@ -24,7 +24,7 @@ You do just two things: **drop files** and **read the summary**. If something is
 | Computer | Apple-silicon Mac (OS version as required by scribe2md) | Windows 10/11 |
 | Phone | iPhone (files travel through iCloud Drive) | iPhone + iCloud for Windows on the PC |
 | Claude | Your own Claude subscription (Pro or Max), with Claude Code installed and signed in | Same |
-| Transcription | Mac version of [scribe2md](https://github.com/VincentLiang1/scribe2md/releases/latest) | Windows version of scribe2md |
+| Transcription (optional) | Mac version of [scribe2md](https://github.com/VincentLiang1/scribe2md/releases/latest) | Windows version of scribe2md |
 | Summary email (optional) | Gmail + an app password | Same |
 
 The knowledge base layout: one folder containing `WIKI/` (the knowledge base itself, with the rules file `CLAUDE.md` and the notes) and `Raw_Sources/` (the originals) side by side; see "What does the knowledge base look like?" in [What is an LLM Wiki?](What-is-LLM-Wiki.md) for a diagram. **Don't have one yet? No problem**: just press Enter during setup and the installer creates the folders and asks Claude to write a `CLAUDE.md`. An existing knowledge base is used as-is and never overwritten.
@@ -37,7 +37,7 @@ Full step-by-step guides: **[Mac-Install-Guide.md](Mac-Install-Guide.md)** and *
 
 1. Make sure iCloud Drive is turned on (System Settings → your name → iCloud → iCloud Drive)
 2. Install Claude Code and sign in with your Claude account: in Terminal run `curl -fsSL https://claude.ai/install.sh | bash`, then `claude`
-3. Download `scribe2md-mac.zip` from the [scribe2md releases](https://github.com/VincentLiang1/scribe2md/releases/latest), drag the app into Applications and open it once so it can set itself up
+3. (Optional) Download `scribe2md-mac.zip` from the [scribe2md releases](https://github.com/VincentLiang1/scribe2md/releases/latest), drag the app into Applications and open it once so it can set itself up
 4. (Optional) Create a Gmail app password at <https://myaccount.google.com/apppasswords> for the summary email
 5. Download [wiki-agent-mac.zip](https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip) (signed and notarized), unzip it, drag wiki-agent into Applications and double-click it there. A Terminal window opens: if macOS offers to install the command line developer tools, click **Install** (not "Get Xcode"). The installer then sets up uv, puts the program in `~/wiki-agent` and asks a series of questions — each has a default, so you can mostly just press Enter
 6. **Allow reading (required)**: at the end it test-reads in the background and macOS asks whether “wiki-agent” may access files in iCloud Drive (and in Documents/Desktop if your knowledge base is there) — click **Allow**
@@ -49,7 +49,7 @@ Alternative to steps 5–6: paste this line into Terminal (then you add an execu
 
 **Windows**
 
-1. Install iCloud for Windows, Claude Code (signed in) and the Windows version of scribe2md
+1. Install iCloud for Windows, Claude Code (signed in) and, optionally, the Windows version of scribe2md
 2. (Optional) Create a Gmail app password for the summary email
 3. Download `Install.bat` from this repository and double-click it. If Windows SmartScreen warns you, choose **More info → Run anyway**. It installs Git and uv if needed, puts the program in `C:\wiki-feeder` (no GitHub account needed) and asks the same questions (the screens before the questions follow your Windows display language)
 

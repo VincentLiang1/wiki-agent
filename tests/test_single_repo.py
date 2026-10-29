@@ -153,6 +153,47 @@ def test_prompt_has_no_personal_wiki_company_words_or_handouts(single, monkeypat
     assert "scope" not in props and "personal_group" not in props
 
 
+def test_pdf_without_scribe2md_is_ingested_by_reading_the_original(single, monkeypatch):
+    """沒裝 scribe2md(§4.8):PDF 不轉,攝入提示叫 claude 直接讀原件、不要去找轉檔工具(不是「轉寫快取已清除」),這筆照常攝入。"""
+    c = replace(single["cfg"], doc2md_cmd=())
+    seen = []
+    real_run = __import__("subprocess").run
+
+    def spy(cmd, *a, **k):
+        if "-p" in cmd:
+            seen.append(k.get("input", ""))
+        return real_run(cmd, *a, **k)
+
+    monkeypatch.setattr("wiki_feeder.ingest.subprocess.run", spy)
+    (c.icloud_inbox / "scan.pdf").write_bytes(b"%PDF-1.4 x")
+    assert collect(c).ok and convert(c).ok
+    r = ingest(c)
+    assert r.ok, r.alerts
+    (prompt,) = seen
+    assert "沒有裝 scribe2md" in prompt and "不要去找或執行任何轉檔工具" in prompt and "轉寫快取已清除" not in prompt
+
+
+def test_office_file_without_scribe2md_is_read_with_office_dump(single, monkeypatch):
+    """沒裝 scribe2md 的 Word 檔:攝入提示叫 claude 用 office-dump 傾印來讀(不是直接讀二進位檔),這筆照常攝入。"""
+    c = replace(single["cfg"], doc2md_cmd=())
+    seen = []
+    real_run = __import__("subprocess").run
+
+    def spy(cmd, *a, **k):
+        if "-p" in cmd:
+            seen.append(k.get("input", ""))
+        return real_run(cmd, *a, **k)
+
+    monkeypatch.setattr("wiki_feeder.ingest.subprocess.run", spy)
+    (c.icloud_inbox / "memo.docx").write_bytes(b"PK")
+    assert collect(c).ok and convert(c).ok
+    r = ingest(c)
+    assert r.ok, r.alerts
+    (prompt,) = seen
+    assert "沒有裝 scribe2md" in prompt and "office-dump" in prompt and "memo.docx" in prompt
+    assert "doc2md 的轉寫會繁化人名" not in prompt
+
+
 def test_manual_edits_are_snapshotted_before_the_next_ingest(single):
     """朋友用桌面版手動改了頁:攝入前另存一筆快照,不混進攝入的 commit,也不因「庫不乾淨」每輪略過。"""
     c = single["cfg"]

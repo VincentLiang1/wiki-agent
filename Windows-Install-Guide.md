@@ -22,7 +22,9 @@ Follow the steps in order; it takes about 30–40 minutes (mostly waiting for do
 3. When it finishes, **close this window and open a new PowerShell**, type `claude` and press Enter. When asked for a sign-in method, choose **Claude account (subscription)**. Your browser opens the Claude sign-in page; sign in with your own account and click **Authorize**
 4. Back in PowerShell, when you see a prompt where you can type, you're signed in. Type `/exit` and press Enter to leave
 
-## 3. Install scribe2md (turns recordings and documents into text)
+## 3. (Optional) Install scribe2md (turns recordings and documents into text)
+
+wiki-agent works without it: PDFs, photos, Word/Excel/PowerPoint and EPUB are read directly by Claude at ingest time (using more tokens; pictures inside Office files are not seen). **Recordings and video are only processed with scribe2md** (so are old .doc/.xls/.ppt files and Outlook .msg): without it those files wait in the pending folder and the daily summary reminds you once a day; install it later, run the installer again and answer **n** to keeping the current settings, and the next round handles them. Step 7 (sharing voiceprints and the name-correction table) also needs it.
 
 1. In your browser, open <https://github.com/VincentLiang1/scribe2md/releases/latest>. Under **Assets** near the bottom of the page, click **scribe2md-win.zip** to download it
 2. In your Downloads folder, right-click the zip → **Extract All**, and extract it somewhere easy to remember (for example `C:\scribe2md`)
@@ -71,7 +73,7 @@ Every question ends with `(Enter = …)` showing the default, and yes/no questio
 | `… has no CLAUDE.md yet. Ask Claude to create the rules file and table of contents?` | (Asked only when there is no `CLAUDE.md` yet) Enter. Claude spends 1–3 minutes writing `CLAUDE.md` and the table of contents `index.md` in the language you picked, then describes in two or three sentences what it created |
 | `Add a section at the end of CLAUDE.md saying "version history is managed by wiki-feeder; don't run git yourself"?` | Enter (yes). Your existing rules are not changed; one section is added at the end |
 | `[Knowledge base name] Name shown in the summary email` | Press Enter (`Knowledge base`), or type a name you like |
-| `[Transcription] Found these meeting-scribe doc2md installs:` | Press Enter to pick the first one. It test-converts a small file; when it says `works`, you're through. If it can't find scribe2md, paste the full path of `.venv\Scripts\doc2md.exe` inside the folder from step 3 |
+| `[Transcription] Found these meeting-scribe doc2md installs:` | Press Enter to pick the first one. It test-converts a small file; when it says `works`, you're through. If none is found it asks `[Transcription] Is scribe2md installed?`: **press Enter (n) to skip** if you didn't install it; **y** and paste the full path of `.venv\Scripts\doc2md.exe` inside the folder from step 3 if you did |
 | `[Summary email] …` then `Sending Gmail address` | Defaults to the Gmail you signed in to Claude with; type `-` if you don't want emails |
 | `Recipient address` | Enter (send to yourself) |
 | `Enter the Gmail app password (again)?` | Enter |
@@ -93,7 +95,7 @@ If nothing happens, check the log: paste `%LOCALAPPDATA%\wiki-feeder\logs` into 
 
 ## 7. (Optional) Share voiceprints and the name-correction table between phone and computer
 
-Speakers you have named in the scribe2md iPhone app or in scribe2md on the PC are then recognized on the other device too. This is a scribe2md feature; wiki-agent needs no setup. Just choose **the same folder in iCloud Drive** on every device.
+Speakers you have named in the scribe2md iPhone app or in scribe2md on the PC are then recognized on the other device too. This is a scribe2md feature (it needs the scribe2md from step 3); wiki-agent needs no setup. Just choose **the same folder in iCloud Drive** on every device.
 
 1. Open **iCloud Drive** in File Explorer and create a folder `_ScribeSync` ("scribe2md sync": voiceprints and, later, the name-correction table) at the top level. ⚠️ **Do not put it inside `_WikiBox`** (files there are sent into the knowledge base, and the voiceprints and real names would go with them)
 2. Right-click `_ScribeSync` → **Always keep on this device** (skip this if the option isn't there)

@@ -7,7 +7,7 @@
 wiki-agent 是一支在你電腦上常駐的小程式,替你照 Andrej Karpathy 的「LLM Wiki」做法維護個人知識庫(沒聽過 LLM Wiki?看〈[什麼是 LLM Wiki](What-is-LLM-Wiki.zh-TW.md)〉):
 
 1. 你在 iPhone 上把錄音、白板照片、掃描件、Office 檔丟進 iCloud 雲碟的 `_WikiBox` 資料夾
-2. 電腦上的 wiki-agent 每分鐘看一次:把檔案收進原件資料夾 `Raw_Sources`,錄音與文件先轉成文字(用 [scribe2md](https://github.com/VincentLiang1/scribe2md))
+2. 電腦上的 wiki-agent 每分鐘看一次:把檔案收進原件資料夾 `Raw_Sources`,錄音與文件先轉成文字(用 [scribe2md](https://github.com/VincentLiang1/scribe2md),選裝:沒裝時文件與照片由 Claude 直接讀,錄音與影片要裝了才處理)
 3. 用你自己的 Claude Code,照你知識庫裡的 `CLAUDE.md` 規則把它編進 `WIKI/Wiki_Pages/`:新建頁面或補進既有的頁、更新目錄 `index.md`
 4. 程式檢查過才記成一個版本(git,由程式代管,你不用學)。每天寄一封摘要信告訴你處理了什麼
 
@@ -22,7 +22,7 @@ wiki-agent 是一支在你電腦上常駐的小程式,替你照 Andrej Karpathy 
 | 電腦 | Apple 晶片的 Mac(版本需求照 scribe2md 的說明) | Windows 10／11 |
 | 手機 | iPhone(用 iCloud 雲碟傳檔) | iPhone + 電腦裝 iCloud for Windows |
 | Claude | 自己的 Claude 訂閱(Pro 或 Max),裝好 Claude Code 並登入 | 同左 |
-| 轉寫 | [scribe2md](https://github.com/VincentLiang1/scribe2md/releases/latest) 的 Mac 版 | scribe2md 的 Windows 版 |
+| 轉寫(選裝) | [scribe2md](https://github.com/VincentLiang1/scribe2md/releases/latest) 的 Mac 版 | scribe2md 的 Windows 版 |
 | 摘要信(可不設) | Gmail + 應用程式密碼 | 同左 |
 
 知識庫的擺法:一個資料夾底下並排 `WIKI/`(知識庫本體,裡面有規則檔 `CLAUDE.md` 與筆記)與 `Raw_Sources/`(原始資料),圖解見〈[什麼是 LLM Wiki](What-is-LLM-Wiki.zh-TW.md)〉的「知識庫長什麼樣子?」。**還沒有也沒關係**:安裝時直接按 Enter,程式會幫你建好資料夾,並請 Claude 寫好 `CLAUDE.md`;已經有的知識庫照原本的用,不會覆蓋。

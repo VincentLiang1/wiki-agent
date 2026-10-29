@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import re
 from pathlib import Path
 
 import pytest
@@ -60,13 +61,21 @@ def test_config_saved_with_a_bom_is_read(tmp_path):
     (GOOD.replace("[mail]", "[mial]"), "[mial]"),                              # 段落拼錯:寄信就安靜地沒設定
     (GOOD.replace("icloud =", "iclod ="), "[inbox] iclod"),                     # 收件匣拼錯:檔案一直沒人收
     (GOOD.replace("dir = ", "# dir = "), "[wiki] dir"),
-    (GOOD.replace("doc2md = ", "# doc2md = "), "doc2md"),
     (GOOD.replace("icloud = ", "# icloud = "), "收件匣"),
     ("[wiki\n", "讀不了"),
 ])
 def test_bad_config_fails_loudly(tmp_path, text, said):
     with pytest.raises(ConfigError, match=said.replace("[", r"\[").replace("]", r"\]")):
         Config.from_file(_write(tmp_path, text), tmp_path / "state")
+
+
+def test_doc2md_is_optional(tmp_path):
+    """[tools] doc2md 沒填 = 沒裝 scribe2md(朋友版選裝,使用者 2026-10-29,§4.8):讀得了,轉寫指令與 ffmpeg 都是空的;
+    填了不是字串才報錯。"""
+    c = Config.from_file(_write(tmp_path, GOOD.replace("doc2md = ", "# doc2md = ")), tmp_path / "state")
+    assert c.doc2md_cmd == () and c.ffmpeg == ""
+    with pytest.raises(ConfigError, match="doc2md"):
+        Config.from_file(_write(tmp_path, re.sub(r"doc2md = .*", "doc2md = 3", GOOD)), tmp_path / "state")
 
 
 def test_state_dir_per_platform(tmp_path):

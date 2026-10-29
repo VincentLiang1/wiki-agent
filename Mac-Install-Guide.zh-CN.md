@@ -23,7 +23,9 @@
 2. 再打 `claude` 按 Enter。第一次会问主题颜色(按 Enter 就好),接着选登录方式——选 **Claude 账号(订阅)** 那一项,浏览器会自动打开 Claude 的登录页,登录你自己的账号、按**授权**
 3. 回到终端,看到可以打字的提示就是登录好了。打 `/exit` 按 Enter 离开
 
-## 3. 装 scribe2md(把录音、文档转成文字)
+## 3. (选做)装 scribe2md(把录音、文档转成文字)
+
+不装也能用:PDF、照片、Word／Excel／PowerPoint、EPUB 这些摄入时由 Claude 直接读(较花 token;Office 文档里的图读不到)。**录音、视频要有 scribe2md 才会处理**(旧版 .doc／.xls／.ppt、Outlook 的 .msg 也要):没装时这些文件留在待处理文件夹、摘要信每天提醒一次,之后装了再跑一次安装程序、问「沿用这份(不重填)?」时回 n 重填,下一轮自动处理。第 7 节(手机与电脑共用声纹与名词对照表)也要有它。
 
 1. 用浏览器打开 <https://github.com/VincentLiang1/scribe2md/releases/latest>,在页面下方 **Assets** 点 **scribe2md-mac.zip** 下载
 2. 打开「下载项目」文件夹,双击 zip 解压缩,把解出来的 App **拖进「应用程序」文件夹**
@@ -80,7 +82,7 @@
 | 要请 Claude 建好规则文件与目录索引吗? | (新的知识库才会问)Enter。Claude 会花 1～3 分钟写好 `CLAUDE.md` 与目录 `index.md`,用的是你的 Claude 额度 |
 | 要在 CLAUDE.md 最后补上「版本记录由 wiki-feeder 代管」吗? | Enter(要)。原本的规则不会被改,只在最后加一节 |
 | 【知识库名称】 | 摘要信上显示的名字,Enter 或打一个你喜欢的 |
-| 【转写】 | 自动找到第 3 步装的 scribe2md,试转一个小文件,看到「可以用」就过了 |
+| 【转写】 | 自动找到第 3 步装的 scribe2md,试转一个小文件,看到「可以用」就过了。没装会问「有装 scribe2md 吗?」:**直接 Enter(默认 n)跳过** |
 | 【摘要信】寄件的 Gmail | 默认是你 Claude 登录的 Gmail;要用别的就打上去;不寄信就输入 `-` |
 | Gmail 的应用专用密码 | 粘贴第 4 步那 16 个字(**打字时画面不会显示**,粘贴后直接按 Enter)。接着会寄一封测试信,手机收到就对了 |
 | 读得到收件箱吗 | 自动。看到 `iCloud	可读` 就对了 |
@@ -106,7 +108,7 @@
 
 ## 7. (选做)手机与电脑共用声纹与名词对照表
 
-在手机 scribe2md App、Mac 的 scribe2md 命名过的人,另一台也认得。这是 scribe2md 自己的功能,wiki-agent 不用设置;每一台都选**同一个 iCloud 云盘里的文件夹**就好。
+在手机 scribe2md App、Mac 的 scribe2md 命名过的人,另一台也认得。这是 scribe2md 自己的功能(要有第 3 节装的 scribe2md),wiki-agent 不用设置;每一台都选**同一个 iCloud 云盘里的文件夹**就好。
 
 1. Finder 打开 **iCloud 云盘**,在最上层添加文件夹 `_ScribeSync`(右键 → **添加文件夹**)。⚠️ **不可以放在 `_WikiBox` 里面**(那里的文件会被送进知识库,声纹与真名就跟着进去)
 2. 对 `_ScribeSync` 按右键 → **永远保留在此设备上**(没有这一项就跳过)

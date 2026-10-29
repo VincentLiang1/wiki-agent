@@ -72,7 +72,9 @@ def render_config(a: dict) -> str:
         lines += ["git_outside = true", f"git_outside_reason = {toml_text(a['git_outside_reason'])}"]
     lines += [
               "", "[mail]", f"from = {toml_text(a.get('mail_from', ''))}", f"to = {toml_text(a.get('mail_to', ''))}",
-              "", "[tools]", f"doc2md = {toml_path(a['doc2md'])}"]
+              "", "[tools]"]
+    if a.get("doc2md"):          # scribe2md 選裝(§4.8):沒裝就不寫,程式照「沒裝」處理
+        lines.append(f"doc2md = {toml_path(a['doc2md'])}")
     if a.get("claude"):
         lines.append(f"claude = {toml_path(a['claude'])}")
     return "\n".join(lines) + "\n"
@@ -400,10 +402,10 @@ HANDOUT_PROMPT = N_("""請根據 Andrej Karpathy 的 LLM Wiki 設計模式,在�
   我新丟的檔案一律先進 {pending}\\;你攝入前要先判讀內容歸屬,把檔案 mv 到 {raw} 底下
   對應的主題子目錄(子目錄命名對齊 Wiki_Pages\\ 的群組)再開始編頁,頁面裡標的來源路徑寫
   搬移後的位置,攝入完 {pending}\\ 必須是空的。把這套分流流程明文寫進 CLAUDE.md
-- 我的電腦裝了 doc2md 這個轉檔 Skill。{raw}{pending}\\ 裡若有 PDF、Word、PowerPoint、
-  Excel、掃描件、圖片、郵件、錄音錄影或 EPUB 電子書,攝入前一律先用它轉成 Markdown 再讀,
-  不要直接讀二進位檔;轉出來的 md 放這個資料夾底下的 .md_cache\\(中間產物),
-  不要寫回 {raw}。這條也要寫進 CLAUDE.md
+- {raw}{pending}\\ 裡的 PDF、Word、PowerPoint、Excel、掃描件、圖片、郵件、錄音錄影這類
+  二進位檔,由另一支程式(wiki-feeder)先轉成 Markdown,攝入時會告訴你轉好的檔在哪;
+  它說沒有轉寫的才直接讀原件。你不必自己安裝或執行任何轉檔工具,也不要把轉出來的檔寫回 {raw}。
+  這條也要寫進 CLAUDE.md
 - Wiki_Pages\\ 放你編譯出來的 Markdown 筆記,含一個 index.md 目錄索引
 - 根目錄寫一份 CLAUDE.md,定義你的角色(知識編譯器)、攝入/查詢/健檢的工作流程、繁體中文與 Markdown 的品質標準
 - 我不使用 Obsidian。所有頁面互連(含 index.md)一律用標準 Markdown 連結 [名稱](路徑.md),
@@ -773,9 +775,17 @@ def ask_library(default_new: str, existing: Path | None, claude: Path | None,
     return w, r, None
 
 
+# scribe2md 選裝(使用者 2026-10-29:「scribe2md 是可以節省 TOKEN 不安裝也OK」,spec §4.8):找不到才問;兩個平台共用
+SCRIBE2MD_QUESTION = N_("【轉寫】有裝 scribe2md 嗎?(選裝:錄音、影片要靠它才會處理;文件與圖片不裝也能讀,只是較花 token、Office 文件裡的圖讀不到。之後要裝,再跑一次安裝就好)")
+
+
 def ask_doc2md(home: Path) -> str:
+    """【轉寫】找得到 scribe2md 就照舊試轉;找不到就問有沒有裝,沒裝回空字串(錄音、影片要裝了才處理,
+    文件與圖片直接讀或由程式轉,§4.8);試轉不過也可以先不裝,之後再跑一次安裝補上。"""
     roots = [home, home / "Desktop", home / "Downloads", home / "Documents", Path("C:/")]
     found = find_doc2md([r for r in roots if r.is_dir()])
+    if not found and not yes(L(SCRIBE2MD_QUESTION), default=False):
+        return ""
     while True:
         if found:
             say(L("【轉寫】找到這些 meeting-scribe 的 doc2md:"))
@@ -794,6 +804,8 @@ def ask_doc2md(home: Path) -> str:
         say(L("  {path}:{msg}", path=exe, msg=msg))
         if ok:
             return str(exe)
+        if not yes(L("  再試一次?(n = 先不裝 scribe2md,之後再跑一次安裝補上)")):
+            return ""
 
 
 def ask_mail(default: str = "") -> tuple[str, str]:

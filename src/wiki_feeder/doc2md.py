@@ -13,7 +13,9 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .config import PLATFORM
 from .i18n import L
+from .office import DUMPERS as OFFICE_DUMP_EXTS
 
 TEXT_EXTS = {".md", ".txt"}  # 本來就是文字:不轉,直接攝入
 AUDIO_EXTS = {".m4a", ".mp3", ".wav", ".mp4", ".mov", ".avi"}
@@ -24,6 +26,24 @@ DOC_EXTS = {
     ".vsdx", ".msg", ".eml",
 }
 SIDECAR_EXT = ".feeder.json"
+# 沒裝 scribe2md(朋友版選裝,spec §4.8)時不靠它也能處理的格式(使用者 2026-10-29:「應該可以才對,只是多一點 TOKEN」):
+# - 攝入的 claude 直接讀:PDF、一般圖片(Claude Code 的 Read 讀得了)、本來就是文字的 CSV／HTML、.eml(MIME 純文字)
+# - Office 新格式(OFFICE_DUMP_EXTS):攝入時用 office-dump(程式自己的 python-docx／openpyxl／python-pptx)讀,少的只有文件裡的圖
+# - TIFF／BMP:Claude 的圖片輸入只收 JPEG／PNG／GIF／WebP,程式用 Pillow 轉成 JPG 副本;HEIC 在 Mac 用系統的 sips 轉,
+#   Windows 要 pillow-heif(使用者 2026-10-29 選不裝)
+# - EPUB:壓縮的 XHTML,程式解開抽純文字
+# 其餘(錄音、影片、舊版 .doc／.xls／.ppt、Outlook .msg)要等裝了 scribe2md 才處理
+DIRECT_READ_EXTS = {".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".csv", ".html", ".htm", ".eml"}
+IMAGE_CONVERT_EXTS = {".tif", ".tiff", ".bmp"}
+HEIC_EXTS = {".heic"}
+EPUB_EXTS = {".epub"}
+
+
+def handled_without_scribe2md(path: Path, platform: str = PLATFORM) -> bool:
+    """沒裝 scribe2md 時這個檔能不能處理(上面四類;HEIC 只有 Mac)。錄音、影片一律不能:Claude 沒有聽覺。"""
+    ext = path.suffix.lower()
+    return (ext in DIRECT_READ_EXTS or ext in OFFICE_DUMP_EXTS or ext in IMAGE_CONVERT_EXTS or ext in EPUB_EXTS
+            or (ext in HEIC_EXTS and platform == "darwin"))
 
 
 class ConvertError(Exception):

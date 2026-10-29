@@ -228,6 +228,106 @@ def test_continuous_recording_has_no_gaps(ccfg, tmp_path):
     assert _side(p)["長段空白"] == []
 
 
+def test_without_scribe2md_pdf_and_images_are_read_directly(ccfg):
+    """朋友版沒裝 scribe2md(使用者 2026-10-29:「scribe2md 是可以節省 TOKEN 不安裝也OK」,§4.8):PDF 與圖片記為已轉、
+    md 空、sidecar 標「直接讀原件」,不呼叫 doc2md;攝入時 claude 直接讀原件。"""
+    c = replace(ccfg, doc2md_cmd=())
+    pdf = _drop(c, "scan.pdf", b"%PDF-1.4 x")
+    jpg = _drop(c, "photo.jpg", b"\xff\xd8\xff")
+    r = convert(c)
+    assert r.ok and sorted(r.done) == ["photo.jpg", "scan.pdf"]
+    assert _side(pdf)["md"] is None and _side(pdf)["直接讀原件"] and _side(jpg)["類型"] == "文件"
+    assert _calls(c) == []
+    with Ledger(c.ledger_path) as ledger:
+        assert ledger.pending_conversions(c.convert_max_attempts) == []
+
+
+def test_without_scribe2md_office_and_eml_are_read_directly(ccfg):
+    """Office 新格式:記為已轉、sidecar 說攝入時用 office-dump(程式自己的 python-docx 等);.eml 是純文字直接讀
+    (使用者 2026-10-29:「應該可以才對,只是多一點 TOKEN」)。"""
+    c = replace(ccfg, doc2md_cmd=())
+    docx = _drop(c, "memo.docx", b"d")
+    eml = _drop(c, "mail.eml", b"Subject: x\n\nhi")
+    r = convert(c)
+    assert r.ok and sorted(r.done) == ["mail.eml", "memo.docx"] and _calls(c) == []
+    assert "office-dump" in _side(docx)["直接讀原件"] and _side(docx)["md"] is None
+    assert _side(eml)["直接讀原件"] and _side(eml)["md"] is None
+
+
+def test_without_scribe2md_images_and_epub_are_converted_by_the_program(ccfg):
+    """TIFF／BMP 用 Pillow 轉成 JPG 副本(Claude 的圖片輸入只收 JPEG／PNG／GIF／WebP)、EPUB 抽成純文字,都放轉寫快取、
+    記成處理紀錄的 md 路徑(7 天後跟著清);EPUB 照 spine 順序。"""
+    from io import BytesIO
+    from zipfile import ZipFile
+
+    from PIL import Image
+
+    c = replace(ccfg, doc2md_cmd=())
+    buf = BytesIO()
+    Image.new("RGB", (8, 8), (200, 30, 30)).save(buf, "BMP")
+    bmp = _drop(c, "scan.bmp", buf.getvalue())
+    buf = BytesIO()
+    Image.new("RGB", (8, 8), (30, 200, 30)).save(buf, "TIFF")
+    tif = _drop(c, "page.tif", buf.getvalue())
+    buf = BytesIO()
+    with ZipFile(buf, "w") as z:
+        z.writestr("META-INF/container.xml", '<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>')
+        z.writestr("OEBPS/content.opf", '<package><manifest><item id="b" href="b.xhtml"/><item id="a" href="a.xhtml"/></manifest>'
+                   '<spine><itemref idref="b"/><itemref idref="a"/></spine></package>')
+        z.writestr("OEBPS/a.xhtml", "<html><body><p>第二章 結論</p><script>x()</script></body></html>")
+        z.writestr("OEBPS/b.xhtml", "<html><body><h1>第一章</h1><p>開場白</p></body></html>")
+    epub = _drop(c, "book.epub", buf.getvalue())
+    r = convert(c)
+    assert r.ok and sorted(r.done) == ["book.epub", "page.tif", "scan.bmp"] and _calls(c) == []
+    for p in (bmp, tif):
+        jpg = Path(_side(p)["替代檔"])
+        assert jpg.parent == c.md_cache and jpg.suffix == ".jpg" and _side(p)["md"] is None
+        with Image.open(jpg) as im:
+            assert im.format == "JPEG" and im.size == (8, 8)
+    text = Path(_side(epub)["md"]).read_text(encoding="utf-8")
+    assert text.index("第一章") < text.index("開場白") < text.index("第二章 結論") and "x()" not in text
+    with Ledger(c.ledger_path) as ledger:
+        assert ledger.conversion(sha256_of(bmp))[2] == _side(bmp)["替代檔"]     # 副本記成 md 路徑:7 天後清快取時一起刪
+        assert ledger.pending_conversions(c.convert_max_attempts) == []
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="HEIC 只有 Mac 用內建的 sips 轉;Windows 要 pillow-heif,使用者選不裝")
+def test_without_scribe2md_heic_is_converted_with_sips_on_mac(ccfg, tmp_path):
+    import subprocess
+
+    from PIL import Image
+
+    png = tmp_path / "x.png"
+    Image.new("RGB", (8, 8), (10, 10, 200)).save(png)
+    heic = tmp_path / "x.heic"
+    subprocess.run(["sips", "-s", "format", "heic", str(png), "--out", str(heic)], check=True, capture_output=True)
+    c = replace(ccfg, doc2md_cmd=())
+    p = _drop(c, "photo.heic", heic.read_bytes())
+    assert convert(c).done == ["photo.heic"]
+    with Image.open(_side(p)["替代檔"]) as im:
+        assert im.format == "JPEG"
+    from wiki_feeder.doc2md import handled_without_scribe2md
+    assert not handled_without_scribe2md(Path("a.heic"), platform="win32")     # Windows 沒有 sips:留著提醒
+
+
+def test_without_scribe2md_audio_and_old_office_wait_without_counting_as_failures(ccfg):
+    """錄音、舊版 .doc、Outlook .msg 留在待處理:不記處理紀錄、不扣重試次數(跑滿 convert_max_attempts 輪也不會
+    「已停止重試」),每輪同一則固定警示;裝好 scribe2md 的下一輪照常轉,沒有要解除的狀態。"""
+    c = replace(ccfg, doc2md_cmd=())
+    _drop(c, "talk.m4a", b"a")
+    _drop(c, "memo.doc", b"d")
+    first = convert(c)
+    assert first.failed == [] and first.done == [] and len(first.alerts) == 1 and "scribe2md" in first.alerts[0]
+    assert "memo.doc" in first.alerts[0] and "talk.m4a" in first.alerts[0]
+    for _ in range(c.convert_max_attempts):
+        assert convert(c).alerts == first.alerts                 # 每輪同一句,全文去重後一天一封
+    with Ledger(c.ledger_path) as ledger:
+        assert {Path(d).name for _, d in ledger.pending_conversions(c.convert_max_attempts)} == {"memo.doc", "talk.m4a"}
+        assert ledger.stuck_conversions(c.convert_max_attempts) == []
+    r = convert(ccfg)                                             # 裝好 scribe2md、重跑安裝把路徑寫進設定檔之後
+    assert r.ok and sorted(r.done) == ["memo.doc", "talk.m4a"] and len(_calls(ccfg)) == 2
+
+
 def test_sidecars_skipped_unsupported_flagged(ccfg):
     _drop(ccfg, "t_錄音.json", b'{"x": 1}')
     p = _drop(ccfg, "奇怪.xyz", b"???")

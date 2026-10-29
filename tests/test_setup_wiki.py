@@ -134,14 +134,14 @@ def test_wikilink_check_looks_at_pages_not_the_rule_that_forbids_it(tmp_path):
 # -- 三種語言:知識庫用安裝時選的語言建;代管 git 那一節認得三種寫法的標題 ------------------------------
 
 def test_english_handout_prompt_asks_for_an_english_wiki(tmp_path):
-    """資料夾名(_Pending、Wiki_Pages、index.md、.md_cache)是程式寫死的,照原樣。"""
+    """資料夾名(_Pending、Wiki_Pages、index.md)是程式寫死的,照原樣(.md_cache 2026-10-29 起不再叫 claude 建:轉寫由 wiki-feeder 做,§4.8)。"""
     from wiki_feeder import i18n
     i18n.set_lang("en")
     wiki, raw = tmp_path / "LLMWIKI" / "WIKI", tmp_path / "LLMWIKI" / "Raw_Sources"
     prompt = ws.handout_prompt(wiki, raw, False)
     assert "English" in prompt and "Markdown" in prompt and "繁體中文" not in prompt
     assert "../Raw_Sources/" in prompt and "../Raw_Sources/_Pending/" in prompt and "\\" not in prompt
-    for kept in ("Wiki_Pages/", "index.md", ".md_cache/", "CLAUDE.md", "[[", "git"):
+    for kept in ("Wiki_Pages/", "index.md", "CLAUDE.md", "[[", "git"):
         assert kept in prompt
     assert "..\\Raw_Sources\\" in ws.handout_prompt(wiki, raw, True)
     assert not any("一" <= ch <= "鿿" for ch in prompt)

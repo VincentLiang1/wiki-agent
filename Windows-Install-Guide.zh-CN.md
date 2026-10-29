@@ -20,7 +20,9 @@
 3. 跑完后**关掉这个窗口、重开一个新的 PowerShell**,打 `claude` 按 Enter。选登录方式时选 **Claude 账号(订阅)**,浏览器会打开 Claude 的登录页,登录你自己的账号、按**授权**
 4. 回到 PowerShell,看到可以打字的提示就是登录好了。打 `/exit` 按 Enter 离开
 
-## 3. 装 scribe2md(把录音、文档转成文字)
+## 3. (选做)装 scribe2md(把录音、文档转成文字)
+
+不装也能用:PDF、照片、Word／Excel／PowerPoint、EPUB 这些摄入时由 Claude 直接读(较花 token;Office 文档里的图读不到)。**录音、视频要有 scribe2md 才会处理**(旧版 .doc／.xls／.ppt、Outlook 的 .msg 也要):没装时这些文件留在待处理文件夹、摘要信每天提醒一次,之后装了再跑一次安装程序、问「沿用这份(不重填)?」时回 n 重填,下一轮自动处理。第 7 节(手机与电脑共用声纹与名词对照表)也要有它。
 
 1. 浏览器打开 <https://github.com/VincentLiang1/scribe2md/releases/latest>,在页面下方 **Assets** 点 **scribe2md-win.zip** 下载
 2. 在「下载」文件夹对 zip 按右键 → **全部解压缩**,解到一个好记的地方(例如 `C:\scribe2md`)
@@ -69,7 +71,7 @@
 | 要请 Claude 建好规则文件与目录索引吗? | (还没有 `CLAUDE.md` 才会问)Enter。Claude 会花 1～3 分钟写好 `CLAUDE.md` 与目录 `index.md`,好了会用两三句话说它建了什么 |
 | 要在 CLAUDE.md 最后补上「版本记录由 wiki-feeder 代管」吗? | Enter(要)。原本的规则不会被改,只在最后加一节 |
 | 【知识库名称】 | Enter 或打一个你喜欢的 |
-| 【转写】 | 列出找到的 doc2md,Enter 选第 1 个;它会试转一个小文件,看到「可以用」就过了。说「找不到 meeting-scribe」时,粘贴第 3 步文件夹里 `.venv\Scripts\doc2md.exe` 的完整路径 |
+| 【转写】 | 有装 scribe2md 就列出找到的 doc2md,Enter 选第 1 个;它会试转一个小文件,看到「可以用」就过了。找不到时会问「有装 scribe2md 吗?」:**没装直接 Enter(默认 n)跳过**;有装就 y,再粘贴第 3 步文件夹里 `.venv\Scripts\doc2md.exe` 的完整路径 |
 | 【摘要信】寄件的 Gmail | 默认是你 Claude 登录的 Gmail;不寄信就输入 `-` |
 | 收件信箱 | Enter(寄给自己) |
 | 要(重新)输入 Gmail 应用专用密码吗? | Enter |
@@ -91,7 +93,7 @@
 
 ## 7. (选做)手机与电脑共用声纹与名词对照表
 
-在手机 scribe2md App、电脑 scribe2md 命名过的人,另一台也认得。这是 scribe2md 自己的功能,wiki-agent 不用设置;每一台都选**同一个 iCloud 云盘里的文件夹**就好。
+在手机 scribe2md App、电脑 scribe2md 命名过的人,另一台也认得。这是 scribe2md 自己的功能(要有第 3 节装的 scribe2md),wiki-agent 不用设置;每一台都选**同一个 iCloud 云盘里的文件夹**就好。
 
 1. 文件总管打开 **iCloud 云盘**,在最上层添加文件夹 `_ScribeSync`。⚠️ **不可以放在 `_WikiBox` 里面**(那里的文件会被送进知识库,声纹与真名就跟着进去)
 2. 对 `_ScribeSync` 按右键 → **永远保留在此设备上**(没有这一项就跳过)
