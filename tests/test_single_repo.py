@@ -35,7 +35,8 @@ def single(tmp_path, monkeypatch):
     state = tmp_path / "state"
     state.mkdir()
     (state / CONFIG_FILE).write_text(
-        f"[inbox]\nicloud = '{icloud}'\n[wiki]\ndir = '{wiki}'\nraw = '{raw}'\n"
+        f"[inbox]\nicloud = '{icloud}'\n[scribe2md]\nsync_dir = '{icloud.parent / '_ScribeSync'}'\n"
+        f"[wiki]\ndir = '{wiki}'\nraw = '{raw}'\n"
         f"[mail]\nfrom = ''\nto = ''\n[tools]\ndoc2md = 'x'\n", encoding="utf-8")
     for k, v in {"FAKE_CLAUDE_ARGS": tmp_path / "claude.jsonl", "FAKE_DOC2MD_ARGS": tmp_path / "doc2md.jsonl"}.items():
         monkeypatch.setenv(k, str(v))

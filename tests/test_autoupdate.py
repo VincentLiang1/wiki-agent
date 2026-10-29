@@ -398,6 +398,8 @@ def test_zip_newest_under_a_day_waits_and_is_not_downloaded(ucfg, tmp_path):
     (root / "MANIFEST").write_text("VERSION\n", encoding="utf-8")
     (root / "scripts").mkdir()
     (root / "scripts" / "winautoupdate.py").write_text("#\n", encoding="utf-8")
+    # 照真的安裝放 winupdate.py:原本靠前面的測試先 import 過才綠,單獨跑或平行跑(xdist)就紅
+    (root / "scripts" / "winupdate.py").write_bytes((Path(__file__).parents[1] / "scripts" / "winupdate.py").read_bytes())
     iso = lambda t: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))   # noqa: E731
     rels = [{"tag_name": "r2", "draft": False, "published_at": iso(NOW - 3600),
              "assets": [{"name": "wiki-agent-win.zip", "browser_download_url": "u2"}]},

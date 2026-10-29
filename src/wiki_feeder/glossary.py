@@ -1,7 +1,8 @@
-"""名詞對照表:知識庫裡的名詞校正 → 手機 App 用的 `name-corrections.json`,放進聲紋同步資料夾(spec §5.14)。
+"""名詞對照表:知識庫裡的名詞校正 → 手機 App 用的 `name-corrections.json`,放進 scribe2md 同步資料夾(spec §5.14;
+裡面是手機 App 與電腦版共用的聲紋與這份對照表,使用者本人的叫 _聲紋同步)。
 
 手機(scribe2md 的「送進知識庫」模式)產生會議草稿前,用它把語音辨識聽錯的人名、公司、術語換成正確寫法;
-逐字稿 md 本身不動。對照表含真名:**只寫到聲紋同步資料夾**,絕不寫進收件匣、原件樹或知識庫(`unsafe_out`)。
+逐字稿 md 本身不動。對照表含真名:**只寫到同步資料夾**,絕不寫進收件匣、原件樹或知識庫(`unsafe_out`)。
 
 兩種來源:
 - 使用者本人的公事庫(`cfg.glossary_fwiki`):照那個庫自己的規則寫的 `memory/asr-name-corrections.md`
@@ -12,6 +13,9 @@
 
 **通用裡兩個字的中文誤譯一律不收**(2026-10-19 實測:「基金」「政策」這類在別場是正常用語,每場都換會改壞),
 分組裡的照收。每一輪攝入後看庫的 HEAD、校正檔與分組規則有沒有變(`_stamp`),沒變不解析;內容沒變不寫(不吵 iCloud)。
+
+輸出可以有好幾份(`cfg.glossary_dir` 給手機的 iCloud 那份,`cfg.glossary_extra_dirs` 給電腦版 meeting-scribe 的
+OneDrive 那份,2026-10-29):每一份各自過 `unsafe_out`、不存在就安靜略過,要寫的用同一份位元組(`write_all`)。
 """
 from __future__ import annotations
 
@@ -264,21 +268,40 @@ def render(doc: dict) -> str:
     return json.dumps(doc, ensure_ascii=False, indent=1, sort_keys=True)
 
 
+def write_all(out_dirs: list[Path], doc: dict) -> list[Path]:
+    """每個資料夾各自:內容(不算 generatedAt)沒變就不寫。要寫的全部用同一份位元組——已經是最新的那份有就照抄它
+    (第一次多一份輸出時 iCloud 那份不重寫,OneDrive 那份照抄它),一份都沒有才產生一次;幾份之間逐位元相同。
+    回傳寫了哪些檔。"""
+    want = json.loads(render(doc))
+    current: bytes | None = None
+    todo: list[Path] = []
+    for out_dir in out_dirs:
+        out = out_dir / OUT_NAME
+        try:
+            raw = out.read_bytes()
+            old = json.loads(raw.decode("utf-8"))
+            old.pop("generatedAt", None)
+        except (OSError, ValueError, AttributeError):
+            old = None
+        if old == want:
+            current = current or raw
+        else:
+            todo.append(out)
+    if not todo:
+        return []
+    if current is None:
+        stamped = dict(doc, generatedAt=datetime.datetime.now().astimezone().isoformat(timespec="seconds"))
+        current = render(stamped).encode("utf-8")
+    for out in todo:
+        tmp = out.with_name("." + out.name)   # 「.」開頭:iCloud／OneDrive 不同步寫到一半的檔
+        tmp.write_bytes(current)
+        os.replace(tmp, out)
+    return todo
+
+
 def write(out_dir: Path, doc: dict) -> bool:
-    """內容(不算 generatedAt)沒變就不寫。回傳有沒有寫。"""
-    out = out_dir / OUT_NAME
-    try:
-        old = json.loads(out.read_text(encoding="utf-8"))
-        old.pop("generatedAt", None)
-    except (OSError, ValueError, AttributeError):
-        old = None
-    if old == json.loads(render(doc)):
-        return False
-    doc = dict(doc, generatedAt=datetime.datetime.now().astimezone().isoformat(timespec="seconds"))
-    tmp = out.with_name("." + out.name)   # 「.」開頭:iCloud 不同步寫到一半的檔
-    tmp.write_text(render(doc), encoding="utf-8")
-    os.replace(tmp, out)
-    return True
+    """一份:內容(不算 generatedAt)沒變就不寫。回傳有沒有寫。"""
+    return bool(write_all([out_dir], doc))
 
 
 def counts(doc: dict) -> str:
@@ -319,8 +342,9 @@ def _stamp(cfg: Config) -> list:
     repo = cfg.repo(cfg.target_repo).repo_dir
     r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True)
     head = r.stdout.strip() if r.returncode == 0 else ""
+    # 每一份輸出:資料夾在不在、檔在不在——OneDrive 那份被刪了、或第一次上線還沒有,下一輪才會補寫
     return [STAMP_VERSION, head, _stat(_source(cfg)), _stat(cfg.glossary_rules),
-            (cfg.glossary_dir / OUT_NAME).exists()]
+            [[d.is_dir(), (d / OUT_NAME).exists()] for d in _all_dirs(cfg)]]
 
 
 def _state(cfg: Config) -> dict:
@@ -334,32 +358,46 @@ def _save(cfg: Config, state: dict) -> None:
     cfg.glossary_state_path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
 
 
+def _all_dirs(cfg: Config) -> list[Path]:
+    return [d for d in (cfg.glossary_dir, *cfg.glossary_extra_dirs) if d is not None]
+
+
+def targets(cfg: Config) -> tuple[list[Path], list[str]]:
+    """這一輪可以寫的輸出資料夾,與警示。每一份各自判斷:跟收件匣、原件樹、知識庫重疊 → 那一份不寫、回警示;
+    資料夾不存在(朋友沒做安裝說明第 7 節、沒裝 OneDrive)→ 安靜略過。一份沒寫成不影響別份。"""
+    outs: list[Path] = []
+    alerts: list[str] = []
+    for out in _all_dirs(cfg):
+        if (hit := unsafe_out(cfg, out)) is not None:
+            alerts.append(L("名詞對照表不寫:輸出資料夾 {out} 跟 {hit} 重疊(對照表含真名,會被收件或攝入);"
+                            "scribe2md 同步資料夾要另外建在雲碟最上層", out=out, hit=hit))
+            continue
+        if out.is_dir():
+            outs.append(out)
+    return outs, alerts
+
+
 def refresh(cfg: Config) -> list[str]:
     """攝入那一輪結束時呼叫(STOP 中不叫:沒驗證過的內容不送到手機)。回傳警示。
-    沒有聲紋同步資料夾(朋友沒做安裝說明第 7 節)、還沒有校正檔就什麼都不做。"""
-    out = cfg.glossary_dir
-    if out is None:
-        return []
-    if (hit := unsafe_out(cfg, out)) is not None:
-        return [L("名詞對照表不寫:輸出資料夾 {out} 跟 {hit} 重疊(對照表含真名,會被收件或攝入);"
-                  "聲紋同步資料夾要另外建在雲碟最上層", out=out, hit=hit)]
-    if not out.is_dir() or not _source(cfg).is_file():
-        return []
+    沒有任何同步資料夾、還沒有校正檔就什麼都不做。"""
+    outs, alerts = targets(cfg)
+    if not outs or not _source(cfg).is_file():
+        return alerts
     state = _state(cfg)
     stamp = _stamp(cfg)
     if state.get("stamp") == stamp:
-        return []
+        return alerts
     try:
         doc, skipped, unruled = build(cfg.repo(cfg.target_repo).repo_dir, cfg.glossary_fwiki, cfg.glossary_rules)
-        if write(out, doc):
-            log.info(L("名詞對照表已更新(%s):%s、略過 %d 條未確定"), out / OUT_NAME, counts(doc), len(skipped))
+        for written in write_all(outs, doc):
+            log.info(L("名詞對照表已更新(%s):%s、略過 %d 條未確定"), written, counts(doc), len(skipped))
     except (OSError, ValueError, GlossaryError) as e:
         # 留著舊的對照表;記下這次的戳記,同一份內容不每分鐘重試、洗 log
         log.warning(L("名詞對照表沒更新:%s"), e)
         unruled = state.get("unruled", [])
     state.update(stamp=_stamp(cfg), unruled=unruled)
     _save(cfg, state)
-    return []
+    return alerts
 
 
 def new_groups(cfg: Config) -> list[str]:

@@ -22,7 +22,8 @@ def _mod():
 ANSWERS = {"icloud": r"C:\Users\阿明\iCloudDrive\_WikiBox", "wiki": r"C:\LLMWIKI\WIKI",
            "raw": r"C:\LLMWIKI\Raw_Sources", "label": '阿明的"知識庫"',
            "doc2md": r"C:\Users\阿明\Downloads\scribe2md\.venv\Scripts\doc2md.exe",
-           "mail_from": "amy@gmail.com", "mail_to": "amy@gmail.com"}
+           "mail_from": "amy@gmail.com", "mail_to": "amy@gmail.com",
+           "scribe_sync": r"C:\Users\阿明\iCloudDrive\_ScribeSync"}
 
 
 def test_answers_round_trip_through_the_real_config_reader(tmp_path):
@@ -34,7 +35,30 @@ def test_answers_round_trip_through_the_real_config_reader(tmp_path):
     assert cfg.raw_roots == (Path(ANSWERS["raw"]),)
     assert cfg.doc2md_cmd == (ANSWERS["doc2md"],)
     assert (cfg.mail_from, cfg.mail_to) == ("amy@gmail.com", "amy@gmail.com")
+    assert cfg.glossary_dir == Path(ANSWERS["scribe_sync"])
     assert (tmp_path / CONFIG_FILE).is_file() and not (tmp_path / (CONFIG_FILE + ".new")).exists()
+    cfg = m.write_config(m.render_config({**ANSWERS, "scribe_sync": ""}), tmp_path)
+    assert cfg.glossary_dir is None                      # 沒做第 7 節:不寫這一節、不產生對照表
+
+
+def test_scribe_sync_folder_is_chosen_by_the_friend_and_kept_out_of_the_inbox(tmp_path, monkeypatch):
+    """scribe2md 同步資料夾(聲紋與名詞對照表)安裝時問、朋友自己選(使用者 2026-10-29:預設目錄不可以是中文,建議名是英文的 _ScribeSync);
+    沒做第 7 節直接 Enter 就不設;選到收件匣、原件資料夾、知識庫裡面(或包著它們)的重問;還沒有就問要不要建。"""
+    m = _mod()
+    icloud = tmp_path / "iCloudDrive"
+    (icloud / "_WikiBox").mkdir(parents=True)
+    a = {"icloud": str(icloud / "_WikiBox"), "wiki": str(tmp_path / "LLMWiki" / "WIKI"),
+         "raw": str(tmp_path / "LLMWiki" / "Raw_Sources")}
+    monkeypatch.setattr("builtins.input", lambda *_: "")
+    assert m.ask_scribe_sync(a) == ""                     # 預設 n
+    answers = iter(["y", str(icloud / "_WikiBox" / "sync"), str(tmp_path), str(tmp_path / "LLMWiki" / "Raw_Sources" / "x"),
+                    str(tmp_path / "nowhere" / "s"), "", ""])
+    prompts = []
+    monkeypatch.setattr("builtins.input", lambda p="": prompts.append(p) or next(answers))
+    assert m.ask_scribe_sync(a) == str(icloud / m.SCRIBE_SYNC_DIR)
+    assert (icloud / m.SCRIBE_SYNC_DIR).is_dir()
+    assert sum("重疊" in p or "overlap" in p for p in prompts) == 0   # 重疊是 say() 印的,不是問句
+    assert m.SCRIBE_SYNC_DIR.isascii() and m.SCRIBE_SYNC_DIR in prompts[-2]
 
 
 def test_mail_can_be_left_empty(tmp_path):

@@ -349,7 +349,7 @@ def resources(cfg: Config, procs: list[dict], free_pct: float | None, total: int
 
 # -- iCloud 同步 -------------------------------------------------------------------
 
-PROBE_NAME = "心跳.txt"
+PROBE_NAME = "heartbeat.txt"   # 對外的固定檔名一律英文(spec §10.2)
 LAST_SYNC = re.compile(r"last-sync:(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)")   # brctl status 的整個 iCloud 雲碟最後同步
 # 檔案本身有沒有傳上去(NSURLUbiquitousItemIsUploadedKey);印 true／false
 _UPLOADED_JS = """ObjC.import('Foundation');
@@ -382,6 +382,10 @@ def icloud_synced(path: Path, since: float) -> tuple[bool | None, str]:
     except (OSError, subprocess.TimeoutExpired) as e:
         return None, f"查不了探針檔的上傳狀態:{e}"
     up = js.stdout.strip()
+    if up == "undefined":
+        # 屬性沒有值:iCloud 不把這個路徑當雲端項目(檔不存在、或資料夾根本不在 iCloud 雲碟裡)。2026-10-29 換版改了探針檔名,
+        # 舊狀態的「等確認」指向還沒寫過的新檔名就是這樣;檔不存在的情況 icloud_probe 已先擋下、重寫,到這裡的是設定問題
+        return None, f"iCloud 不認得探針檔 {path}(屬性沒有值:檔不存在、或資料夾不在 iCloud 雲碟裡)"
     if up not in ("true", "false"):
         return None, f"查不了探針檔的上傳狀態:{(js.stderr or js.stdout).strip()[:300]}"
     m = LAST_SYNC.search(st.stdout)
@@ -427,6 +431,10 @@ def icloud_probe(cfg: Config, now: float, synced=icloud_synced) -> list[Problem]
         return _rewrite_probe(cfg, now)   # 沒寫過、重開機過(不含睡眠的時鐘歸零)、或該寫下一次了
     if not state.get("pending") or age < cfg.icloud_sync_timeout:
         return []
+    if not probe_path(cfg).exists():
+        # 「等確認」的那個檔已經不在:換版改了探針檔名(2026-10-29 心跳.txt → heartbeat.txt,舊狀態指向沒寫過的新名)、
+        # 或使用者在手機「檔案」App 把它刪了。拿不存在的檔問 iCloud 只會得到「不認得」,既不是工具壞也不是卡住:重寫、重新計時
+        return _rewrite_probe(cfg, now)
     ok, detail = synced(probe_path(cfg), written)
     if ok:
         state["pending"] = False

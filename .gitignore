@@ -4,3 +4,5 @@ __pycache__/
 .DS_Store
 .pytest_cache/
 dist/
+# 自動修理的 claude 在開發目錄建的暫存檔:它沒有 rm／mv 權限,留著會讓開發目錄不乾淨、擋住修完後的 deploy(2026-10-29)
+.repair_*

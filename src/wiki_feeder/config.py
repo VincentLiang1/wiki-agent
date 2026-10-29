@@ -26,8 +26,6 @@ LEGACY_PENDING, LEGACY_DISCARD, LEGACY_INTAKE = "_待處理", "_捨棄候選", "
 LEGACY = {PENDING: LEGACY_PENDING, DISCARD: LEGACY_DISCARD, INTAKE: LEGACY_INTAKE}
 # 掃描既有原件時跳過的資料夾:新舊名稱都收(不然待處理、捨棄的檔被當成已歸檔的原件,同內容新檔被判重複)
 SYSTEM_DIRS = tuple(LEGACY) + tuple(LEGACY.values())
-# 安裝說明第 7 節讓朋友在 iCloud 雲碟最上層建的聲紋同步資料夾(每種語言同一個名字):名詞對照表寫在這裡給手機(glossary.py)
-GLOSSARY_SYNC_DIR = "_聲紋同步"
 # 已經有知識庫的朋友,待處理資料夾照他 CLAUDE.md 寫的(使用者 2026-10-27:「已經有 WIKI,目錄本來就不應該限定」):
 # 一層、不是隱藏、沒有 Windows 不准的字元;捨棄、收件區仍只用上面的系統名
 _BAD_DIR = re.compile(r'[\\/<>:"|?*\x00-\x1f]')
@@ -205,9 +203,12 @@ class Config:
     vp_bridge_fresh: float = 600         # 狀態檔要在這段時間內寫過才算數(剛睡醒、橋樑還沒跑的舊狀態不算)
     vp_bridge_checks: int = 8            # 出手之後最多查幾次(每 15 秒一次)
     md_cache_keep_days: float = 7       # 攝入完成(或捨棄、移走)幾天後刪掉轉寫快取;原件不動,要重轉再轉
-    # 名詞對照表(glossary.py,spec §5.14):寫到哪個資料夾(聲紋同步資料夾;None 或資料夾不存在 = 不產生)、
+    # 名詞對照表(glossary.py,spec §5.14):寫到哪個資料夾(scribe2md 同步資料夾;None 或資料夾不存在 = 不產生)、
     # 來源是公事庫的寫法(True,使用者本人)還是朋友的表格、分組規則(只用在公事庫的寫法;None = 不整理、不提新分組)
     glossary_dir: Path | None = None
+    # 再多寫幾份一樣的(電腦版 meeting-scribe 從 OneDrive 的同步資料夾讀,2026-10-29):每一份各自過重疊檢查、
+    # 不存在就安靜略過;只在使用者本人的設定(owner_mac.py)設,朋友的不設
+    glossary_extra_dirs: tuple[Path, ...] = ()
     glossary_fwiki: bool = False
     glossary_rules: Path | None = None
     lang: str = SOURCE                  # 介面語言(i18n.py):朋友的設定檔 [general] language;使用者本人永遠 zh-Hant
@@ -412,7 +413,8 @@ class Config:
         known = {"inbox": {"icloud", "onedrive", "icloud_restart"},
                  "wiki": {"dir", "raw", "label", "github", "branch", "pending", "discard", "intake",
                           "git_outside", "git_outside_reason"},
-                 "mail": {"from", "to"}, "tools": {"doc2md", "claude", "ffmpeg"}, "general": {"language", "auto_update"}}
+                 "mail": {"from", "to"}, "tools": {"doc2md", "claude", "ffmpeg"}, "general": {"language", "auto_update"},
+                 "scribe2md": {"sync_dir"}}
         problems = [f"[{k}]" for k in data if k not in known]
         problems += [f"[{k}] {x}" for k, keys in known.items() for x in data.get(k, {}) if x not in keys]
         if problems:
@@ -431,6 +433,12 @@ class Config:
             raise ConfigError(L("設定檔 {path} 沒有任何收件匣([inbox] icloud 或 onedrive)", path=path))
         if not isinstance(inbox.get("icloud_restart", True), bool):
             raise ConfigError(L("設定檔 {path} 的 [inbox] icloud_restart 只能是 true 或 false", path=path))
+        # scribe2md 同步資料夾(手機 App 與電腦版共用的聲紋與名詞對照表)由朋友安裝時自己選、寫進設定檔
+        # (使用者 2026-10-29:預設目錄不可以是中文、讓客戶自己選;之前是從收件匣推同一層的 _聲紋同步;
+        # 同日再改名:裡面不是只放聲紋);沒填、或資料夾還沒建都不產生名詞對照表
+        sync_dir = data.get("scribe2md", {}).get("sync_dir")
+        if sync_dir is not None and not isinstance(sync_dir, str):
+            raise ConfigError(L("設定檔 {path} 的 [scribe2md] sync_dir 要是路徑字串", path=path))
         if not isinstance(wiki.get("git_outside", False), bool):
             raise ConfigError(L("設定檔 {path} 的 [wiki] git_outside 只能是 true 或 false", path=path))
         if not isinstance(data.get("general", {}).get("auto_update", True), bool):
@@ -464,8 +472,7 @@ class Config:
             # 只有 Mac 的 iCloud 有 bird 要顧;Windows 的 iCloud 是另一套程式,不動
             icloud_restart=bool(inbox.get("icloud")) and PLATFORM == "darwin" and inbox.get("icloud_restart", True),
             auto_update=data.get("general", {}).get("auto_update", True),   # 朋友版兩個平台都預設打開(§7.9)
-            # 收件匣在 iCloud 雲碟的,聲紋同步資料夾就在同一層(安裝說明第 7 節);沒建就不產生對照表
-            glossary_dir=Path(inbox["icloud"]).parent / GLOSSARY_SYNC_DIR if inbox.get("icloud") else None,
+            glossary_dir=opt(sync_dir),
             futures=None,
             repos=(RepoConfig("main", wiki.get("label", L("知識庫", lang)), Path(wiki["dir"]), raw,
                               wiki.get("github", ""), wiki.get("branch", "master"), managed=True,

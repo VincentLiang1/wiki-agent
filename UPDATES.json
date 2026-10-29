@@ -1,5 +1,13 @@
 [
  {
+  "source": "59ae6cb",
+  "date": "2026-10-29",
+  "needs_human": false,
+  "zh-Hant": "- 手機與電腦共用聲紋、名詞對照表的資料夾改成安裝時自己選:安裝程式多問一題「【scribe2md 同步資料夾】有做安裝說明第 7 節嗎?」,建議名是英文的 `_ScribeSync`,不再固定用 iCloud 雲碟裡的 `_聲紋同步`。**有做第 7 節的**:再跑一次安裝程式、問「沿用這份(不重填)?」回 n 重填、在那一題填你的資料夾(可以就是原來的 `_聲紋同步`),名詞對照表才會繼續更新;沒做第 7 節的不必做任何事\n- 內部調整:程式裡幾個固定檔名改成英文,你的設定照舊運作",
+  "zh-Hans": "- 手机与电脑共用声纹、名词对照表的文件夹改成安装时自己选:安装程序多问一题「【scribe2md 同步文件夹】有做安装说明第 7 节吗?」,建议名是英文的 `_ScribeSync`,不再固定用 iCloud 云盘里的 `_聲紋同步`。**有做第 7 节的**:再跑一次安装程序、问「沿用这份(不重填)?」回 n 重填、在那一题填你的文件夹(可以就是原来的 `_聲紋同步`),名词对照表才会继续更新;没做第 7 节的不必做任何事\n- 内部调整:程序里几个固定文件名改成英文,你的设置照旧运作",
+  "en": "- The folder that phone and computer share for voiceprints and the name-correction table is now chosen at install time: the installer asks one more question, `[scribe2md sync folder] Did you do step 7 of the guide …?`, and suggests the English name `_ScribeSync` instead of always using `_聲紋同步` in iCloud Drive. **If you did step 7**: run the installer again, answer n to keeping the current settings, and give your folder at that question (it can stay the old `_聲紋同步`); otherwise the name-correction table stops updating. If you never did step 7, nothing to do\n- Internal change: a few fixed file names inside the program are now English; your setup works as before"
+ },
+ {
   "source": "afc5d86",
   "date": "2026-10-28",
   "needs_human": false,

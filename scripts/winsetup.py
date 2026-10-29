@@ -59,6 +59,8 @@ def render_config(a: dict) -> str:
     for k in ("icloud", "onedrive"):
         if a.get(k):
             lines.append(f"{k} = {toml_path(a[k])}")
+    if a.get("scribe_sync"):
+        lines += ["", "[scribe2md]", f"sync_dir = {toml_path(a['scribe_sync'])}"]
     # 系統資料夾名照原件資料夾現況(config.folder_names):ask_wiki 已經照它建好待處理資料夾,這裡再看一次結果相同
     names = a.get("folders") or folder_names(Path(a["raw"]))
     lines += ["", "[wiki]", f"dir = {toml_path(a['wiki'])}", f"raw = {toml_path(a['raw'])}",
@@ -116,8 +118,8 @@ def check_doc2md(exe: Path) -> tuple[bool, str]:
     if not exe.is_file():
         return False, L("找不到這個檔")
     with tempfile.TemporaryDirectory() as d:
-        src = Path(d) / "安裝測試.txt"
-        src.write_text("wiki-feeder 安裝測試\n", encoding="utf-8")
+        src = Path(d) / "install-test.txt"
+        src.write_text("wiki-feeder install test\n", encoding="utf-8")
         try:
             r = subprocess.run([str(exe), str(src), "--out-dir", str(Path(d) / "out"), "--prune-days", "0"],
                                capture_output=True, timeout=300)
@@ -348,6 +350,45 @@ def ask_inbox(home: Path) -> str:
         p.mkdir()
     # 「永遠保留在此裝置上」:收件匣裡的檔才會真的下載下來(程式碰到佔位檔也會自己要求下載,這是先做好的保險)
     subprocess.run(["attrib", "+P", str(p)], capture_output=True)
+    return str(p)
+
+
+# 安裝時建議的 scribe2md 同步資料夾名(手機 App 與電腦版共用的聲紋與名詞對照表;使用者 2026-10-29:不叫「聲紋同步」,
+# 裡面不是只放聲紋):對外一律英文(spec §10.2),跟 _WikiBox 同一層;朋友可以改成自己的
+SCRIBE_SYNC_DIR = "_ScribeSync"
+
+
+def overlapping(p: Path, guarded: list[Path]) -> Path | None:
+    """p 跟 guarded 裡哪一個重疊(相同、在裡面或包著它);都沒有回 None。跟 glossary.unsafe_out 同一套判斷,
+    安裝時還沒有 Config 所以另寫一份。"""
+    o = p.resolve()
+    for g in guarded:
+        r = g.resolve()
+        if o == r or r in o.parents or o in r.parents:
+            return g
+    return None
+
+
+def ask_scribe_sync(a: dict) -> str:
+    """(選做)scribe2md 同步資料夾——手機與電腦共用聲紋、名詞對照表(安裝說明第 7 節):朋友自己選、寫進設定檔 [scribe2md] sync_dir
+    (使用者 2026-10-29:預設目錄不可以是中文、讓客戶自己選)。沒做第 7 節就回空字串(不產生對照表)。
+    對照表含真名,不可跟收件匣、原件資料夾、知識庫重疊(在裡面或包著它們),重疊就重問;還沒有就問要不要建。"""
+    if not yes(L("【scribe2md 同步資料夾】有做安裝說明第 7 節(手機與電腦共用聲紋與名詞對照表)嗎?"), default=False):
+        return ""
+    inbox = Path(a["icloud"])
+    guarded = [inbox, Path(a["wiki"]), Path(a["raw"])]
+    while True:
+        p = Path(pick(L("  scribe2md 同步資料夾(iCloud 雲碟裡、跟 _WikiBox 同一層;不可在 _WikiBox 裡)"), True,
+                      str(inbox.parent / SCRIBE_SYNC_DIR)))
+        if (hit := overlapping(p, guarded)) is not None:
+            say(L("  {path} 跟 {hit} 重疊(對照表含真名,會被收件或攝入),請換一個", path=p, hit=hit))
+            continue
+        if not p.parent.is_dir():
+            say(L("  找不到 {path},請再確認", path=p.parent))
+            continue
+        break
+    if not p.is_dir() and yes(L("  {path} 還沒有,要建立嗎?", path=p)):
+        p.mkdir()
     return str(p)
 
 
@@ -828,6 +869,7 @@ def main(argv: list[str] | None = None) -> int:
         a["wiki"], a["raw"], a["folders"] = ask_library(str(default_wiki(home)),
                                                         find_wiki(home, (Path("C:/"), Path("D:/"))), claude, True, a)
         a["icloud"] = ask_inbox(home)
+        a["scribe_sync"] = ask_scribe_sync(a)
         a["label"] = ask(L("【知識庫名稱】摘要信上顯示的名字"), L("知識庫"))
         a["doc2md"] = ask_doc2md(home)
         a["mail_from"], a["mail_to"] = ask_mail(mail_default(status))

@@ -159,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
         a = {"lang": lang}
         a["wiki"], a["raw"], a["folders"] = ask_library(home, claude, a)
         a["icloud"] = ask_inbox(home)
+        a["scribe_sync"] = ws.ask_scribe_sync(a)
         a["label"] = ask(L("【知識庫名稱】摘要信上顯示的名字"), L("知識庫"))
         a["doc2md"] = ask_doc2md(home)
         a["mail_from"], a["mail_to"] = ask_mail(ws.mail_default(status))

@@ -19,7 +19,7 @@ from wiki_feeder import repair
 from wiki_feeder.collect import build_inboxes, run_file, run_lock
 from wiki_feeder.ingest import STOP_LEFTOVER, STOP_SHRANK, IngestError, finish_stopped, ingest, quarantine, resume
 from wiki_feeder.ledger import Ledger
-from wiki_feeder.watchdog import detect, resources
+from wiki_feeder.watchdog import detect, icloud_synced, resources
 
 NO_SAMPLE = (lambda: ([], 90.0, 32 * 2**30))
 
@@ -998,7 +998,7 @@ def test_icloud_probe_flags_only_an_upload_overdue(cfg, monkeypatch):
     c, clock = _icloud(cfg, monkeypatch)
     never = _synced([])            # 還沒到時間就查的話 StopIteration
     assert _detect(c, icloud_check=never) == []                 # 第一次:寫探針
-    assert (c.icloud_probe_dir / "心跳.txt").exists()
+    assert (c.icloud_probe_dir / "heartbeat.txt").exists()
     clock.up += c.icloud_sync_timeout - 60
     assert _detect(c, icloud_check=never) == []                 # 還在時限內:不查
     clock.up += 120
@@ -1042,6 +1042,37 @@ def test_icloud_probe_not_overdue_when_network_dropped_after_writing(cfg, monkey
     clock.up += c.icloud_sync_timeout + 1      # 網路回來之後還是傳不上去:這才是 iCloud 卡住
     (p,) = _detect(c, now=900.0, icloud_check=_synced([(False, "探針檔已上傳:false")]))
     assert p.key == "icloud:stalled"
+
+
+def test_icloud_probe_missing_file_is_rewritten_not_checked(cfg, monkeypatch):
+    """2026-10-29:換版把探針檔名 心跳.txt 改成 heartbeat.txt,舊版留下的「等確認」狀態指向沒寫過的新檔;
+    拿不存在的檔問 iCloud 得到「不認得」(undefined),被當成檢查工具壞了、叫 claude 來查。
+    (使用者在手機刪掉探針檔也是同一回事。)探針檔不在就重寫、重新計時,不去查、不報。"""
+    c, clock = _icloud(cfg, monkeypatch)
+    _detect(c, now=100.0)
+    (c.icloud_probe_dir / "heartbeat.txt").unlink()
+    clock.up += c.icloud_sync_timeout + 1
+    assert _detect(c, now=200.0, icloud_check=_synced([])) == []     # _synced([]) 一被叫就 StopIteration:證明沒去查
+    assert (c.icloud_probe_dir / "heartbeat.txt").exists()
+    state = json.loads(c.icloud_probe_state_path.read_text())
+    assert state["written"] == 200.0 and state["pending"] and state["up"] == clock.up
+
+
+def test_icloud_synced_reports_an_unrecognised_probe_as_a_tool_problem(monkeypatch, tmp_path):
+    """探針檔在、iCloud 卻說屬性沒有值(資料夾不在 iCloud 雲碟裡):是設定問題,回 None 並把原因寫清楚,
+    不可寫成看不懂的「undefined」。"""
+    import subprocess
+    from types import SimpleNamespace
+
+    def fake_run(cmd, **kw):
+        if cmd[0] == "brctl":
+            return SimpleNamespace(stdout="last-sync:2026-10-29 11:50:00\n", stderr="", returncode=0)
+        return SimpleNamespace(stdout="undefined\n", stderr="", returncode=0)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    probe = tmp_path / "heartbeat.txt"
+    probe.write_text("x")
+    ok, detail = icloud_synced(probe, 0.0)
+    assert ok is None and "不認得探針檔" in detail and "undefined" not in detail
 
 
 def test_network_down_is_remembered_for_the_icloud_probe(env, dev, monkeypatch):

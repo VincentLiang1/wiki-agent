@@ -1596,7 +1596,7 @@ def backfill(cfg: Config, sha: str, stage: Path, snap: dict[str, bytes], result:
             (keep / rel).parent.mkdir(parents=True, exist_ok=True)
             (keep / rel).write_bytes(data)
         keep.mkdir(parents=True, exist_ok=True)
-        (keep / "不收的理由.txt").write_text("\n".join(why) + "\n\ncommit message:\n" + message + "\n",
+        (keep / "why-refused.txt").write_text("\n".join(why) + "\n\ncommit message:\n" + message + "\n",
                                          encoding="utf-8")
         shown = "、".join(why[:3]) + ("⋯" if len(why) > 3 else "")
         return [], [f"回填個人 WIKI 沒寫進去:{shown};副本裡的改動留在 {keep}"]
