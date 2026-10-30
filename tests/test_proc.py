@@ -26,6 +26,14 @@ def test_normal_command_passes_through():
     assert (r.returncode, r.stdout, r.stderr) == (3, "out\n", "err\n")
 
 
+def test_env_reaches_the_child():
+    """呼叫端給的 env 要原樣交給子行程(攝入的 git 靠它帶設定;2026-10-30 審查)。"""
+    import os
+    r = run_net([sys.executable, "-c", "import os; print(os.environ.get('WIKI_FEEDER_ENV_PROBE', ''))"], 30,
+                text=True, env={**os.environ, "WIKI_FEEDER_ENV_PROBE": "1"})
+    assert (r.returncode, r.stdout.strip()) == (0, "1")
+
+
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows 的 taskkill /F 一律強制、沒有 SIGTERM 收尾(平台差異表);要它的 deploy 只在 Mac")
 def test_timeout_can_give_the_child_time_to_clean_up(tmp_path):

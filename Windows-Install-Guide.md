@@ -124,7 +124,7 @@ Claude fixes the page and also records the correction in the knowledge base's na
 
 - `wiki-feeder updated itself to …`: it worked; the email says what changed
 - `wiki-feeder … is available: this version needs you to update it yourself`: this version has a step you need to do; double-click Update.bat as below
-- `⚠️ Needs attention | wiki-feeder auto-update failed, rolled back to …`: it went back to the previous version and keeps running; no rush
+- `🚨 Needs attention | wiki-feeder auto-update failed, rolled back to …`: it went back to the previous version and keeps running; no rush
 
 If the daily summary shows the alert "Auto-update hasn't been able to check for days": on the days this computer was on, it couldn't check for new versions (days it was off or offline don't count), so auto-update itself may be broken. Double-click Update.bat as described below to update by hand once.
 
@@ -141,6 +141,6 @@ To update right away (or when an email asks you to): double-click **Update.bat**
 
 ## When something goes wrong
 
-- **The email subject starts with `⚠️ Needs attention`**: open PowerShell, type `cd C:\wiki-agent; claude`, paste the whole email into Claude and ask it to handle it according to wiki-agent's rules (you can write to Claude in English)
+- **The email subject starts with `🚨 Needs attention`**: open PowerShell, type `cd C:\wiki-agent; claude`, paste the whole email into Claude and ask it to handle it according to wiki-agent's rules (you can write to Claude in English)
 - **The email says Claude Code is not signed in or the sign-in expired**: type `claude` in PowerShell and sign in again; the next round picks up where it left off
 - **Don't run git in the knowledge base yourself** (including asking Claude to commit for you): the program only accepts versions it has verified itself; one extra commit makes it stop and wait for a person

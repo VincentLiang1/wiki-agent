@@ -384,19 +384,19 @@ def _result_mail(cfg: Config, state: dict, res: dict, deps: UpdateDeps) -> None:
         _queue(state, key, L("wiki-feeder 已自動更新到 {v}", v=new),
                L("已經換成新版,收件與攝入照常在跑。\n\n這次改了什麼:\n\n{notes}", notes=res.get("notes") or "-"))
     elif kind == "failed":
-        _queue(state, key, L("⚠️ 需要處理｜wiki-feeder 自動更新失敗,已退回 {old}", old=res.get("old", "")),
+        _queue(state, key, L("🚨 需要處理｜wiki-feeder 自動更新失敗,已退回 {old}", old=res.get("old", "")),
                L("要換到 {v} 時「{step}」這一步失敗,已經退回原本的版本 {old},系統照常在跑。\n\n原因:\n{detail}\n\n"
                  "不急著處理;要的話{claude},把這封信貼給 Claude",
                  v=new, step=_step_name(res.get("step", "")), old=res.get("old", ""), detail=res.get("detail", "")[-1500:],
                  claude=_claude(deps)))
     elif kind == "rollback_failed":
-        _queue(state, key, L("⚠️ 需要處理｜wiki-feeder 自動更新失敗,也沒能退回"),
+        _queue(state, key, L("🚨 需要處理｜wiki-feeder 自動更新失敗,也沒能退回"),
                L("要換到 {v} 時「{step}」這一步失敗,退回原本的版本也沒有成功,收件或攝入可能停了。\n\n原因:\n{detail}\n\n"
                  "請{human};還是不行的話,{claude},把這封信貼給 Claude",
                  v=new, step=_step_name(res.get("step", "")), detail=res.get("detail", "")[-1500:], human=_human(deps),
                  claude=_claude(deps)))
     elif kind == "interrupted":
-        _queue(state, key, L("⚠️ 需要處理｜wiki-feeder 自動更新被中斷"),
+        _queue(state, key, L("🚨 需要處理｜wiki-feeder 自動更新被中斷"),
                L("換到 {v} 的途中更新程式停掉了(多半是關機或斷電),排程已經重新啟用,但程式可能停在新舊版之間。\n\n請{human}",
                  v=new, human=_human(deps)))
 

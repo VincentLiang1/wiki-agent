@@ -23,7 +23,7 @@ FAKE_CLAUDE_DIRTY  不管哪種模式,最後都留下 暫存.txt(例如 backfill
 FAKE_CLAUDE_STAGE  正常攝入之外(off:什麼都不改),照公事庫規則回填到個人 WIKI 的副本(提示裡給的路徑):
                     new 新增一頁通用知識、leak 新增的頁提到 甲公司(測試設定的回填禁字)、script 改知識圖譜/ 的腳本、graph 改知識圖譜/ 的 .md、
                     nonmd 新增一個 .txt、delete 刪掉副本裡的 index.md、cut 把副本裡的 長頁.md 刪到剩 5 行、
-                    bold 新增的頁有一處 CJK 粗體失效
+                    bold 新增的頁有一處 CJK 粗體失效、memory 照個人 WIKI 規則在副本的 memory/ 記一則
 FAKE_CLAUDE_BREAK_WIKI_REMOTE  把個人 WIKI 的 origin 指到不存在的地方(回填寫回後推不上去)
 FAKE_CLAUDE_SHRINK  同一個 commit 裡順手改既有的 Wiki_Pages/大頁.md:cut 刪到剩 10 行、rewrite 整頁改寫成
                     75 行(淨刪 25 行、佔原檔 25%)、mv 原封不動改名成 搬走.md、rm 整個 git rm 掉 index.md
@@ -172,6 +172,9 @@ if stage_mode:
         (pages / "知識圖譜" / "_typed_graph.md").write_text("# 圖\n", encoding="utf-8")
     elif stage_mode == "nonmd":
         (pages / "筆記.txt").write_text("x", encoding="utf-8")
+    elif stage_mode == "memory":
+        (stage / "memory").mkdir(parents=True, exist_ok=True)
+        (stage / "memory" / "新記憶.md").write_text("# 記一則\n", encoding="utf-8")
     elif stage_mode == "delete":
         (pages / "index.md").unlink()
     elif stage_mode == "cut":
@@ -215,7 +218,17 @@ schema = json.loads(args[args.index("--json-schema") + 1])
 structured = {k: v for k, v in structured.items() if k in schema["properties"]}   # 照這次給的回報格式交
 if os.environ.get("FAKE_CLAUDE_NOREPORT"):
     print(json.dumps({"type": "result", "subtype": "error_max_budget_usd", "is_error": True,
-                      "total_cost_usd": 5.03, "num_turns": 61, "duration_ms": 497000}))
+                      "total_cost_usd": 5.03, "num_turns": 61, "duration_ms": 497000,
+                      # usage 照 2026-10-30 實測的形狀(只留攝入記進 log 的欄位)
+                      "usage": {"input_tokens": 12, "cache_creation_input_tokens": 80000,
+                                "cache_read_input_tokens": 2500000, "output_tokens": 30000,
+                                "server_tool_use": {"web_search_requests": 0, "web_fetch_requests": 2},
+                                "iterations": [{"input_tokens": 2, "cache_creation_input_tokens": 40000,
+                                                "cache_read_input_tokens": 0},
+                                               {"input_tokens": 10, "cache_creation_input_tokens": 40000,
+                                                "cache_read_input_tokens": 110000}]},
+                      "modelUsage": {"claude-fable-5-1": {"costUSD": 4.9}, "claude-haiku-5-5": {"costUSD": 0.13}},
+                      "subagent_stats": {"spawned": 1}}))
     sys.exit(0)
 print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "ok",
                   "structured_output": structured, "total_cost_usd": 0.01,

@@ -7,7 +7,7 @@
 為什麼不開放「只跑約定好的那幾支 python」:那幾支若在公事庫的 tools/ 裡,claude 能先改寫它再執行,
 等於能跑任意程式;所以檢查寫在這裡,跑的是發佈副本(claude 改不到)。
 
-公事庫要查的兩項(公事庫 CLAUDE.md〈Python 改寫的反斜線毀損〉〈CJK 粗體／斜體 flanking〉):
+公事庫要查的兩項(公事庫 docs/健檢清單.md 的控制字元、docs/排版細則.md〈CJK 粗體／斜體 flanking〉;2026-10-30 從它的 CLAUDE.md 搬過去):
 控制字元(Cc／Cf／Co／Cs,`\\n`、`\\t` 除外)一律是毀損;粗體失效一律用 CommonMark 渲染器判定——
 逐行渲染、輸出還留著字面 `**` 就是失效。不自己實作 flanking 條文(2026-07-29 那樣做誤報 99 筆)。
 另外照公事庫 CLAUDE.md 列的 grep 健檢查 Wiki_Pages/ 的頁面(wikilink、H2 禁用字元、錨點大寫、跨群組連結的

@@ -139,7 +139,7 @@ Claude fixes the page and also records the correction in the knowledge base's na
 
 - `wiki-feeder updated itself to …`: it worked; the email says what changed
 - `wiki-feeder … is available: this version needs you to update it yourself`: this version has a step you need to do; update by hand as below
-- `⚠️ Needs attention | wiki-feeder auto-update failed, rolled back to …`: it went back to the previous version and keeps running; no rush
+- `🚨 Needs attention | wiki-feeder auto-update failed, rolled back to …`: it went back to the previous version and keeps running; no rush
 
 If the daily summary shows the alert "Auto-update hasn't been able to check for days": on the days this computer was on, it couldn't check for new versions (days it was off or offline don't count), so auto-update itself may be broken. Update by hand once as below.
 
@@ -156,7 +156,7 @@ To update right away (or when an email asks you to): repeat steps 1–3 of step 
 
 ## When something goes wrong
 
-- **The email subject starts with `⚠️ Needs attention`**: open Terminal, type `cd ~/wiki-agent && claude`, paste the whole email into Claude and ask it to handle it according to wiki-agent's rules (you can write to Claude in English)
+- **The email subject starts with `🚨 Needs attention`**: open Terminal, type `cd ~/wiki-agent && claude`, paste the whole email into Claude and ask it to handle it according to wiki-agent's rules (you can write to Claude in English)
 - **The email says Claude Code is not signed in or the sign-in expired**: type `claude` in Terminal and sign in again; the next round picks up where it left off
 - **It can't read the inbox**: usually "Don't Allow" was clicked: Apple menu  → **System Settings** → **Privacy & Security** → **Files and Folders** → **wiki-agent**, turn on iCloud Drive (and Documents/Desktop), then double-click wiki-agent again to re-check (if you installed with the Terminal command, Full Disk Access is missing or switched off)
 - **You don't want wiki-agent to restart iCloud sync**: open `~/Library/Application Support/wiki-feeder/config.toml` in TextEdit, add the line `icloud_restart = false` under `[inbox]`, save, and double-click wiki-agent once. The log is `logs/icloud.log` in the same folder

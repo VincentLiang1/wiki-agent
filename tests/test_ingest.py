@@ -1151,7 +1151,19 @@ def test_alert_mail_subject_says_it_needs_attention(env, monkeypatch):
     post_summary(c, IngestReport(alerts=["有 1 個檔轉寫已停止重試,卡在 _待處理/:壞檔.pdf"]))
 
     (msg,) = _FakeSMTP.sent
-    assert msg["Subject"].startswith("⚠️ 需要處理") and "壞檔.pdf" in msg.get_content()
+    assert msg["Subject"].startswith("🚨 需要處理 1 件｜") and "壞檔.pdf" in msg.get_content()
+
+
+def test_alerts_come_before_ingested_items(env):
+    """2026-10-29:警示排在九筆已攝入後面,主旨又像一般摘要,使用者以為是攝入完成的通知、沒看到要搬原件。
+    要人處理的一律放在最前面。"""
+    from wiki_feeder.ingest import Outcome, render_summary
+
+    done = Outcome("週會.txt", "done", str(env["fraw"] / "會議與月報" / "週會.txt"),
+                   commits=[{"repo": "FWIKI", "github": "me/FWIKI", "hash": "a" * 40, "subject": "s"}])
+    text = render_summary(env["cfg"], IngestReport([done], alerts=["原件留在 _待處理/"]), datetime(2026, 10, 29, 11, 13))
+
+    assert text.index("### 失敗與警示") < text.index("### 已攝入")
 
 def test_mail_failure_does_not_break_ingest(env, monkeypatch):
     from wiki_feeder import notify
@@ -1344,9 +1356,15 @@ def test_commit_without_report_alerts_and_logs_why(env, monkeypatch, caplog):
     assert _remote_log(env["f_remote"])[0] == "docs(ingest): n"
     assert Path(o.raw_path) == env["fraw"] / "_待處理" / "n.txt"
     assert any("n.txt:攝入有 commit 但 claude 沒交回報(error_max_budget_usd)" in a for a in rep.alerts)
+    # 花完預算的要寫花了多少、上限多少:使用者要決定上限要不要調(2026-10-30)
+    assert any("這筆花了 US$5.03、撞上每筆的預算上限 US$10" in a for a in rep.alerts), rep.alerts
     assert "攝入 n.txt:claude 結束(error_max_budget_usd、is_error),花費 US$5.03、61 輪、497 秒,沒有結構化回報" \
         in caplog.text
     assert not any("群組「」" in n for n in o.notes)
+    # 錢花在哪(使用者 2026-10-30:26 KB 的轉寫為什麼要 US$10.99;攝入不留對話紀錄,只能看結束時交的 usage)
+    assert ("攝入 n.txt:用量 token 輸入 12、寫快取 80,000、讀快取 2,500,000、輸出 30,000; 呼叫 2 次、最大一次上下文 "
+            "150,010; 網路抓取 2、搜尋 0; 子代理 1 個; 各模型 claude-fable-5-1 US$4.90、claude-haiku-5-5 US$0.13") \
+        in caplog.text, caplog.text
 
 
 def test_ingest_that_dies_after_committing_stops(env, monkeypatch):
@@ -1796,6 +1814,7 @@ def test_forbidden_words_in_wiki_commit_message_are_dropped_not_refused(env, mon
     pytest.param("script", "知識圖譜/ 除外", id="script"),
     pytest.param("graph", "知識圖譜/ 除外", id="graph"),
     pytest.param("nonmd", "只准新增或修改", id="nonmd"),
+    pytest.param("memory", "只准新增或修改", id="memory"),
     pytest.param("delete", "刪掉了", id="delete"),
     pytest.param("cut", "大量刪減既有內容", id="cut"),
 ])
@@ -1839,6 +1858,27 @@ def test_stage_is_rebuilt_from_wiki_for_every_ingest(env, monkeypatch):
     assert r.ok and not r.outcomes[0].notes, r.outcomes[0].notes
     assert _remote_log(env["f_remote"].parent / "WIKI.git") == ["init"]
     assert not (c.wiki_stage_dir / "Wiki_Pages" / "通用知識.md").exists()
+
+
+def test_stage_has_wiki_memory_and_prompt_roots_its_paths_there(env, monkeypatch):
+    """個人庫 CLAUDE.md 指路「先讀 memory/…」:副本要有那一份,提示也要講相對路徑從副本算起——
+    claude 的工作目錄是公事庫,它也有 memory/,不講就讀到公事庫的同名檔(2026-10-30)。"""
+    c = env["cfg"]
+    _wiki_seed(env, {"memory/feedback_taiwan_terminology.md": "# 用語對照\n"})
+    seen = {}
+    real = subprocess.run
+
+    def spy(args, *a, **k):
+        if "--add-dir" in args:
+            seen["prompt"] = k.get("input", "")
+            seen["memory"] = (c.wiki_stage_dir / "memory" / "feedback_taiwan_terminology.md").read_text(encoding="utf-8")
+        return real(args, *a, **k)
+    monkeypatch.setattr(subprocess, "run", spy)
+    _feed(env, "t.txt", b"ttt")
+
+    assert ingest(c).outcomes[0].status == "done"
+    assert seen["memory"] == "# 用語對照\n"
+    assert f"一律從 {c.wiki_stage_dir} 算起" in seen["prompt"]
 
 
 def test_wiki_push_failure_is_retried_next_round_without_stop(env, monkeypatch):
@@ -2095,7 +2135,7 @@ def test_summary_and_mail_subject_are_in_english_for_english_friends(env, monkey
     post_summary(c, report, datetime(2026, 10, 6, 9, 5))
     (msg,) = _FakeSMTP.sent
     subject = msg["Subject"]
-    assert subject.startswith("⚠️ Needs attention"), subject
+    assert subject.startswith("🚨 Needs attention (1)"), subject
     assert "10/06 09:05" in subject and not _CJK.search(subject), subject
 
 

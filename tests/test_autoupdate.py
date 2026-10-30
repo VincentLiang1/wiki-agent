@@ -224,7 +224,7 @@ def test_auto_update_off_does_not_even_fetch(ucfg, tmp_path):
 
 
 def test_result_is_mailed_once_and_a_failed_version_is_not_retried(ucfg, tmp_path):
-    """結果另寄一封信:成功寫新版與說明;失敗並已退回,主旨開頭「⚠️ 需要處理」、寫哪一步、系統照常在跑。"""
+    """結果另寄一封信:成功寫新版與說明;失敗並已退回,主旨開頭「🚨 需要處理」、寫哪一步、系統照常在跑。"""
     pub = Pub(tmp_path)
     pub.publish("aaaaaaa", NOW - 3 * DAY)
     want = pub.publish("bbbbbbb", NOW - 2 * DAY)
@@ -235,7 +235,7 @@ def test_result_is_mailed_once_and_a_failed_version_is_not_retried(ucfg, tmp_pat
     ucfg.update_result_path.write_text(json.dumps(res), encoding="utf-8")
     au.tick(ucfg, root, "wf", _deps(box))
     [(subject, body)] = box.mails
-    assert subject.startswith("⚠️ 需要處理") and "試讀" in body and "照常在跑" in body and "aaaaaaa" in subject
+    assert subject.startswith("🚨 需要處理") and "試讀" in body and "照常在跑" in body and "aaaaaaa" in subject
     assert not box.spawned                                     # 裝失敗過的那一版不再自動重試
     ucfg.update_result_path.write_text(json.dumps(res), encoding="utf-8")
     au.tick(ucfg, root, "wf", _deps(box, now=lambda: NOW + DAY + 60))

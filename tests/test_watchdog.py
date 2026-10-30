@@ -1,4 +1,4 @@
-"""看門狗與自動修理:假的 FWIKI／WIKI、假的開發目錄;修理的 claude、發佈、resume、寄信都換成假的。"""
+"""看門狗與自動修理:假的 FWIKI／WIKI、假的開發目錄(修理的 clone 照它的 origin 建在假狀態目錄);修理的 claude、發佈、resume、寄信都換成假的。"""
 from __future__ import annotations
 
 import json
@@ -302,9 +302,9 @@ def test_code_fix_is_deployed_before_resume(env, dev, monkeypatch):
     def fix(cfg):
         quarantine(cfg, "暫存.txt")
         finish_stopped(cfg, "s.txt")
-        (dev / "a.py").write_text("x = 2\n")
-        git("commit", "-q", "-am", "修好", cwd=dev)
-        git("push", "-q", "origin", "main", cwd=dev)
+        (cfg.repair_clone / "a.py").write_text("x = 2\n")
+        git("commit", "-q", "-am", "修好", cwd=cfg.repair_clone)
+        git("push", "-q", "origin", "main", cwd=cfg.repair_clone)
     monkeypatch.setattr(repair, "run_agent", _agent(calls, fix, code_changed=True, resume_ok=True,
                                                     reviewed_commits=_stop_hashes(c)))
 
@@ -323,14 +323,15 @@ def test_repair_mail_flags_code_changed_without_docs(env, dev, monkeypatch, with
     calls = Calls()
 
     def fix(cfg):
-        (dev / "src").mkdir(exist_ok=True)
-        (dev / "src" / "模組.py").write_text("x = 2\n")
+        w = cfg.repair_clone
+        (w / "src").mkdir(exist_ok=True)
+        (w / "src" / "模組.py").write_text("x = 2\n")
         if with_docs:
-            (dev / "docs" / "spec").mkdir(parents=True, exist_ok=True)
-            (dev / "docs" / "spec" / "05-攝入與驗證.md").write_text("改了\n")
-        git("add", "-A", cwd=dev)
-        git("commit", "-q", "-m", "修好", cwd=dev)
-        git("push", "-q", "origin", "main", cwd=dev)
+            (w / "docs" / "spec").mkdir(parents=True, exist_ok=True)
+            (w / "docs" / "spec" / "05-攝入與驗證.md").write_text("改了\n")
+        git("add", "-A", cwd=w)
+        git("commit", "-q", "-m", "修好", cwd=w)
+        git("push", "-q", "origin", "main", cwd=w)
     monkeypatch.setattr(repair, "run_agent", _agent(calls, fix, code_changed=True))
 
     repair.tick(c, _deps(c, calls))
@@ -451,16 +452,100 @@ def test_old_inbox_wait_does_not_skip_the_next_wait(env, dev, monkeypatch):
     repair.tick(c, _deps(c, calls))                  # 網路剛通:要等收件再跑一輪
     assert not calls.agent and not calls.mail
 
-def test_dirty_dev_dir_is_not_touched(env, dev, monkeypatch):
-    """開發目錄有人正在改:不修,寄信說明(修了會跟人打架)。"""
-    c = replace(env["cfg"], repair_repo=dev)
+def _weird_stop(c):
     c.ingest_stop_path.parent.mkdir(parents=True, exist_ok=True)
     c.ingest_stop_path.write_text(json.dumps({"檔案": "x", "原因": "STOP:怪事"}, ensure_ascii=False))
+
+
+def test_dirty_dev_dir_no_longer_blocks_a_repair(env, dev, monkeypatch):
+    """修理在自己的 clone 改(2026-10-30):開發目錄有人正在改也照修,而且不碰那邊的檔與暫存區
+    (以前共用開發目錄,59ae6cb 夾了修理的 7 個檔)。"""
+    c = replace(env["cfg"], repair_repo=dev)
+    _weird_stop(c)
     (dev / "a.py").write_text("改到一半\n")
+    (dev / "b.py").write_text("暫存了\n")
+    git("add", "b.py", cwd=dev)
+    calls = Calls()
+
+    def fix(cfg):
+        assert cfg.repair_clone != dev and (cfg.repair_clone / "a.py").read_text() == "x = 1\n"
+        (cfg.repair_clone / "a.py").write_text("x = 2\n")
+        git("commit", "-q", "-am", "修好", cwd=cfg.repair_clone)
+        git("push", "-q", "origin", "main", cwd=cfg.repair_clone)
+    monkeypatch.setattr(repair, "run_agent", _agent(calls, fix, code_changed=True))
+    repair.tick(c, _deps(c, calls))
+    assert calls.agent and calls.deploy
+    assert c.repair_clone.is_relative_to(c.state_dir)
+    assert (dev / "a.py").read_text() == "改到一半\n"
+    assert git("diff", "--cached", "--name-only", cwd=dev).strip() == "b.py"
+    assert git("rev-list", "--count", "HEAD", cwd=dev).strip() == "1"      # 開發目錄的 HEAD 也沒動
+
+
+def test_dirty_clone_is_stashed_not_lost(env, dev, monkeypatch):
+    """上次修理留下沒 commit 的修改(測試沒過):下次修理存成 stash 再開始,不丟、也不卡住之後的修理。"""
+    c = replace(env["cfg"], repair_repo=dev)
+    assert repair.clone_ready(c) == ("", "")
+    (c.repair_clone / "a.py").write_text("x = 3  # 沒測過\n")
+    (c.repair_clone / "tmp.txt").write_text("刪不掉的暫存檔\n")
+    why, note = repair.clone_ready(c)
+    assert not why and "stash" in note
+    assert git("status", "--porcelain", cwd=c.repair_clone).strip() == ""
+    assert "tmp.txt" in git("stash", "show", "--include-untracked", "--name-only", cwd=c.repair_clone).strip()
+
+
+def test_clone_is_brought_back_to_main_and_up_to_date(env, dev, monkeypatch):
+    """修理的 clone 停在別的分支或舊版:回到 main、跟上 origin/main 才修(在舊程式上改,推送會被拒或蓋掉別人的修正)。"""
+    c = replace(env["cfg"], repair_repo=dev)
+    assert repair.clone_ready(c) == ("", "")
+    git("checkout", "-q", "-b", "試驗", cwd=c.repair_clone)
+    (dev / "a.py").write_text("x = 9\n")
+    git("commit", "-q", "-am", "人推的新版", cwd=dev)
+    git("push", "-q", "origin", "main", cwd=dev)
+    assert repair.clone_ready(c) == ("", "")
+    assert git("rev-parse", "--abbrev-ref", "HEAD", cwd=c.repair_clone).strip() == "main"
+    assert git("rev-parse", "HEAD", cwd=c.repair_clone).strip() == git("rev-parse", "HEAD", cwd=dev).strip()
+
+
+def test_clone_with_an_unpushed_commit_is_not_repaired(env, dev, monkeypatch):
+    """上次修理 commit 了卻沒推成:那是修好的程式,不可以蓋掉,也不在它上面接著修;寄信找人、寫出 clone 的位置。"""
+    c = replace(env["cfg"], repair_repo=dev)
+    assert repair.clone_ready(c) == ("", "")
+    (c.repair_clone / "a.py").write_text("x = 5\n")
+    git("commit", "-q", "-am", "修好但沒推成", cwd=c.repair_clone)
+    _weird_stop(c)
     calls = Calls()
     monkeypatch.setattr(repair, "run_agent", _agent(calls))
     repair.tick(c, _deps(c, calls))
-    assert not calls.agent and "沒 commit 的修改" in calls.mail[0][1]
+    assert not calls.agent and "沒推上 GitHub" in calls.mail[0][1] and str(c.repair_clone) in calls.mail[0][1]
+    assert git("log", "-1", "--format=%s", cwd=c.repair_clone).strip() == "修好但沒推成"
+
+
+def test_clone_sync_failure_is_mailed_and_not_repaired(env, dev, monkeypatch):
+    """套件裝不好(uv sync 失敗):不叫修理(它會把環境問題當程式的問題去查),寄信說明。"""
+    c = replace(env["cfg"], repair_repo=dev)
+    _weird_stop(c)
+    calls = Calls()
+    monkeypatch.setattr(repair, "run_agent", _agent(calls))
+    d = _deps(c, calls)
+    d.sync = lambda cfg: (False, "No solution found")
+    repair.tick(c, d)
+    assert not calls.agent and "uv sync" in calls.mail[0][1]
+
+
+def test_repair_runs_in_the_clone(env, dev, monkeypatch):
+    """修理的 claude 與它結束後的發佈都在 clone 跑,不在開發目錄。"""
+    c = replace(env["cfg"], repair_repo=dev)
+    seen = []
+
+    def fake(cmd, timeout, input=None, **kw):
+        seen.append(kw.get("cwd"))
+        import subprocess
+        return subprocess.CompletedProcess(cmd, 0, json.dumps({"structured_output": {"summary": "s"}}), "")
+    monkeypatch.setattr(repair, "run_net", fake)
+    repair.run_agent(c, [repair.Problem("stop", "k", "t", "d")])
+    repair._deploy(c)
+    repair._sync(c)
+    assert seen == [c.repair_clone] * 3
 
 
 def test_resource_problem_is_reported_not_fixed(env, dev, monkeypatch):
@@ -658,11 +743,11 @@ def test_unfinished_fix_or_needs_human_keeps_the_stop(env, dev, monkeypatch):
     def fix(cfg):
         quarantine(cfg, "暫存.txt")
         finish_stopped(cfg, "s.txt")
-        (dev / "a.py").write_text("x = 3  # 測試沒過,沒 commit\n")
+        (cfg.repair_clone / "a.py").write_text("x = 3  # 測試沒過,沒 commit\n")
     monkeypatch.setattr(repair, "run_agent", _agent(calls, fix, resume_ok=True, reviewed_commits=_stop_hashes(c)))
     repair.tick(c, _deps(c, calls))
     assert not calls.resume and c.ingest_stop_path.exists()
-    git("checkout", "--", "a.py", cwd=dev)
+    assert "沒 commit 的修改" in calls.mail[0][1]
     calls2 = Calls()
     c3 = replace(c, repair_max_per_day=9)
     c3.repair_log_path.unlink()
@@ -838,17 +923,6 @@ def test_finish_stopped_needs_a_stop_and_an_ingested_report(env, monkeypatch):
         led.ingest_set(sha, "stopped", result=json.dumps(saved, ensure_ascii=False))
     with pytest.raises(IngestError, match="不是 ingested"):
         finish_stopped(c, "s.txt")
-
-
-def test_repair_waits_for_main_and_origin(env, dev, monkeypatch):
-    """開發目錄不在 main、或有 commit 還沒推:可能是人做到一半,修理不可以接著 commit、推上去。"""
-    c = replace(env["cfg"], repair_repo=dev)
-    git("checkout", "-q", "-b", "試驗", cwd=dev)
-    assert "不在 main" in repair.dev_ready(c)
-    git("checkout", "-q", "main", cwd=dev)
-    (dev / "a.py").write_text("x = 9\n")
-    git("commit", "-q", "-am", "還沒推", cwd=dev)
-    assert "不一致" in repair.dev_ready(c)
 
 
 def test_agents_down_during_a_deploy_is_not_a_problem(cfg):
@@ -1135,7 +1209,7 @@ def _icloud_deps(c, calls, answers, restarts):
 
 def test_icloud_stall_restarts_bird_without_claude(env, dev, monkeypatch):
     c, clock = _icloud(replace(env["cfg"], repair_repo=dev), monkeypatch)
-    (dev / "a.py").write_text("有人正在改\n")      # 開發目錄不乾淨也照樣重啟:重啟 bird 不碰程式
+    (dev / "a.py").write_text("有人正在改\n")      # 重啟 bird 不碰程式,也不準備修理的 clone
     _stall(c, clock)
     calls, restarts = Calls(), []
     monkeypatch.setattr(repair, "run_agent", _agent(calls))

@@ -67,7 +67,7 @@ Both installers finish by setting up a schedule that runs every minute. To check
 
 ## When something goes wrong
 
-- **The email subject starts with "⚠️ Needs attention"**: open Terminal (Mac: `cd ~/wiki-agent && claude`) or PowerShell (Windows: `cd C:\wiki-feeder; claude`), paste the whole email into Claude and ask it to handle it according to wiki-agent's rules
+- **The email subject starts with "🚨 Needs attention"**: open Terminal (Mac: `cd ~/wiki-agent && claude`) or PowerShell (Windows: `cd C:\wiki-feeder; claude`), paste the whole email into Claude and ask it to handle it according to wiki-agent's rules
 - **"Claude Code is not signed in or the sign-in expired"**: run `claude` and sign in again; the next round picks up where it left off
 - **Mac can't read the inbox**: usually Full Disk Access is missing or switched off — redo step 6 above
 

@@ -161,7 +161,7 @@ class Config:
     ingest_max_attempts: int = 3
     push_retries: int = 3
     # --- 看門狗與自動修理(使用者 2026-10-05 定案:每 3 分鐘查、卡住就自己修、修完寄信;一天最多 3 次) ---
-    repair_repo: Path | None = None     # 開發目錄:修理在這裡改程式、測試、推送,再由看門狗發佈
+    repair_repo: Path | None = None     # 開發目錄:修理的 clone 照它的 origin 建(修理不在這裡改,見 repair_clone)
     repair_max_per_day: int = 3
     repair_timeout: float = 3600
     repair_budget_usd: float = 10.0
@@ -287,6 +287,12 @@ class Config:
 
     def repo(self, key: str) -> RepoConfig:
         return next(r for r in self.repos if r.key == key)
+
+    @property
+    def repair_clone(self) -> Path:
+        # 修理自己的 clone:在這裡改程式、測試、commit、推送、發佈。不用開發目錄——互動 session 跟它共用工作目錄與
+        # 暫存區,git add -A、stash、reset 會捲走或丟掉修理改到一半的檔(2026-10-29 59ae6cb、2026-10-30 審查)
+        return self.state_dir / "repair-repo"
 
     @property
     def repair_lock_path(self) -> Path:

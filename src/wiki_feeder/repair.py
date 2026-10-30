@@ -1,4 +1,4 @@
-"""自動修理:看門狗發現問題 → 開一個 claude -p 在開發目錄查原因、修程式 → 程式自己發佈、解除 STOP → 寄信。
+"""自動修理:看門狗發現問題 → 開一個 claude -p 在修理自己的 clone 查原因、修程式 → 程式自己發佈、解除 STOP → 寄信。
 
 使用者 2026-10-05 定案:直接開放自動修;STOP 只在「原因明確、內容無害」時自動解除;一天最多 3 次;
 同一個問題修過一次又出現就不再自己修,改寄信找人;CPU／記憶體被佔用只查原因、寄信。
@@ -69,7 +69,7 @@ HELPERS = ("quarantine", "finish-stopped", "unstick", "reconvert", "ledger")
 def feeder_cmd() -> list[str]:
     """動真資料的指令(隔離、補完、解卡)一律用「正在跑的這一份」程式——launchd 底下是發佈副本——不用開發目錄:
     修理一邊改 ingest.py、一邊跑 finish-stopped 的話,會用改到一半、沒測過的程式動處理紀錄與原件。
-    -P:`-m` 預設把 cwd(開發目錄)放進 sys.path 最前面,那就又跑回開發目錄的程式了。"""
+    -P:`-m` 預設把 cwd(修理的 clone)放進 sys.path 最前面,那就又跑回開發目錄的程式了。"""
     return [sys.executable, "-P", "-m", "wiki_feeder"]
 
 
@@ -119,7 +119,7 @@ PROMPT = """你是 wiki-feeder 的自動修理。看門狗發現常駐程式出�
    原因在 wiki-feeder 自己的程式才可以照第 1 條修,否則在 cause 與 human_todo 寫清楚建議怎麼處理。
 6. 需要人到 Mac 畫面上操作(隱私權限、登入)或你沒把握的:needs_human 填 true,human_todo 寫具體步驟。
 7. 不可修改 WIKI／FWIKI 的任何檔(包括它們的 CLAUDE.md);不可 --force;不可刪檔。
-8. 動真資料的指令照抄上面的完整寫法(跑的是已發佈的程式);**不要用 `uv run wiki-feeder`**——那會跑開發目錄裡
+8. 動真資料的指令照抄上面的完整寫法(跑的是已發佈的程式);**不要用 `uv run wiki-feeder`**——那會跑這個目錄裡
    你正在改、還沒測過的程式。其他可用的:`{feeder} reconvert <檔名>`、`{feeder} ledger`。
 """
 
@@ -142,6 +142,7 @@ class Deps:
     icloud_online: Callable[[], bool] = None        # 連得上 iCloud(www.icloud.com:443)
     net_id: Callable[[], str | None] = None         # 現在接在哪個網路(watchdog.net_id);None = 不看換網路(測試、非 Mac)
     ip_families: Callable[[], tuple[bool, bool]] = None   # (IPv4 通、IPv6 通);None = 不查(測試)
+    sync: Callable[[Config], tuple[bool, str]] = None       # 修理的 clone 裝好套件(uv sync);None = 不裝(測試)
     now: Callable[[], float] = time.time
     sleep: Callable[[float], None] = time.sleep
     extra: dict = field(default_factory=dict)
@@ -190,9 +191,17 @@ def _settled_inboxes(cfg: Config, now: float, problems: list[Problem]) -> list[P
 
 
 def _deploy(cfg: Config) -> tuple[bool, str]:
-    r = run_net([UV, "run", "python", "scripts/launchd.py", "deploy"], 7200, cwd=cfg.repair_repo, text=True,
+    # 在修理的 clone 跑:launchd.py 的 REPO 是它所在的 repo,發佈副本的 origin 這次指到 clone(人下次 deploy 會對回開發目錄)
+    r = run_net([UV, "run", "python", "scripts/launchd.py", "deploy"], 7200, cwd=cfg.repair_clone, text=True,
                 term_grace=120)
     return r.returncode == 0, (r.stdout + r.stderr).strip()[-1500:]
+
+
+def _sync(cfg: Config) -> tuple[bool, str]:
+    """修理開始前先裝好 clone 的套件:第一次 clone、或 uv.lock 變了,不先裝的話 claude 的第一次 uv run pytest
+    要等好幾分鐘(算在它的時限裡),裝失敗也會被它當成程式的問題去查。"""
+    r = run_net([UV, "sync", "-q"], 900, cwd=cfg.repair_clone, text=True)
+    return r.returncode == 0, (r.stdout + r.stderr).strip()[-800:]
 
 
 def _resume(cfg: Config) -> str:
@@ -243,7 +252,7 @@ def default_deps() -> Deps:
     from .watchdog import agents_not_loaded
     return Deps(online=_online, deploy=_deploy, resume=_resume, mail=_mail, agents_check=agents_not_loaded,
                 icloud_synced=icloud_synced, restart_bird=_restart_bird, vp_kick=_vp_kick, vp_download=_vp_download,
-                icloud_online=_icloud_online, ip_families=_ip_families,
+                icloud_online=_icloud_online, ip_families=_ip_families, sync=_sync,
                 **({"brctl_status": brctl_status, "bird_running": bird_running, "net_id": net_id}
                    if sys.platform == "darwin" else {}))
 
@@ -532,28 +541,45 @@ def _escalate(cfg: Config, deps: Deps, now: float, key: str, subject: str, body:
 # -- 前置檢查 ------------------------------------------------------------------------
 
 def _git(repo: Path, *args: str, check: bool = True) -> str:
-    """本機 git。安全閘(dev_ready、stop_resumable、要不要發佈)一律 check:git 失敗時 stdout 是空的,
+    """本機 git。安全閘(clone_ready、stop_resumable、要不要發佈)一律 check:git 失敗時 stdout 是空的,
     不看結束碼就會讀成「乾淨」「沒有沒推送的 commit」而放行(ingest.unverified_commits 踩過同一個坑)。
     只有收集現場資料、寫信時用 check=False。"""
     return repo_git(repo, *args, check=check)
 
 
-def dev_ready(cfg: Config) -> str:
-    """開發目錄要乾淨、在 main、跟 origin/main 一致;否則不修(可能有人正在改,修了會打架)。回傳問題說明,沒問題回空字串。"""
-    repo = cfg.repair_repo
-    if repo is None or not (repo / ".git").exists():
-        return "沒有設定開發目錄"
+def clone_ready(cfg: Config) -> tuple[str, str]:
+    """準備修理自己的 clone(cfg.repair_clone),回傳 (不能修的理由, 給信的備註);能修時理由是空字串。
+
+    修理不在開發目錄改:互動 session 跟它共用工作目錄與暫存區(2026-10-29 59ae6cb 夾了修理的 7 個檔)。
+    clone 只有修理在用,所以開發目錄有人正在改也照修。沒有 clone 就照開發目錄的 origin(GitHub)建,
+    推送用的認證跟開發目錄一樣。上次修理留下沒 commit 的修改:存成 stash(不丟)再開始;
+    留下沒推上去的 commit:不修、找人——那是修好卻沒推成的程式,不可以蓋掉。"""
+    src, repo = cfg.repair_repo, cfg.repair_clone
+    if src is None or not (src / ".git").exists():
+        return "沒有設定開發目錄", ""
+    note = ""
     try:
+        if not (repo / ".git").exists():
+            url = _git(src, "remote", "get-url", "origin")
+            repo.parent.mkdir(parents=True, exist_ok=True)
+            r = run_net(["git", "clone", "-q", url, str(repo)], 600, cwd=repo.parent, text=True)
+            if r.returncode:
+                return f"建不起修理的 clone({repo}):{(r.stderr or r.stdout).strip()[-300:]}", ""
+        else:
+            r = run_net(["git", "fetch", "-q", "origin"], 120, cwd=repo, text=True)
+            if r.returncode:
+                return f"修理的 clone 拿不到 GitHub 的最新版:{(r.stderr or r.stdout).strip()[-300:]}", ""
         if _git(repo, "status", "--porcelain"):
-            return f"開發目錄 {repo} 有沒 commit 的修改(可能有人正在改)"
+            _git(repo, "stash", "push", "-u", "-q", "-m", f"wiki-feeder 修理留下的修改({datetime.now():%Y-%m-%d %H:%M})")
+            note = f"上次修理在 {repo} 留下沒 commit 的修改,已存成 stash(git -C '{repo}' stash list 看得到)"
         if _git(repo, "rev-parse", "--abbrev-ref", "HEAD") != "main":
-            return "開發目錄不在 main"
-        run_net(["git", "fetch", "-q", "origin"], 120, cwd=repo)
-        if _git(repo, "rev-parse", "HEAD") != _git(repo, "rev-parse", "origin/main"):
-            return "開發目錄跟 origin/main 不一致"
+            _git(repo, "checkout", "-q", "main")
+        if _git(repo, "rev-list", "--count", "origin/main..HEAD") != "0":
+            return f"修理的 clone {repo} 有沒推上 GitHub 的 commit(上次修理沒推成),要人看過", note
+        _git(repo, "merge", "--ff-only", "-q", "origin/main")
     except IngestError as e:
-        return f"開發目錄的 git 出錯:{e}"
-    return ""
+        return f"修理的 clone 的 git 出錯:{e}", note
+    return "", note
 
 
 def _same_commit(a: str, b: str) -> bool:
@@ -660,7 +686,7 @@ def run_agent(cfg: Config, problems: list[Problem]) -> dict:
             "--json-schema", json.dumps(SCHEMA, ensure_ascii=False)]
     prompt = PROMPT.format(problems=_problems_text(problems), facts=facts(cfg, problems),
                            feeder=shlex.join(feeder_cmd()))
-    r = run_net(args, cfg.repair_timeout, input=prompt, cwd=cfg.repair_repo, text=True)
+    r = run_net(args, cfg.repair_timeout, input=prompt, cwd=cfg.repair_clone, text=True)
     try:
         out = json.loads(r.stdout)
     except ValueError:
@@ -750,7 +776,7 @@ def _round(cfg: Config, deps: Deps, now: float) -> str:
                   + _problems_text(fresh))
         return "今天的修理次數用完,已寄信找人"
 
-    # iCloud 不叫 claude(它沒辦法重啟 bird,kill／killall 在 DISALLOWED),所以也不看開發目錄乾不乾淨
+    # iCloud 不叫 claude(它沒辦法重啟 bird,kill／killall 在 DISALLOWED),所以也不準備修理的 clone
     mine = [p for p in fresh if p.kind == "icloud"]
     if mine:
         msg = _fix_icloud(cfg, deps, now, mine)
@@ -765,21 +791,25 @@ def _round(cfg: Config, deps: Deps, now: float) -> str:
         if not fresh:
             return msg
 
-    why = dev_ready(cfg)
+    why, note = clone_ready(cfg)
+    if not why and deps.sync:
+        ok, out = deps.sync(cfg)
+        if not ok:
+            why = f"修理的 clone 裝不好套件(uv sync):{out}"
     if why:
         _escalate(cfg, deps, now, "dev:" + _keys(fresh), "沒辦法自動修",
-                  f"{why},這次不自動修。發現的問題:\n\n" + _problems_text(fresh))
-        return "開發目錄不能修:" + why
+                  f"{why},這次不自動修。" + (f"\n{note}。" if note else "") + "發現的問題:\n\n" + _problems_text(fresh))
+        return "修理的 clone 不能修:" + why
 
     # 先記次數再修:修到一半當掉也算一次,不會無限重來
     base = {"type": "repair", "day": _day(now), "time": now, "keys": [p.key for p in fresh]}
     for p in fresh:
         _record(cfg, {**base, "key": p.key, "summary": "(修理中)"})
-    head0 = _git(cfg.repair_repo, "rev-parse", "HEAD")
-    res: dict = {}
+    head0 = _git(cfg.repair_clone, "rev-parse", "HEAD")
+    res: dict = {"clone_note": note} if note else {}
     try:
-        res = run_agent(cfg, fresh)
-        if res.get("api_down") and _git(cfg.repair_repo, "rev-parse", "HEAD") == head0:
+        res = {**res, **run_agent(cfg, fresh)}
+        if res.get("api_down") and _git(cfg.repair_clone, "rev-parse", "HEAD") == head0:
             # 跟斷網一樣:不修、不算次數(否則這個問題 7 天內都只會寄信找人)、不寄信,下一輪再試
             res["void"] = True
             return "修理的 claude 連不上 API,下一輪再試:" + str(res.get("error", ""))[:200]
@@ -788,7 +818,7 @@ def _round(cfg: Config, deps: Deps, now: float) -> str:
         log.exception("修理流程出錯")
         res = {**res, "error": f"修理流程出錯:{type(e).__name__}: {e}"}
         subject = "🛑 wiki-feeder 修理流程出錯、需要你｜" + "、".join(p.title for p in fresh)[:80]
-        head1 = _git(cfg.repair_repo, "rev-parse", "HEAD", check=False) or head0
+        head1 = _git(cfg.repair_clone, "rev-parse", "HEAD", check=False) or head0
         try:
             deps.mail(cfg, subject, _mail_body(cfg, fresh, res, [], head0, head1, fresh)
                       + f"\n\n## 修理流程出錯\n{type(e).__name__}: {e}\n發佈、解除 STOP 可能沒做完;詳細在 {cfg.log_path}")
@@ -916,8 +946,8 @@ def _fix_vp_bridge(cfg: Config, deps: Deps, now: float, problems: list[Problem])
 
 
 def _finish(cfg: Config, deps: Deps, fresh: list[Problem], res: dict, head0: str) -> str:
-    notes: list[str] = []
-    repo = cfg.repair_repo
+    notes: list[str] = [res["clone_note"]] if res.get("clone_note") else []
+    repo = cfg.repair_clone
     head1 = _git(repo, "rev-parse", "HEAD")
     deployed = True
     if head1 != head0:
@@ -932,7 +962,7 @@ def _finish(cfg: Config, deps: Deps, fresh: list[Problem], res: dict, head0: str
     elif _git(repo, "status", "--porcelain"):
         # 修好的程式沒 commit(多半是測試沒過,規則 1):跟沒發佈一樣,resume 的話舊版又出一樣的事
         deployed = False
-        notes.append("修理在開發目錄留下沒 commit 的修改,下次修理前要人清掉")
+        notes.append(f"修理在它的 clone 留下沒 commit 的修改(下次修理開始時會存成 stash):{repo}")
 
     if any(p.kind == "stop" for p in fresh):
         if not res.get("resume_ok") or res.get("needs_human"):
@@ -974,11 +1004,11 @@ def _mail_body(cfg: Config, fresh: list[Problem], res: dict, notes: list[str], h
     if res.get("actions"):
         lines += ["", "## 做了什麼"] + [f"- {a}" for a in res["actions"]]
     if head1 != head0:
-        commits = _git(cfg.repair_repo, "log", "--format=%h %s", f"{head0}..{head1}", check=False)
+        commits = _git(cfg.repair_clone, "log", "--format=%h %s", f"{head0}..{head1}", check=False)
         lines += ["", "## 程式修改"] + [f"- {ln.split(' ', 1)[-1]}\n  https://github.com/{cfg.feeder_github}/commit/{ln.split()[0]}"
                                        for ln in commits.splitlines()]
         # 程式改了文件要一起改(使用者 2026-10-06):規則只是叮嚀,漏了的話信裡要看得出來
-        changed = _git(cfg.repair_repo, "-c", "core.quotePath=false", "diff", "--name-only", head0, head1,
+        changed = _git(cfg.repair_clone, "-c", "core.quotePath=false", "diff", "--name-only", head0, head1,
                        check=False).splitlines()
         if any(p.startswith(("src/", "scripts/")) for p in changed) and not any(p.startswith("docs/") for p in changed):
             lines.append("- ⚠️ 這次改了程式,但沒有改 docs/ 底下的文件:請確認規格書(docs/spec)或實作文件(docs/dev)"
@@ -992,5 +1022,5 @@ def _mail_body(cfg: Config, fresh: list[Problem], res: dict, notes: list[str], h
     if res.get("summary"):
         lines += ["", "## 摘要", res["summary"]]
     if res.get("session_id"):
-        lines += ["", f"修理過程的紀錄:claude --resume {res['session_id']}(在 {cfg.repair_repo})"]
+        lines += ["", f"修理過程的紀錄:claude --resume {res['session_id']}(在 {cfg.repair_clone})"]
     return "\n".join(lines)

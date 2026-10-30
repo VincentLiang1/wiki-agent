@@ -137,7 +137,7 @@ _COMMIT_MANAGED = ("**不要 git add、不要 git commit**(會被權限擋下):�
                    "「攝入:<原件檔名>——一句摘要」。只能改 Wiki_Pages/ 底下的檔(與下面第 7 條的名詞校正表),"
                    "動到別處程式不 commit、停下所有攝入等人。"
                    "**不要打 `git show`、`git log`、`git diff`(含 `--stat`)**——會被權限擋下。")
-_BACKFILL_RULE = ("\n   **回填個人 WIKI 照本庫規則做,但只寫在副本裡**:個人 WIKI 的頁面副本在 {stage}(那個庫自己的規則是 {stage}/CLAUDE.md,照它建頁、改頁、登錄它的 index.md)。只能新增或修改 {stage}/Wiki_Pages/ 底下的 .md(知識圖譜/ 除外),不刪檔、不改名、不大幅刪減既有內容;副本不是 git 庫,不要在那裡 commit——程式驗證後替你寫回個人 WIKI、commit 並推送,commit message 照個人 WIKI 的 CLAUDE.md 格式寫進回報的 wiki_commit_message(沒回填就填空字串)。回填的頁面與 commit message 都**不得提到本庫{forbidden}**:只寫去除內部細節後可攜的通用知識;寫不出來就不回填。commit message 連「沒有回填本庫」這種交代也不要寫(個人 WIKI 規則要你寫回填到哪一頁,這裡不適用);提到這些字的行程式會整行刪掉。")
+_BACKFILL_RULE = ("\n   **回填個人 WIKI 照本庫規則做,但只寫在副本裡**:個人 WIKI 的頁面副本在 {stage}(那個庫自己的規則是 {stage}/CLAUDE.md,照它建頁、改頁、登錄它的 index.md;它寫的相對路徑(例如「先讀 memory/…」)一律從 {stage} 算起,**不是本庫的同名檔**,{stage}/memory/ 只讀、不要改)。只能新增或修改 {stage}/Wiki_Pages/ 底下的 .md(知識圖譜/ 除外),不刪檔、不改名、不大幅刪減既有內容;副本不是 git 庫,不要在那裡 commit——程式驗證後替你寫回個人 WIKI、commit 並推送,commit message 照個人 WIKI 的 CLAUDE.md 格式寫進回報的 wiki_commit_message(沒回填就填空字串)。回填的頁面與 commit message 都**不得提到本庫{forbidden}**:只寫去除內部細節後可攜的通用知識;寫不出來就不回填。commit message 連「沒有回填本庫」這種交代也不要寫(個人 WIKI 規則要你寫回填到哪一頁,這裡不適用);提到這些字的行程式會整行刪掉。")
 # 歸屬判斷(有個人庫時才有):拿不準一律公事——公事判成個人,公司內容就進了個人庫、公事庫也查不到;
 # 個人判成公事只是事後要搬(使用者 2026-10-26)
 _SCOPE_RULE = ("\n   **歸屬:先判斷這份該攝入本庫,還是只進個人 WIKI**,寫進回報的 scope。上面說的「跟本庫主題沒有直接關係」"
@@ -1241,7 +1241,55 @@ def _log_end(name: str, out: dict, result: dict) -> str:
              L("、") + "is_error" if out.get("is_error") else "", out.get("total_cost_usd", "?"), out.get("num_turns", "?"),
              round(out["duration_ms"] / 1000) if isinstance(out.get("duration_ms"), (int, float)) else "?",
              "" if result else L(",沒有結構化回報"))
+    usage = _usage_text(out)
+    if usage:
+        log.info(L("攝入 %s:用量 %s"), name, usage)
     return end
+
+
+def _usage_text(out: dict) -> str:
+    """claude 回報的 token 用量攤開成一行(使用者 2026-10-30:一份 26 KB 的轉寫為什麼要 US$10.99?
+    攝入不留對話紀錄,只能靠結束時交的 usage 看錢花在讀快取、寫快取還是輸出)。欄位缺了就略過,不擋攝入。"""
+    def num(d, k):
+        v = d.get(k) if isinstance(d, dict) else None
+        return v if isinstance(v, (int, float)) else None
+
+    u = out.get("usage") if isinstance(out.get("usage"), dict) else {}
+    parts = []
+    tok = [(L("輸入"), num(u, "input_tokens")), (L("寫快取"), num(u, "cache_creation_input_tokens")),
+           (L("讀快取"), num(u, "cache_read_input_tokens")), (L("輸出"), num(u, "output_tokens"))]
+    if any(v is not None for _, v in tok):
+        parts.append("token " + L("、").join(f"{k} {v:,}" for k, v in tok if v is not None))
+    its = [i for i in u.get("iterations") or [] if isinstance(i, dict)]
+    ctx = [sum(num(i, k) or 0 for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+           for i in its]
+    if ctx:
+        parts.append(L("呼叫 {n} 次、最大一次上下文 {peak:,}", n=len(ctx), peak=max(ctx)))
+    tools = u.get("server_tool_use") if isinstance(u.get("server_tool_use"), dict) else {}
+    fetch, search = num(tools, "web_fetch_requests"), num(tools, "web_search_requests")
+    if fetch or search:
+        parts.append(L("網路抓取 {f}、搜尋 {s}", f=fetch or 0, s=search or 0))
+    spawned = num(out.get("subagent_stats"), "spawned")
+    if spawned:
+        parts.append(L("子代理 {n} 個", n=spawned))
+    models = out.get("modelUsage") if isinstance(out.get("modelUsage"), dict) else {}
+    costs = [f"{m} US${c:.2f}" for m, d in models.items() if (c := num(d, "costUSD")) is not None]
+    if costs:
+        parts.append(L("各模型 {costs}", costs=L("、").join(costs)))
+    return "; ".join(parts)
+
+
+def _no_report_alert(cfg: Config, name: str, end: str, out: dict) -> str:
+    """commit 了卻沒交回報的警示。花完預算的附上花費與上限(2026-10-29 Claude_Team_教學.pdf 花了 US$10.99、
+    撞上 US$10 上限):使用者要知道這份要多少錢、上限要不要調。一筆只報一次,金額不會讓警示每輪變。"""
+    msg = L("{name}:攝入有 commit 但 claude 沒交回報({end}),原件留在 {pending}/;"
+            "照頁面「來源」把原件搬好、更新處理紀錄,待確認事項看 commit message", name=name, end=end,
+            pending=cfg.pending_name)
+    cost = out.get("total_cost_usd")
+    if end == "error_max_budget_usd" and isinstance(cost, (int, float)):
+        msg += L("。這筆花了 US${cost}、撞上每筆的預算上限 US${budget}(`ingest_budget_usd`),"
+                 "上限要不要調高,請 Claude 看歷來每筆的花費再決定", cost=f"{cost:.2f}", budget=f"{cfg.ingest_budget_usd:g}")
+    return msg
 
 
 def _log_denials(cfg: Config, name: str, out: dict) -> None:
@@ -1448,9 +1496,7 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
         notes = place_notes + notes
         if not result:
             # 指定只進個人庫、寫回了卻沒交回報:群組不知道,原件留在 _待處理/——跟公事那邊一樣發警示,不只一行備註
-            msg = L("{name}:攝入有 commit 但 claude 沒交回報({end}),原件留在 {pending}/;"
-                    "照頁面「來源」把原件搬好、更新處理紀錄,待確認事項看 commit message", name=raw.name, end=end,
-                    pending=cfg.pending_name)
+            msg = _no_report_alert(cfg, raw.name, end, out)
             report.alerts.append(msg)
             notes.append(msg)
         added, deleted, _ = diff_lines(personal, before[personal.key])
@@ -1460,9 +1506,7 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
     else:
         # commit 了卻沒交回報(2026-10-07 業務月會逐字稿):群組、原件位置、待確認全不知道,
         # 只在摘要留一行「群組「」不在原件樹裡」沒人會注意到,頁面來源指向的原件卻還在 _待處理/
-        msg = L("{name}:攝入有 commit 但 claude 沒交回報({end}),原件留在 {pending}/;"
-                "照頁面「來源」把原件搬好、更新處理紀錄,待確認事項看 commit message", name=raw.name, end=end,
-                pending=cfg.pending_name)
+        msg = _no_report_alert(cfg, raw.name, end, out)
         report.alerts.append(msg)
         notes = [msg]
     heartbeat(cfg.ingest_lock_path)
@@ -1510,11 +1554,14 @@ def _forced_personal(side: dict) -> bool:
 # 回填只准動這些:Wiki_Pages/ 底下的 .md,知識圖譜/ 除外(腳本與 hook 產生的圖檔都在那裡)
 BACKFILL_ROOT = "Wiki_Pages/"
 BACKFILL_DENY = ("Wiki_Pages/知識圖譜/",)
+# 副本另外放個人庫的 memory/ 給 claude 讀、不准改(改了就被上面的範圍擋下):個人庫 CLAUDE.md 有「寫綠界之前先讀
+# memory/…」這類指路,副本沒有它就讀不到(2026-10-30 FWIKI 那邊的 session 查出來)
+STAGE_READ_ONLY = "memory"
 # 單向規則:公事庫的內容不得寫進個人庫、個人庫不得提到公事庫。新寫進去的內容多出 cfg.backfill_forbidden 的字就整筆不收
 
 
 def prepare_stage(cfg: Config) -> tuple[Path, dict[str, bytes]]:
-    """每一筆攝入前重建個人庫副本:CLAUDE.md 與 Wiki_Pages/ 底下所有 .md。回傳 (副本目錄, 相對路徑 → 內容)。"""
+    """每一筆攝入前重建個人庫副本:CLAUDE.md、Wiki_Pages/ 與 memory/ 底下所有 .md。回傳 (副本目錄, 相對路徑 → 內容)。"""
     import shutil
     wiki = cfg.repo(cfg.backfill_repo).repo_dir
     stage = cfg.wiki_stage_dir
@@ -1522,7 +1569,8 @@ def prepare_stage(cfg: Config) -> tuple[Path, dict[str, bytes]]:
         shutil.rmtree(stage)
     stage.mkdir(parents=True)
     snap: dict[str, bytes] = {}
-    for src in [wiki / "CLAUDE.md", *sorted((wiki / "Wiki_Pages").rglob("*.md"))]:
+    for src in [wiki / "CLAUDE.md", *sorted((wiki / "Wiki_Pages").rglob("*.md")),
+                *sorted((wiki / STAGE_READ_ONLY).rglob("*.md"))]:
         if not src.is_file() or src.is_symlink():
             continue
         rel = src.relative_to(wiki).as_posix()
@@ -1824,6 +1872,13 @@ def prune_md_cache(cfg: Config, now: datetime | None = None) -> int:
 
 def render_summary(cfg: Config, report: IngestReport, when: datetime) -> str:
     lines = [L("## {time} 這一輪", time=f"{when:%H:%M}"), ""]
+    # 要人處理的放最前面(使用者 2026-10-30:放在九筆已攝入後面,以為是攝入完成的通知、沒仔細看)
+    failed = [o for o in report.outcomes if o.status == "failed"]
+    if failed or report.alerts:
+        lines.append(L("### 失敗與警示"))
+        lines += [L("- **{name}**:{notes}", name=o.name, notes=o.error) for o in failed]
+        lines += [f"- {a}" for a in report.alerts if not any(o.error and o.error in a for o in failed)]
+        lines.append("")
     done = [o for o in report.outcomes if o.status == "done"]
     if done:
         lines.append(L("### 已攝入"))
@@ -1858,12 +1913,6 @@ def render_summary(cfg: Config, report: IngestReport, when: datetime) -> str:
         lines.append(L("### 攝入前已從收件區手動移走(略過)"))
         lines += [f"- {o.name}" for o in gone]
         lines.append("")
-    failed = [o for o in report.outcomes if o.status == "failed"]
-    if failed or report.alerts:
-        lines.append(L("### 失敗與警示"))
-        lines += [L("- **{name}**:{notes}", name=o.name, notes=o.error) for o in failed]
-        lines += [f"- {a}" for a in report.alerts if not any(o.error and o.error in a for o in failed)]
-        lines.append("")
     # 單庫(朋友的 Windows 版)沒有個人庫可搬
     lines.append(L("有錯請在 Claude Code 裡說是哪一筆({fix})。",
                    fix=L(SUMMARY_FIX_BACKFILL) if cfg.has_backfill else L(SUMMARY_FIX_SINGLE)))
@@ -1879,8 +1928,9 @@ def _mail_summary(cfg: Config, report: IngestReport, when: datetime, body: str) 
     parts = [f"{k} {v}" for k, v in counts.items() if v] or [L("警示")]
     subject = L("wiki-feeder 攝入摘要 {time}:{parts}", time=f"{when:%m/%d %H:%M}", parts=L("、").join(parts))
     if report.alerts:
-        # 卡住(停止重試、STOP、doc2md 跑不起來、收件匣讀不到)要人處理:主旨一眼看得出來
-        subject = L("⚠️ 需要處理｜{subject}", subject=subject)
+        # 卡住(停止重試、STOP、doc2md 跑不起來、收件匣讀不到)要人處理:主旨一眼看得出來。
+        # 🚨＋件數(使用者 2026-10-30):「⚠️ 需要處理｜…攝入 9」被當成攝入完成的通知、沒點開
+        subject = L("🚨 需要處理 {n} 件｜{subject}", n=len(report.alerts), subject=subject)
     if not cfg.mail_to or not cfg.mail_from:
         return None
     try:

@@ -1,5 +1,13 @@
 [
  {
+  "source": "857a993",
+  "date": "2026-10-30",
+  "needs_human": false,
+  "zh-Hant": "- 要你處理的信更醒目:主旨開頭改成「🚨 需要處理 N 件」(寫出有幾件),信裡的「失敗與警示」移到最前面,不再排在已攝入的檔後面、被當成一般的攝入完成通知。自動更新失敗的信主旨也改用 🚨\n- 攝入一份檔用完每筆的預算、沒交回報時,警示會寫出這份花了多少、每筆上限多少,方便判斷上限要不要調\n- 每筆攝入在 log 多記一行用量(各類 token、呼叫次數、最大一次上下文、網路抓取、子代理、各模型花費),查得出額度花在哪。用訂閱登入的話,這裡的金額是照定價換算的估計,不是帳單",
+  "zh-Hans": "- 要你处理的邮件更醒目:主题开头改成「🚨 需要处理 N 件」(写出有几件),邮件里的「失败与警示」移到最前面,不再排在已摄入的文件后面、被当成一般的摄入完成通知。自动更新失败的邮件主题也改用 🚨\n- 摄入一份文件用完每笔的预算、没交回报时,警示会写出这份花了多少、每笔上限多少,方便判断上限要不要调\n- 每笔摄入在 log 多记一行用量(各类 token、调用次数、最大一次上下文、网络抓取、子代理、各模型花费),查得出额度花在哪。用订阅登录的话,这里的金额是按定价换算的估计,不是账单",
+  "en": "- Emails that need you stand out more: the subject now starts with \"🚨 Needs attention (N)\" (with the count), and \"Failures and alerts\" moves to the top of the email instead of sitting after the ingested files, where it read like an ordinary ingest-done notice. Auto-update failure emails use 🚨 too\n- When an ingest runs out of its per-item budget without handing back a report, the alert now says how much it cost and what the per-item limit is, so you can decide whether to raise it\n- Each ingest logs one more line with usage (token types, number of calls, largest context, web fetches, subagents, cost per model), so you can see where the quota went. If you sign in with a subscription, that amount is an estimate at list price, not a bill"
+ },
+ {
   "source": "ae65b4e",
   "date": "2026-10-29",
   "needs_human": false,
