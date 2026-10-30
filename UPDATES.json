@@ -1,5 +1,13 @@
 [
  {
+  "source": "6abde4f",
+  "date": "2026-10-30",
+  "needs_human": false,
+  "zh-Hant": "- 表格加總(table-sums)認得分隔列寫成 `--:` 這種只有兩個減號的表,不再回「沒有表格」\n- 攝入時要跟原件資料夾裡別份 Office 原件(例如上一版)比對,提示講明同一個傾印指令換成那份的路徑就能讀,不再以為只能讀這一份\n- `wiki-feeder tool-gaps` 指令列出全部缺口(摘要信照舊最多列 8 項)\n- log 的用量那行,「呼叫 N 次、最大一次上下文」改成「結束時上下文」(原本的數字其實只是最後一次呼叫)",
+  "zh-Hans": "- 表格加总(table-sums)认得分隔行写成 `--:` 这种只有两个减号的表,不再回「没有表格」\n- 摄入时要跟原件文件夹里别份 Office 原件(例如上一版)比对,提示讲明同一个导出命令换成那份的路径就能读,不再以为只能读这一份\n- `wiki-feeder tool-gaps` 命令列出全部缺口(摘要邮件照旧最多列 8 项)\n- log 的用量那行,「调用 N 次、最大一次上下文」改成「结束时上下文」(原本的数字其实只是最后一次调用)",
+  "en": "- table-sums now recognises tables whose separator row uses only two hyphens, such as `--:`, instead of reporting \"no tables\"\n- When an ingest needs to compare with another Office original in the originals folder (for example the previous version), the prompt now says the same dump command works with that file's path, so it no longer assumes only the current file can be read\n- `wiki-feeder tool-gaps` lists every gap (the summary email still lists at most 8)\n- In the usage line of the log, \"N calls, largest context\" became \"context at end\" (the number was only ever the last call)"
+ },
+ {
   "source": "857a993",
   "date": "2026-10-30",
   "needs_human": false,

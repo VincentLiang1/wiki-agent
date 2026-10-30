@@ -182,7 +182,23 @@ def test_office_attachments_of_a_mail_get_the_dump_command_too(env, tmp_path):
     xlsx = md.with_name(md.stem + ".assets") / "sub" / "11510 分機表.xlsx"   # Windows 的分隔字元是 \
     assert f"/x/uv run wiki-feeder office-dump '{xlsx}'" in prompt
     assert "image1.png" not in prompt
-    assert "office-dump" not in _prompt(target, raw, {"轉寫": {}}, "", ["群組"], tools, tmp_path)
+    plain = _prompt(target, raw, {"轉寫": {}}, "", ["群組"], tools, tmp_path)
+    assert f"office-dump '{raw}'" not in plain and "11510" not in plain
+
+
+def test_prompt_says_dump_works_on_other_originals_too(env, tmp_path):
+    """提示只寫本筆的完整路徑,claude 以為只能傾印這一份:2026-10-27 設備清冊、10-29 上一版的 xlsx 都沒比對。
+    原件樹裡別份 Office 原件也用同一個指令(權限本來就是整個子命令一條)。"""
+    from wiki_feeder.ingest import _prompt
+    target = env["cfg"].repo(env["cfg"].target_repo)
+    raw = target.raw_root / "_待處理" / "報價單.pdf"
+    tools = ("/x/uv", "run", "wiki-feeder")
+
+    prompt = _prompt(target, raw, {"轉寫": {}}, "", ["群組"], tools, tmp_path)
+
+    assert f"要比對原件樹({target.raw_root})裡別份 Office 原件" in prompt
+    assert "/x/uv run wiki-feeder office-dump <那份原件的完整路徑>" in prompt
+    assert "office-dump" not in _prompt(target, raw, {"轉寫": {}}, "", ["群組"], (), tmp_path)   # 沒有工具指令就不提
 
 
 def test_backfill_prompt_names_the_forbidden_words_from_the_config(env, monkeypatch):
@@ -1362,7 +1378,7 @@ def test_commit_without_report_alerts_and_logs_why(env, monkeypatch, caplog):
         in caplog.text
     assert not any("群組「」" in n for n in o.notes)
     # 錢花在哪(使用者 2026-10-30:26 KB 的轉寫為什麼要 US$10.99;攝入不留對話紀錄,只能看結束時交的 usage)
-    assert ("攝入 n.txt:用量 token 輸入 12、寫快取 80,000、讀快取 2,500,000、輸出 30,000; 呼叫 2 次、最大一次上下文 "
+    assert ("攝入 n.txt:用量 token 輸入 12、寫快取 80,000、讀快取 2,500,000、輸出 30,000; 結束時上下文 "
             "150,010; 網路抓取 2、搜尋 0; 子代理 1 個; 各模型 claude-fable-5-1 US$4.90、claude-haiku-5-5 US$0.13") \
         in caplog.text, caplog.text
 

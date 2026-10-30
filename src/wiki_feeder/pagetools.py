@@ -247,8 +247,9 @@ def _tables(text: str):
             fenced = not fenced
         elif not fenced and (h := _HEADING.match(line)):
             heads = heads[:len(h[1]) - 1] + [""] * (len(h[1]) - 1 - len(heads)) + [h[2]]
+        # 分隔列一格一個減號就算(GFM);要三個的話 `--:` 這種靠右對齊的整張表都認不到(2026-10-27 三筆攝入回報)
         elif (not fenced and line.lstrip().startswith("|") and i + 1 < len(lines)
-              and re.fullmatch(r"\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*", lines[i + 1])):
+              and re.fullmatch(r"\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*", lines[i + 1])):
             prev = next((lines[j].strip() for j in range(i - 1, -1, -1) if lines[j].strip()), "")
             rows = []
             j = i + 2

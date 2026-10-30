@@ -223,9 +223,7 @@ if os.environ.get("FAKE_CLAUDE_NOREPORT"):
                       "usage": {"input_tokens": 12, "cache_creation_input_tokens": 80000,
                                 "cache_read_input_tokens": 2500000, "output_tokens": 30000,
                                 "server_tool_use": {"web_search_requests": 0, "web_fetch_requests": 2},
-                                "iterations": [{"input_tokens": 2, "cache_creation_input_tokens": 40000,
-                                                "cache_read_input_tokens": 0},
-                                               {"input_tokens": 10, "cache_creation_input_tokens": 40000,
+                                "iterations": [{"input_tokens": 10, "cache_creation_input_tokens": 40000,
                                                 "cache_read_input_tokens": 110000}]},
                       "modelUsage": {"claude-fable-5-1": {"costUSD": 4.9}, "claude-haiku-5-5": {"costUSD": 0.13}},
                       "subagent_stats": {"spawned": 1}}))

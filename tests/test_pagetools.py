@@ -221,6 +221,15 @@ def test_table_sums_add_up_columns_and_check_the_total_row(repo):
         table_sums(repo, "../外面.md")
 
 
+def test_table_with_short_alignment_row_is_still_a_table(repo):
+    """分隔列 `--:`(兩個減號)也是表格(GFM 一個就算):2026-10-27 三筆攝入的調漲表、分攤表都被回成「沒有表格」。"""
+    (repo / "Wiki_Pages" / "分攤.md").write_text(
+        "## 分攤\n\n| 單位 | 金額 |\n|--|--:|\n| 甲 | 600 |\n| 乙 | 400 |\n| 合計 | 1,000 |\n", encoding="utf-8")
+    out = table_sums(repo, "Wiki_Pages/分攤.md")
+    assert "沒有表格" not in out
+    assert "金額:加總 1,000,合計列相符" in out, out
+
+
 def test_rounded_percentages_within_rounding_error_are_not_flagged(repo):
     (repo / "Wiki_Pages" / "比例.md").write_text(
         "| 單位 | 佔比 |\n|---|---:|\n| 甲 | 33.3% |\n| 乙 | 33.3% |\n| 丙 | 33.3% |\n| 合計 | 100% |\n",

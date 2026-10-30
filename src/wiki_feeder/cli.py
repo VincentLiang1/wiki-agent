@@ -222,7 +222,7 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
         for w in args.resolved:
             toolgaps.resolve(cfg, w)
             print(L("已標成補好:{word}(之前的紀錄不再提醒)", word=w))
-        print("\n".join(toolgaps.digest(cfg, days=args.days)) or L("近 {days} 天沒有攝入工具缺口", days=args.days))
+        print("\n".join(toolgaps.digest(cfg, days=args.days, limit=None)) or L("近 {days} 天沒有攝入工具缺口", days=args.days))
         if toolgaps.ignored(cfg):
             print(L("(不提醒:{words})", words=L("、").join(toolgaps.ignored(cfg))))
         return 0

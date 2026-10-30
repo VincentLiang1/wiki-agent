@@ -68,6 +68,21 @@ def test_forbidden_commands_are_labelled_and_listed_last(cfg):
     assert any("不會放行" in x for x in lines)
 
 
+def test_mail_lists_eight_but_the_command_lists_all(cfg, capsys):
+    """信最多列 8 項、寫「另有 N 項,tool-gaps 看全部」;指令本身要真的列全部(2026-10-30 指令也只列 8 項)。"""
+    now = datetime.now()
+    for i in range(10):
+        toolgaps.record(cfg, f"{i}.pdf", "unverified", [f"缺口{i}:原因"], now)
+
+    mail = toolgaps.digest(cfg, now)
+    assert sum(x.startswith("- 未驗") for x in mail) == toolgaps.MAX_ITEMS
+    assert "- 另有 2 項,`wiki-feeder tool-gaps` 看全部" in mail
+
+    assert main(["tool-gaps"], cfg) == 0
+    out = capsys.readouterr().out
+    assert all(f"「缺口{i}」" in out for i in range(10)) and "另有" not in out
+
+
 def test_ignored_gaps_drop_out_of_the_reminder(cfg, capsys):
     """確定不做的(例如同名 docx 重產,2026-10-07 使用者決定維持現狀)不要天天提醒。"""
     toolgaps.record(cfg, "a.pdf", "unverified", ["同名 docx 未重產:x"], NOW)

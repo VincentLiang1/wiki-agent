@@ -135,8 +135,10 @@ def resolve(cfg: Config, word: str, when: datetime | None = None) -> None:
                            ensure_ascii=False) + "\n")
 
 
-def digest(cfg: Config, now: datetime | None = None, days: int = WINDOW_DAYS) -> list[str]:
-    """最近幾天的缺口,同一個鍵併成一項、依涉及幾筆攝入排序;兩筆以上的標 🔁。沒有就回空串列。"""
+def digest(cfg: Config, now: datetime | None = None, days: int = WINDOW_DAYS,
+           limit: int | None = MAX_ITEMS) -> list[str]:
+    """最近幾天的缺口,同一個鍵併成一項、依涉及幾筆攝入排序;兩筆以上的標 🔁。沒有就回空串列。
+    limit:列幾項(摘要信 MAX_ITEMS;`tool-gaps` 指令給 None 列全部——信上寫「看全部」,指令卻也只列 8 項,2026-10-30)。"""
     now = now or datetime.now()
     since = now - timedelta(days=days)
     skip = ignored(cfg)
@@ -172,7 +174,7 @@ def digest(cfg: Config, now: datetime | None = None, days: int = WINDOW_DAYS) ->
     # 刻意禁止的排最後:那不是可以補的指令
     order = sorted(groups.items(), key=lambda kv: (kv[0][1] in banned, -len(kv[1]["files"]), kv[0]))
     lines = [L("### 🧰 攝入工具缺口(近 {days} 天,可以考慮補只讀指令的)", days=days)]
-    for (kind, k), g in order[:MAX_ITEMS]:
+    for (kind, k), g in order[:limit]:
         d = sorted(g["days"])
         when = d[0] if len(d) == 1 else f"{d[0]}～{d[-1]}"
         label = L("刻意禁止") if k in banned else L("被擋下") if kind == "denied" else L("未驗")
@@ -180,8 +182,8 @@ def digest(cfg: Config, now: datetime | None = None, days: int = WINDOW_DAYS) ->
         again = L("{date} 修好後又出現,", date=g["again"]) if g.get("again") else ""
         lines.append(L("- {mark}{label}「{key}」:{again}{n} 筆攝入({when}),例:{example}", mark=mark, label=label,
                        key=k, again=again, n=len(g["files"]), when=when, example=g["example"][:120]))
-    if len(order) > MAX_ITEMS:
-        lines.append(L("- 另有 {n} 項,`wiki-feeder tool-gaps` 看全部", n=len(order) - MAX_ITEMS))
+    if limit is not None and len(order) > limit:
+        lines.append(L("- 另有 {n} 項,`wiki-feeder tool-gaps` 看全部", n=len(order) - limit))
     if any(k in banned for _, k in groups):
         lines.append(L("「刻意禁止」的是權限故意擋的(會清檔、會動到別的庫、有替代指令),不會放行;"
                        "反覆出現表示攝入提示沒講清楚,要改的是提示。"))

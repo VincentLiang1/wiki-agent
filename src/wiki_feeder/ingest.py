@@ -1192,6 +1192,10 @@ def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: l
         user += (f"- 原件附帶的 Office 檔(doc2md 從原件取出、放在轉寫快取裡)。轉寫會繁化人名、看不到儲存格顏色與公式;"
                  f"要核對原文字形、顏色標註、公式時執行(照抄,不要改寫、不要串接其他指令):\n"
                  + "".join(f"  {dump} {shlex.quote(str(p))}\n" for p in attached))
+    if tools_cmd:
+        # 只寫本筆的完整路徑,claude 以為只能傾印這一份(2026-10-27、10-29 要跟上一版逐台比對都放棄了)
+        user += (f"- 要比對原件樹({target.raw_root})裡別份 Office 原件(例如上一版)時,同一個指令把路徑換成那份的完整路徑"
+                 f"(一次一份):\n  {dump} <那份原件的完整路徑>\n")
     dest_rel = f"{target.raw_root.name}\\<群組>\\{raw.name}"
     tools = shlex.join(tools_cmd)
     commit_rule = (_COMMIT_MANAGED if target.managed else _COMMIT_SELF).format(tools=tools)
@@ -1260,11 +1264,11 @@ def _usage_text(out: dict) -> str:
            (L("讀快取"), num(u, "cache_read_input_tokens")), (L("輸出"), num(u, "output_tokens"))]
     if any(v is not None for _, v in tok):
         parts.append("token " + L("、").join(f"{k} {v:,}" for k, v in tok if v is not None))
+    # iterations 只有最後一次呼叫(2026-10-30 實測:44 輪的攝入也只有一筆),看得到的是結束時上下文多大,不是每輪的最大值
     its = [i for i in u.get("iterations") or [] if isinstance(i, dict)]
-    ctx = [sum(num(i, k) or 0 for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
-           for i in its]
-    if ctx:
-        parts.append(L("呼叫 {n} 次、最大一次上下文 {peak:,}", n=len(ctx), peak=max(ctx)))
+    if its:
+        last = sum(num(its[-1], k) or 0 for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+        parts.append(L("結束時上下文 {ctx:,}", ctx=last))
     tools = u.get("server_tool_use") if isinstance(u.get("server_tool_use"), dict) else {}
     fetch, search = num(tools, "web_fetch_requests"), num(tools, "web_search_requests")
     if fetch or search:
