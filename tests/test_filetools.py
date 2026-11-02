@@ -236,7 +236,10 @@ def test_group_readme_does_not_write_through_a_symlink(readme_repo, tmp_path):
     repo = readme_repo
     victim = tmp_path / "外面.md"
     victim.write_text("外面", encoding="utf-8")
-    (repo / "Wiki_Pages" / "群組" / "README.md").symlink_to(victim)
+    try:
+        (repo / "Wiki_Pages" / "群組" / "README.md").symlink_to(victim)
+    except OSError as e:   # Windows 建符號連結要開發人員模式或系統管理員(WinError 1314)
+        pytest.skip(f"這台建不了符號連結:{e}")
     with pytest.raises(PageToolError, match="symlink"):
         group_readme(repo, "master")
     assert victim.read_text(encoding="utf-8") == "外面"
