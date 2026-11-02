@@ -120,14 +120,17 @@ _PROMPT ="""本次為 wiki-feeder 自動攝入:無人值守,沒有人可以回�
    - 表格加總:`{tools} table-sums <頁面路徑> [--heading <關鍵字>]`(只看標題或表前那一行含關鍵字的表)——印出每張表各數字欄的加總,有合計列就比對;佔比欄(%)逐列驗算是哪一欄 ÷ 哪個分母、哪幾列對不上。本庫規則要你「用腳本重算、assert 加總」「重算佔比」的統計表,自己算好寫進頁面後用它驗算,commit message 寫驗算結果——驗算過就算驗了,不寫進 unverified
    - 單頁的 commit 歷史:`{tools} page-history <頁面路徑>`;commit message 含某個關鍵字的:`{tools} page-history --grep <關鍵字>`(都是一個 commit 一行)
    - 某個 commit 的完整訊息與動到哪些檔:`{tools} commit-detail <commit 雜湊>`;commit 完要確認自己 commit 了什麼用 `{tools} commit-detail HEAD`
-{handout_line}   - 放圖片(本庫〈圖片管理〉):`{tools} add-image <原件或轉寫快取裡的圖> "Wiki_Pages/<群組>/images/<頁名>/<檔名>.jpg"`——.png／.webp／.gif 轉成 .jpg、.jpg／.jpeg 原樣放進去,不覆蓋既有的圖(換檔名)。只收原件樹與轉寫快取裡的圖;含個資的圖照本庫規則不放
-   本庫規則要你改之前先查 git 的,照規則用上面的指令查。commit 前對這次改過的每一頁跑一次 check-pages。這幾個指令做不到的檢查用 Grep／Read,再做不到的在 commit message 註明「未驗」,**同時一項一句寫進回報的 unverified**(格式「哪一項檢查:為什麼做不到」,同一種檢查每次用同樣的說法,例如「同名 docx 未重產:要執行本庫 tools/ 的腳本」;全都驗了就填空陣列)——使用者靠它知道還缺哪些指令,不要省略;**只寫權限做不到的**,你判斷不必做的(不適用、內容太少不回填、本庫規則說留待日後)不寫。要看自己改了什麼用 git status 與 Read。**Bash 一次只打一條指令,不要用 `&&`、`;`、`|` 串接**——串接裡只要有一段沒放行(例如 git diff),整條都被擋下;暫存了什麼用 `git status --short`、commit 了什麼用 commit-detail HEAD。git 指令直接打 `git add`／`git commit`／`git status`(工作目錄就是本庫),**不要加 `-C <路徑>`**——會被權限擋下。除了要 commit 的頁面與上面兩個指令產生的講義、圖片,**不得在庫裡建立任何檔案**(暫存檔、檢查腳本都不行)——commit 後庫裡留有任何沒 commit 的檔,程式會判成 STOP、停下所有攝入等人處理。**不得修改 tools/ 與 .claude/ 底下的任何檔**(動到也會 STOP)。
+{handout_line}{readme_line}   - 放圖片(本庫〈圖片管理〉):`{tools} add-image <原件或轉寫快取裡的圖> "Wiki_Pages/<群組>/images/<頁名>/<檔名>.jpg"`——.png／.webp／.gif 轉成 .jpg、.jpg／.jpeg 原樣放進去,不覆蓋既有的圖(換檔名)。只收原件樹與轉寫快取裡的圖;含個資的圖照本庫規則不放
+   本庫規則要你改之前先查 git 的,照規則用上面的指令查。commit 前對這次改過的每一頁跑一次 check-pages。這幾個指令做不到的檢查用 Grep／Read,再做不到的在 commit message 註明「未驗」,**同時一項一句寫進回報的 unverified**(格式「哪一項檢查:為什麼做不到」,同一種檢查每次用同樣的說法,例如「同名 docx 未重產:要執行本庫 tools/ 的腳本」;全都驗了就填空陣列)——使用者靠它知道還缺哪些指令,不要省略;**只寫權限做不到的**,你判斷不必做的(不適用、內容太少不回填、本庫規則說留待日後)不寫。要看自己改了什麼用 git status 與 Read。**Bash 一次只打一條指令,不要用 `&&`、`;`、`|` 串接**——串接裡只要有一段沒放行(例如 git diff),整條都被擋下;暫存了什麼用 `git status --short`、commit 了什麼用 commit-detail HEAD。git 指令直接打 `git add`／`git commit`／`git status`(工作目錄就是本庫),**不要加 `-C <路徑>`**——會被權限擋下。除了要 commit 的頁面與上面幾個指令產生的講義、圖片、群組 README,**不得在庫裡建立任何檔案**(暫存檔、檢查腳本都不行)——commit 後庫裡留有任何沒 commit 的檔,程式會判成 STOP、停下所有攝入等人處理。**不得修改 tools/ 與 .claude/ 底下的任何檔**(動到也會 STOP)。
 {glossary_rule}完成後回報:建了或擴充了哪些頁(repo、路徑、每頁一句)、群組、待確認事項、一句摘要。
 """
 
 
 _HANDOUT_LINE = ("   - 重產講義(本庫規則說改了有 handouts/ 講義的頁要重產):`{tools} make-handout"
                  + ' --src "Wiki_Pages/<群組>/<頁>.md" --out "handouts/<頁>.md" [--drop-source] [--no-urls] [--drop <章節,…>] [--drop-alert <關鍵字,…>] [--embed-images]`——跑的是本庫 origin 上那一版的 tools/make_handout.py。參數照舊講義的樣子給:它會印出與舊講義的差異,新冒出來源列、外部網址或對內章節,就是少給了參數,補上再跑一次;判斷不了就寫進 unverified' + "\n")
+_README_LINE = ("   - 重產群組 README(本庫規則說動到 index.md 就重跑 tools/make_group_readme.py):`{tools} group-readme`"
+                "——跑的是本庫 origin 上那一版的腳本,從 index.md 重產各群組資料夾的 README.md、補上 index.md 的「本組清單」"
+                "連結行。改完 index.md、commit 之前跑一次,它改了的檔跟頁面一起 commit;失敗的話照它印的原因改 index.md 再跑\n")
 _COMMIT_SELF = ("照本庫規則 commit(commit message 格式照 CLAUDE.md),但**絕對不要 git push**——程式會在驗證後推送。"
                 "commit 完要確認 commit 了什麼,用 `{tools} commit-detail HEAD`;**不要打 `git show`、`git log`、`git diff`"
                 "(含 `--stat`)**——三個都會被權限擋下。")
@@ -137,7 +140,7 @@ _COMMIT_MANAGED = ("**不要 git add、不要 git commit**(會被權限擋下):�
                    "「攝入:<原件檔名>——一句摘要」。只能改 Wiki_Pages/ 底下的檔(與下面第 7 條的名詞校正表),"
                    "動到別處程式不 commit、停下所有攝入等人。"
                    "**不要打 `git show`、`git log`、`git diff`(含 `--stat`)**——會被權限擋下。")
-_BACKFILL_RULE = ("\n   **回填個人 WIKI 照本庫規則做,但只寫在副本裡**:個人 WIKI 的頁面副本在 {stage}(那個庫自己的規則是 {stage}/CLAUDE.md,照它建頁、改頁、登錄它的 index.md;它寫的相對路徑(例如「先讀 memory/…」)一律從 {stage} 算起,**不是本庫的同名檔**,{stage}/memory/ 只讀、不要改)。只能新增或修改 {stage}/Wiki_Pages/ 底下的 .md(知識圖譜/ 除外),不刪檔、不改名、不大幅刪減既有內容;副本不是 git 庫,不要在那裡 commit——程式驗證後替你寫回個人 WIKI、commit 並推送,commit message 照個人 WIKI 的 CLAUDE.md 格式寫進回報的 wiki_commit_message(沒回填就填空字串)。回填的頁面與 commit message 都**不得提到本庫{forbidden}**:只寫去除內部細節後可攜的通用知識;寫不出來就不回填。commit message 連「沒有回填本庫」這種交代也不要寫(個人 WIKI 規則要你寫回填到哪一頁,這裡不適用);提到這些字的行程式會整行刪掉。")
+_BACKFILL_RULE = ("\n   **回填個人 WIKI 照本庫規則做,但只寫在副本裡**:個人 WIKI 的頁面副本在 {stage}(那個庫自己的規則是 {stage}/CLAUDE.md,照它建頁、改頁、登錄它的 index.md;它寫的相對路徑(例如「先讀 memory/…」)一律從 {stage} 算起,**不是本庫的同名檔**,{stage}/memory/ 只讀、不要改)。只能新增或修改 {stage}/Wiki_Pages/ 底下的 .md(知識圖譜/ 除外),不刪檔、不改名、不大幅刪減既有內容;它規則裡「動到 index 就重產各群組 README.md」那一步由程式寫回時代做,不要改 README、也不必跑它的腳本(不算沒驗);副本不是 git 庫,不要在那裡 commit——程式驗證後替你寫回個人 WIKI、commit 並推送,commit message 照個人 WIKI 的 CLAUDE.md 格式寫進回報的 wiki_commit_message(沒回填就填空字串)。回填的頁面與 commit message 都**不得提到本庫{forbidden}**:只寫去除內部細節後可攜的通用知識;寫不出來就不回填。commit message 連「沒有回填本庫」這種交代也不要寫(個人 WIKI 規則要你寫回填到哪一頁,這裡不適用);提到這些字的行程式會整行刪掉。")
 # 歸屬判斷(有個人庫時才有):拿不準一律公事——公事判成個人,公司內容就進了個人庫、公事庫也查不到;
 # 個人判成公事只是事後要搬(使用者 2026-10-26)
 _SCOPE_RULE = ("\n   **歸屬:先判斷這份該攝入本庫,還是只進個人 WIKI**,寫進回報的 scope。上面說的「跟本庫主題沒有直接關係」"
@@ -172,8 +175,8 @@ PROMPT_LANG = {
 
 # 攝入時放行的只讀指令(pagetools.py)。一個一個放行:放行整個 wiki_feeder 的話,resume、ingest 這些會動真資料的也放行了
 PAGE_TOOLS = ("page-history", "commit-detail", "check-pages", "table-sums")
-# 寫檔的兩個(filetools.py):只寫公事庫的 handouts/ 與頁面的 images/
-FILE_TOOLS = ("make-handout", "add-image")
+# 寫檔的(filetools.py):只寫公事庫的 handouts/、頁面的 images/ 與 Wiki_Pages/ 的群組 README、index.md
+FILE_TOOLS = ("make-handout", "add-image", "group-readme")
 INGEST_TOOLS = ("office-dump", *PAGE_TOOLS, *FILE_TOOLS)
 
 
@@ -1208,6 +1211,8 @@ def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: l
                    if stage is not None else "")
     handout_line = (_HANDOUT_LINE.format(tools=tools)
                     if (target.repo_dir / "tools" / "make_handout.py").is_file() else "")
+    readme_line = (_README_LINE.format(tools=tools)
+                   if (target.repo_dir / "tools" / "make_group_readme.py").is_file() else "")
     if not target.managed:
         group_rule = f"只能從這份清單挑:{'、'.join(groups)}"
     elif groups:
@@ -1218,7 +1223,7 @@ def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: l
     return _PROMPT.format(raw_rel=raw_rel, raw_abs=raw, group_rule=group_rule, dest_rel=dest_rel,
                           raw_root=target.raw_root.name, suffix=raw.suffix,
                           text_line=text_line, meta=meta_txt, user_sidecar=user, tools=tools,
-                          commit_rule=commit_rule, backfill_rule=backfill_rule, handout_line=handout_line, page_checks=page_checks,
+                          commit_rule=commit_rule, backfill_rule=backfill_rule, handout_line=handout_line, readme_line=readme_line, page_checks=page_checks,
                           stage_check=stage_check, pending=pending, discard=discard,
                           scope_rule=(_SCOPE_RULE.format(groups="、".join(personal[1]), raw=personal[0]) if scoped else ""),
                           glossary_rule=_GLOSSARY_RULE if target.managed else "") + PROMPT_LANG.get(lang, "")
@@ -1672,12 +1677,25 @@ def backfill(cfg: Config, sha: str, stage: Path, snap: dict[str, bytes], result:
     head = git(wiki, "rev-parse", "HEAD")
     if head != before[rc.key] or git(wiki, "status", "--porcelain"):
         return refuse(["個人庫在攝入期間有變動(有人動過),這次不寫回"])
+    readme: list[str] = []
+    created: list[str] = []
+    readme_note: list[str] = []
     try:
         for rel, data in changed.items():
             (wiki / rel).parent.mkdir(parents=True, exist_ok=True)
             (wiki / rel).write_bytes(data)
+        # 個人庫的群組 README 是 index 的切片(它的 CLAUDE.md:動到 index 就重跑腳本):程式代跑,併進同一個 commit。
+        # 跑 origin 那一版、在庫外暫存目錄跑(filetools);沒有腳本的庫(朋友版、舊版)略過。
+        # 失敗只在摘要提一句:README 是衍生的,為它整筆不收,頁面就白做了
+        from .filetools import has_readme_script, regen_group_readme
+        from .pagetools import PageToolError
+        if has_readme_script(wiki, rc.branch):
+            try:
+                readme, created, _ = regen_group_readme(wiki, rc.branch)
+            except (PageToolError, OSError) as e:
+                readme_note = [L("回填個人 WIKI 的群組 README 沒重產:{e}", e=str(e)[-300:])]
         # 整份 add(不可只暫存一部分:個人庫的 hook 會把暫存的 .md 整份重新 add)
-        git(wiki, "add", "--", *changed)
+        git(wiki, "add", "--", *changed, *(r for r in readme if r not in changed))
         msg_file = cfg.state_dir / "wiki-commit-msg.txt"
         msg_file.write_text(message + "\n", encoding="utf-8")
         git(wiki, "commit", "-q", "-F", str(msg_file))
@@ -1686,13 +1704,14 @@ def backfill(cfg: Config, sha: str, stage: Path, snap: dict[str, bytes], result:
     except IngestError as e:
         # 退回攝入前:個人庫開始前是乾淨的(ensure_clean_and_current),這裡只會丟掉這次寫回的內容
         git(wiki, "reset", "-q", "--hard", head, check=False)
-        for rel in changed:
+        # 這次新建、還沒追蹤的檔 reset 清不掉:回填的新頁,與新群組重產出來的 README
+        for rel in [*changed, *created]:
             if rel not in snap and (wiki / rel).exists():
                 (wiki / rel).unlink()
         return refuse([f"個人庫 commit 失敗:{e}"])
     mark_verified(cfg, rc)   # 程式自己檢查過才 commit:記成已驗證,推送與補推才會推它
     scrubbed = [L("回填個人 WIKI 的 commit message 有 {n} 行提到公事庫的字,已整行刪掉再 commit", n=dropped)] if dropped else []
-    return new_commits(rc, head), scrubbed + _backfill_page_notes(wiki.name, changed, snap, rc.raw_root)
+    return new_commits(rc, head), scrubbed + readme_note + _backfill_page_notes(wiki.name, changed, snap, rc.raw_root)
 
 
 def _backfill_page_notes(name: str, changed: dict[str, bytes], snap: dict[str, bytes], raw: Path) -> list[str]:

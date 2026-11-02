@@ -1,5 +1,13 @@
 [
  {
+  "source": "8857816",
+  "date": "2026-11-03",
+  "needs_human": false,
+  "zh-Hant": "- 內部調整,單一知識庫沒有變化:新增的「重產群組 README」只用在庫裡有對應腳本的兩庫設定;你的設定照舊運作,不必做任何事",
+  "zh-Hans": "- 内部调整,单一知识库没有变化:新增的「重新生成分组 README」只用在库里有对应脚本的两库设置;你的设置照旧运作,不必做任何事",
+  "en": "- Internal changes; nothing changes for a single knowledge base: the new \"regenerate group READMEs\" step only applies to the two-repo setup whose repo has the matching script. Your setup keeps working as before; nothing to do"
+ },
+ {
   "source": "6abde4f",
   "date": "2026-10-30",
   "needs_human": false,

@@ -1,4 +1,5 @@
-"""攝入時 claude 能用的兩個寫檔指令:重產講義(make-handout)、把圖片轉成 jpg 放進頁面的 images/(add-image)。
+"""攝入時 claude 能用的寫檔指令:重產講義(make-handout)、把圖片轉成 jpg 放進頁面的 images/(add-image)、
+從 index.md 重產各群組的 README.md(group-readme,跟 make-handout 同一套做法,2026-11-02 加)。
 
 和 pagetools 一樣,參數由程式檢查過才動手,claude 只能給「哪一頁」「放到哪」:
 - make-handout 跑的是公事庫 **origin 上那一版**的 tools/ 腳本(公事庫 CLAUDE.md 規定講義一律用
@@ -26,6 +27,8 @@ from .pagetools import PageToolError, git_text, page_path
 
 HANDOUT_SCRIPT = "make_handout.py"
 HANDOUT_TIMEOUT = 120
+README_SCRIPT = "make_group_readme.py"
+README_NAME = "README.md"
 DIFF_MAX_LINES = 200
 JPEG_QUALITY = 90
 _HANDOUT_OUT = re.compile(r"handouts/[^/]+\.md")
@@ -85,6 +88,75 @@ def make_handout(repo: Path, branch: str, src: str, out: str, flags: list[str]) 
             if len(diff) > DIFF_MAX_LINES else "")
     return (L("已重產 {path},與舊講義的差異(新出現來源列、外部網址、對內章節的話,是參數跟舊版不同,"
               "補上參數再跑一次):\n", path=out_rel) + "\n".join(diff[:DIFF_MAX_LINES]) + more)
+
+
+def has_readme_script(repo: Path, branch: str) -> bool:
+    """origin/<branch> 的 tools/ 有沒有群組 README 腳本(沒有 tools/ 也算沒有:朋友版、還沒加腳本的庫)。"""
+    try:
+        names = git_text(repo, "ls-tree", "-z", "--name-only", f"origin/{branch}:tools/").split("\0")
+    except PageToolError:
+        return False
+    return README_SCRIPT in names
+
+
+def regen_group_readme(repo: Path, branch: str) -> tuple[list[str], list[str], str]:
+    """用 origin/<branch> 那一版的 tools/make_group_readme.py,從 Wiki_Pages/index.md 重產各群組的 README.md
+    (公事庫、個人庫的 CLAUDE.md 都規定:README 是 index 的切片,動到 index 就重跑)。
+    回傳 (改了的檔, 其中新建的檔, 腳本印的訊息),路徑都是庫裡的相對路徑。
+
+    跟 make-handout 一樣在庫外的暫存目錄跑:放進 index.md、每個群組資料夾(空的)與既有的 README.md,
+    腳本自己的檢查都過了,才把有變的 README.md 與 index.md(它維護「本組清單」連結行)寫回庫裡;
+    其他檔一律不帶回。腳本失敗時庫裡什麼都不動。"""
+    wp = repo / "Wiki_Pages"
+    if not (wp / "index.md").is_file():
+        raise PageToolError(L("{repo} 沒有 Wiki_Pages/index.md", repo=repo.name))
+    groups = sorted(d.name for d in wp.iterdir() if d.is_dir() and not d.is_symlink())
+    with tempfile.TemporaryDirectory(prefix="wiki-feeder-readme-") as tmp:
+        root = Path(tmp)
+        ref = f"origin/{branch}"
+        if README_SCRIPT not in git_text(repo, "ls-tree", "-z", "--name-only", f"{ref}:tools/").split("\0"):
+            raise PageToolError(L("{ref} 的 tools/ 裡沒有 {script}", ref=ref, script=README_SCRIPT))
+        (root / "tools").mkdir()
+        (root / "tools" / README_SCRIPT).write_bytes(_blob(repo, f"{ref}:tools/{README_SCRIPT}"))
+        names = ["index.md", *(f"{g}/{README_NAME}" for g in groups)]
+        (root / "Wiki_Pages").mkdir()
+        for g in groups:
+            (root / "Wiki_Pages" / g).mkdir()
+        for n in names:
+            if (wp / n).is_file() and not (wp / n).is_symlink():
+                (root / "Wiki_Pages" / n).write_bytes((wp / n).read_bytes())
+        # 只用標準函式庫,-I:不吃環境變數、使用者的 site-packages,也不把腳本所在目錄放進模組搜尋路徑
+        utf8 = ["-X", "utf8"] if WINDOWS else []
+        try:
+            r = subprocess.run([sys.executable, "-I", *utf8, str(root / "tools" / README_SCRIPT)],
+                               cwd=tmp, capture_output=True, timeout=HANDOUT_TIMEOUT)
+        except (OSError, subprocess.SubprocessError) as e:
+            raise PageToolError(L("{script} 執行失敗:{e}", script=README_SCRIPT, e=e)) from e
+        msg = (r.stdout or r.stderr).decode("utf-8", "replace").strip()
+        if r.returncode != 0:
+            raise PageToolError(L("{script} 失敗(README 與 index.md 都沒有改):{err}",
+                                  script=README_SCRIPT, err=msg[-1500:]))
+        new = {n: (root / "Wiki_Pages" / n).read_bytes() for n in names if (root / "Wiki_Pages" / n).is_file()}
+    for n in new:   # 先全部查過才寫:寫到一半才擋,index.md 改了、README 沒改
+        if (wp / n).is_symlink():
+            raise PageToolError(L("{path} 是捷徑(symlink),不寫", path=f"Wiki_Pages/{n}"))
+    changed, created = [], []
+    for n, data in new.items():
+        target = wp / n
+        if not target.is_file() or target.read_bytes() != data:
+            changed.append(f"Wiki_Pages/{n}")
+            if not target.is_file():
+                created.append(f"Wiki_Pages/{n}")
+            target.write_bytes(data)
+    return changed, created, msg
+
+
+def group_readme(repo: Path, branch: str) -> str:
+    """攝入的 claude 用的 group-readme(公事庫):重產,印出改了哪些檔。"""
+    changed, _, msg = regen_group_readme(repo, branch)
+    if not changed:
+        return L("README 與 index.md 都是最新的,沒有改({msg})", msg=msg)
+    return L("已重產 {n} 個檔({msg}),跟頁面一起 commit:\n", n=len(changed), msg=msg) + "\n".join(changed)
 
 
 def _blob(repo: Path, spec: str) -> bytes:

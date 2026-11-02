@@ -52,6 +52,7 @@ _CROSS = re.compile(r"^\s*[-*+]\s+\[([^]]+)\]\(\.\./([^)]+)\.md\)")
 _UNTYPED = re.compile(r"^\s*[-*+]\s+\[[^]]+\]\((?!https?://)[^)]+\.md\) — (?!基礎|進階|對比|對立)")
 _INDEX_LINE = re.compile(r"^- \[[^]]+\]\([^)]+\.md\) — (.*)$")
 INDEX_SUMMARY_MAX = 400
+_GROUP_README = re.compile(r"Wiki_Pages/[^/]+/README\.md")
 
 
 class PageToolError(Exception):
@@ -133,7 +134,9 @@ def scan_text(text: str, rel: str = "", personal: bool = False, raw: Path | None
     rules = [_WIKILINK] if basic else _PERSONAL_RULES if personal else _WIKI_RULES
     rules = [(rx, L(kind)) for rx, kind in rules]
     drive = _drive(raw)
-    wiki = rel.startswith("Wiki_Pages/")
+    # 群組 README 是 index 的切片、不是頁面,兩庫 CLAUDE.md 都說不算頁面健檢:每行都是「- [頁](頁.md) — 摘要」,
+    # 照查的話每筆攝入都報 type label(2026-11-02 摘要信);控制字元、粗體失效照查
+    wiki = rel.startswith("Wiki_Pages/") and not _GROUP_README.fullmatch(rel)
     index = rel == "Wiki_Pages/index.md"
     problems = []
     fenced = False

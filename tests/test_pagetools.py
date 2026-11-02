@@ -165,6 +165,16 @@ def test_company_wiki_grep_checks_only_apply_to_wiki_pages():
     assert [k for _, k, _ in scan_text("LLMWIKI\\公事原件\\a", "memory/x.md", raw=raw)] == ["來源路徑帶磁碟前綴"]
 
 
+def test_group_readme_is_not_a_page():
+    """群組 README 是 index 的切片:每行都沒有 type label,不套頁面健檢(2026-11-02 每筆攝入都報);毀損照查。"""
+    line = "- [某頁](某頁.md) — 會議紀錄 2026-11:摘要"
+    for personal in (False, True):
+        assert scan_text(line, "Wiki_Pages/群組/README.md", personal) == []
+    assert [k for _, k, _ in scan_text(line, "Wiki_Pages/群組/某頁.md")] == ["相關連結的 type label 不是 基礎／進階／對比／對立"]
+    assert [k for _, k, _ in scan_text(line, "Wiki_Pages/群組/子/README.md")][0].startswith("相關連結的 type label")
+    assert [k for _, k, _ in scan_text("壞\x01", "Wiki_Pages/群組/README.md")] == ["控制字元 U+0001"]
+
+
 def test_index_summaries_over_400_characters_are_reported():
     line = "- [群組/頁](群組/頁.md) — 單位 2026-10：" + "字" * 400
     (( _, kind, _),) = scan_text(line, "Wiki_Pages/index.md")

@@ -1289,6 +1289,7 @@ def test_git_history_and_page_checks_are_allowed_one_command_at_a_time(env, monk
     # 有講義腳本的庫才提重產講義(沒有的庫照桌面版講義建、沒有講義功能,提了 claude 會去找 handouts/)
     (env["fwiki"] / "tools").mkdir()
     (env["fwiki"] / "tools" / "make_handout.py").write_text("# 講義\n", encoding="utf-8")
+    (env["fwiki"] / "tools" / "make_group_readme.py").write_text("# 群組 README\n", encoding="utf-8")
     git("add", "-A", cwd=env["fwiki"])
     git("commit", "-q", "-m", "tools", cwd=env["fwiki"])
     git("push", "-q", "origin", "master", cwd=env["fwiki"])
@@ -1309,10 +1310,10 @@ def test_git_history_and_page_checks_are_allowed_one_command_at_a_time(env, monk
     tools = [a for a in allowed if a.startswith("Bash(/x/python")]
     assert tools == [f"Bash(/x/python -P -m wiki_feeder {t}:*)"
                      for t in ("office-dump", "page-history", "commit-detail", "check-pages", "table-sums",
-                               "make-handout", "add-image")]
+                               "make-handout", "add-image", "group-readme")]
     assert not any(a.startswith(("Bash(git log", "Bash(git show", "Bash(git diff")) for a in allowed)
     for t in ("check-pages <頁面路徑>", "page-history <頁面路徑>", "page-history --grep", "commit-detail <commit 雜湊>",
-              "table-sums <頁面路徑>", "commit-detail HEAD", "make-handout --src", "add-image <"):
+              "table-sums <頁面路徑>", "commit-detail HEAD", "make-handout --src", "add-image <", "group-readme`"):
         assert f"`/x/python -P -m wiki_feeder {t}" in prompt
     # commit 完的自我確認寫在 commit 那一條:只寫在第 6 條長段落時,一晚 5 筆先打 git show／log 被擋
     rule2 = prompt.split("\n2. ", 1)[1].split("\n", 1)[0]
@@ -2167,3 +2168,89 @@ def test_mail_subject_without_alerts_is_english_too(env, monkeypatch):
     post_summary(c, IngestReport([Outcome("a.txt", "discarded", "", notes=["空白"])]), datetime(2026, 10, 6))
     (msg,) = _FakeSMTP.sent
     assert "Needs attention" not in msg["Subject"] and not _CJK.search(msg["Subject"]), msg["Subject"]
+
+
+# 假的個人庫 tools/make_group_readme.py:跟真的一樣路徑從 __file__ 算、靠 os.listdir 找群組資料夾,
+# 每個群組產一份 README、index 補一行;index 含「壞」就失敗
+WIKI_README_SCRIPT = '''import os, sys
+WP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Wiki_Pages")
+idx = open(os.path.join(WP, "index.md"), encoding="utf-8").read()
+if "壞" in idx:
+    sys.exit("index 壞了")
+for d in sorted(os.listdir(WP)):
+    if os.path.isdir(os.path.join(WP, d)):
+        n = idx.count("](" + d + "/")
+        open(os.path.join(WP, d, "README.md"), "w", encoding="utf-8").write(f"# {d}\\n共 {n} 頁\\n")
+if "本組清單" not in idx:
+    open(os.path.join(WP, "index.md"), "a", encoding="utf-8").write("本組清單\\n")
+'''
+
+
+def _wiki_with_readme_script(env, index="# 索引\n- [舊頁](群組/舊頁.md)\n"):
+    _wiki_seed(env, {"CLAUDE.md": "# 個人庫規則\n", "tools/make_group_readme.py": WIKI_README_SCRIPT,
+                     "Wiki_Pages/index.md": index, "Wiki_Pages/群組/舊頁.md": "# 舊頁\n"})
+
+
+def test_backfill_regenerates_wiki_group_readmes_in_the_same_commit(env, monkeypatch):
+    """個人庫的群組 README 是 index 的切片(它的 CLAUDE.md:動到 index 就重跑):claude 拿不到真的個人庫,
+    程式寫回時代跑 origin 那一版的腳本,README 與 index 的改動併進同一個回填 commit(使用者 2026-11-02)。"""
+    c = env["cfg"]
+    _wiki_with_readme_script(env)
+    monkeypatch.setenv("FAKE_CLAUDE_STAGE", "new")
+    _feed(env, "w.txt", b"www")
+
+    r = ingest(c)
+
+    (o,) = r.outcomes
+    assert o.status == "done" and not o.notes, (o.error, o.notes)
+    w_remote = env["f_remote"].parent / "WIKI.git"
+    assert _remote_log(w_remote)[:2] == ["docs(backfill): 通用知識", "seed"]     # 一個 commit
+    assert git("show", "master:Wiki_Pages/群組/README.md", cwd=w_remote) == "# 群組\n共 1 頁\n"
+    idx = git("show", "master:Wiki_Pages/index.md", cwd=w_remote)
+    assert "- [通用知識](通用知識.md)" in idx and "本組清單" in idx
+    assert not git("status", "--porcelain", cwd=_wiki(env))
+
+
+def test_failed_wiki_readme_script_still_commits_the_backfill(env, monkeypatch):
+    """腳本失敗:README 是衍生的,頁面照樣 commit,摘要提一句原因;個人庫不留半成品。"""
+    c = env["cfg"]
+    _wiki_with_readme_script(env, index="# 索引(壞)\n- [舊頁](群組/舊頁.md)\n")
+    monkeypatch.setenv("FAKE_CLAUDE_STAGE", "new")
+    _feed(env, "w.txt", b"www")
+
+    r = ingest(c)
+
+    (o,) = r.outcomes
+    assert o.status == "done", o.error
+    assert any("群組 README 沒重產" in n and "index 壞了" in n for n in o.notes), o.notes
+    w_remote = env["f_remote"].parent / "WIKI.git"
+    assert _remote_log(w_remote)[0] == "docs(backfill): 通用知識"
+    assert "期貨市場的一般做法" in git("show", "master:Wiki_Pages/通用知識.md", cwd=w_remote)
+    assert not (_wiki(env) / "Wiki_Pages" / "群組" / "README.md").exists()
+    assert not git("status", "--porcelain", cwd=_wiki(env))
+
+
+def test_wiki_commit_failure_also_removes_new_readmes(env, monkeypatch):
+    """個人庫 commit 失敗退回時,沒加進索引的新檔 reset 清不掉(git add 本身就失敗時):新群組重產出來的 README
+    也要刪,不然個人庫不乾淨、之後每一輪都不攝入。"""
+    import wiki_feeder.ingest as ing
+    c = env["cfg"]
+    _wiki_with_readme_script(env)
+    real_git = ing.git
+
+    def failing_add(repo, *args, **kw):
+        if args[:1] == ("add",) and Path(repo) == _wiki(env):
+            raise ing.IngestError("git add 失敗")
+        return real_git(repo, *args, **kw)
+
+    monkeypatch.setattr(ing, "git", failing_add)
+    monkeypatch.setenv("FAKE_CLAUDE_STAGE", "new")
+    _feed(env, "w.txt", b"www")
+
+    r = ingest(c)
+
+    (o,) = r.outcomes
+    assert o.status == "done", o.error
+    assert any("個人庫 commit 失敗" in n for n in o.notes), o.notes
+    assert not (_wiki(env) / "Wiki_Pages" / "群組" / "README.md").exists()
+    assert not git("status", "--porcelain", "--untracked-files=all", cwd=_wiki(env))

@@ -142,6 +142,7 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     ai = sub.add_parser("add-image", help=L("把原件或轉寫快取裡的圖轉成 jpg,放進公事庫頁面的 images/(攝入時用,不覆蓋)"))
     ai.add_argument("src")
     ai.add_argument("dest", help=L("Wiki_Pages/<群組>/images/<頁名>/<檔名>.jpg"))
+    sub.add_parser("group-readme", help=L("用公事庫 origin 那一版的 tools/make_group_readme.py 從 index.md 重產各群組的 README.md(攝入時用)"))
     tg = sub.add_parser("tool-gaps", help=L("攝入工具缺口:近幾天被權限擋下的指令、claude 回報做不到的檢查"))
     tg.add_argument("--days", type=int, default=7)
     tg.add_argument("--ignore", metavar=L("關鍵字"), help=L("確定不做:含這個關鍵字的缺口不再出現在摘要信的提醒"))
@@ -171,8 +172,8 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
         print(cfg_error, file=sys.stderr)
         return 2
     if args.cmd in FILE_TOOLS:
-        # 攝入的 claude 用的寫檔指令:只寫公事庫的 handouts/ 與 images/,參數由 filetools 檢查過才動手
-        from .filetools import add_image, make_handout
+        # 攝入的 claude 用的寫檔指令:只寫公事庫的 handouts/、images/ 與群組 README,參數由 filetools 檢查過才動手
+        from .filetools import add_image, group_readme, make_handout
         from .pagetools import PageToolError
         target = cfg.repo(cfg.target_repo)
         try:
@@ -182,6 +183,8 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
                 flags += [x for f, v in (("--drop", args.drop), ("--drop-alert", args.drop_alert)) if v
                           for x in (f, v)]
                 print(make_handout(target.repo_dir, target.branch, args.src, args.out, flags))
+            elif args.cmd == "group-readme":
+                print(group_readme(target.repo_dir, target.branch))
             else:
                 print(add_image(target.repo_dir, [target.raw_root, cfg.md_cache], args.src, args.dest))
         except PageToolError as e:

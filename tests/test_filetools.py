@@ -1,4 +1,4 @@
-"""攝入時 claude 能用的寫檔指令:make-handout、add-image(filetools.py)。
+"""攝入時 claude 能用的寫檔指令:make-handout、add-image、group-readme(filetools.py)。
 
 make-handout 只跑公事庫 origin 上那一版的 tools/ 腳本;add-image 只從原件樹與轉寫快取拿圖、只寫頁面的 images/、不覆蓋。
 """
@@ -10,7 +10,7 @@ import pytest
 from conftest import git
 from PIL import Image
 
-from wiki_feeder.filetools import add_image, make_handout
+from wiki_feeder.filetools import add_image, group_readme, make_handout
 from wiki_feeder.pagetools import PageToolError
 
 # 假的 make_handout.py:照真的那支的樣子——import 同目錄的改寫表、先寫產出再 assert、--drop-source 砍來源列
@@ -154,3 +154,95 @@ def test_refusals_follow_the_interface_language(repo, tmp_path):
     i18n.set_lang("en")
     with pytest.raises(PageToolError, match="is not a file in the originals tree or the transcription cache"):
         add_image(repo, [raw], str(other), "Wiki_Pages/群組/images/頁/圖.jpg")
+
+
+# 假的 make_group_readme.py:照真的那支的樣子——路徑從 __file__ 算、每個 #### 群組產 README、
+# index 每個群組標題下補「本組清單」行、群組沒有資料夾就失敗。另外亂寫兩個檔,確認不會被帶回庫裡
+README_SCRIPT = '''import os, sys
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WP = os.path.join(REPO, "Wiki_Pages")
+idx = open(os.path.join(WP, "index.md"), encoding="utf-8").read().split("\\n")
+out, cur, pages = [], None, {}
+for l in idx:
+    if l.startswith("本組清單"):
+        continue
+    out.append(l)
+    if l.startswith("#### "):
+        cur = l[5:]
+        if not os.path.isdir(os.path.join(WP, cur)):
+            sys.exit(f"index 的群組 {cur} 沒有對應資料夾")
+        pages[cur] = []
+        out.append(f"本組清單:[{cur}/README.md]({cur}/README.md)")
+    elif l.startswith("- [") and cur:
+        pages[cur].append(l)
+for g, ps in pages.items():
+    open(os.path.join(WP, g, "README.md"), "w", encoding="utf-8").write("# " + g + "\\n" + "\\n".join(ps) + "\\n")
+open(os.path.join(WP, "index.md"), "w", encoding="utf-8").write("\\n".join(out))
+open(os.path.join(WP, "群組", "頁.md"), "w", encoding="utf-8").write("被腳本蓋掉\\n")
+open(os.path.join(REPO, "tools", "x.py"), "w", encoding="utf-8").write("x\\n")
+print(f"重產 {len(pages)} 組")
+'''
+INDEX = "# 索引\n\n## 頁面列表\n\n#### 群組\n\n- [頁](群組/頁.md) — 摘要\n"
+
+
+@pytest.fixture
+def readme_repo(repo):
+    (repo / "tools" / "make_group_readme.py").write_text(README_SCRIPT, encoding="utf-8")
+    (repo / "Wiki_Pages" / "index.md").write_text(INDEX, encoding="utf-8")
+    git("add", "-A", cwd=repo)
+    git("commit", "-q", "-m", "readme", cwd=repo)
+    git("push", "-q", "origin", "master", cwd=repo)
+    return repo
+
+
+def test_group_readme_writes_readmes_and_index_only(readme_repo):
+    """README 與 index.md 的「本組清單」行寫回庫裡;腳本在暫存目錄亂寫的其他檔(頁面、tools/)不帶回。"""
+    repo = readme_repo
+    page = (repo / "Wiki_Pages" / "群組" / "頁.md").read_bytes()
+    out = group_readme(repo, "master")
+    assert "Wiki_Pages/群組/README.md" in out and "Wiki_Pages/index.md" in out and "重產 1 組" in out
+    assert (repo / "Wiki_Pages" / "群組" / "README.md").read_text(encoding="utf-8") == "# 群組\n- [頁](群組/頁.md) — 摘要\n"
+    assert "本組清單:[群組/README.md]" in (repo / "Wiki_Pages" / "index.md").read_text(encoding="utf-8")
+    assert (repo / "Wiki_Pages" / "群組" / "頁.md").read_bytes() == page
+    assert not (repo / "tools" / "x.py").exists()
+    assert "最新" in group_readme(repo, "master")        # 重跑沒有變:冪等
+
+
+def test_group_readme_runs_the_script_on_origin_not_the_working_copy(readme_repo, tmp_path):
+    repo = readme_repo
+    (repo / "tools" / "make_group_readme.py").write_text(f"open({str(tmp_path / 'pwned')!r}, 'w')\n", encoding="utf-8")
+    git("commit", "-q", "-am", "改腳本", cwd=repo)                     # 本機 commit 了也一樣:還沒推上去
+    group_readme(repo, "master")
+    assert not (tmp_path / "pwned").exists()
+    assert (repo / "Wiki_Pages" / "群組" / "README.md").is_file()
+
+
+def test_failed_group_readme_leaves_the_repo_untouched(readme_repo):
+    """index 寫了沒有資料夾的群組:腳本失敗,README 與 index.md 都不動、不留半成品。"""
+    repo = readme_repo
+    group_readme(repo, "master")
+    idx = repo / "Wiki_Pages" / "index.md"
+    bad = idx.read_text(encoding="utf-8").replace("#### 群組", "#### 不存在的群組")
+    idx.write_text(bad, encoding="utf-8")
+    readme = (repo / "Wiki_Pages" / "群組" / "README.md").read_bytes()
+    with pytest.raises(PageToolError, match="沒有對應資料夾"):
+        group_readme(repo, "master")
+    assert idx.read_text(encoding="utf-8") == bad
+    assert (repo / "Wiki_Pages" / "群組" / "README.md").read_bytes() == readme
+
+
+def test_group_readme_does_not_write_through_a_symlink(readme_repo, tmp_path):
+    """README 是指到庫外(或 tools/)的捷徑時不寫:不然重產就蓋掉捷徑指到的檔。"""
+    repo = readme_repo
+    victim = tmp_path / "外面.md"
+    victim.write_text("外面", encoding="utf-8")
+    (repo / "Wiki_Pages" / "群組" / "README.md").symlink_to(victim)
+    with pytest.raises(PageToolError, match="symlink"):
+        group_readme(repo, "master")
+    assert victim.read_text(encoding="utf-8") == "外面"
+
+
+def test_group_readme_needs_the_script_on_origin(repo):
+    (repo / "Wiki_Pages" / "index.md").write_text(INDEX, encoding="utf-8")
+    with pytest.raises(PageToolError, match="make_group_readme.py"):
+        group_readme(repo, "master")
