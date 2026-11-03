@@ -47,7 +47,7 @@ def test_docx_and_pptx_text(tmp_path):
 
     assert "游定森 董事長致詞" in dump(tmp_path / "a.docx")
     assert "公司簡介" in dump(tmp_path / "b.pptx")
-    assert "不支援" in dump(tmp_path / "c.xls")
+    assert "不支援" in dump(tmp_path / "c.odt")
 
 
 def test_dump_command_cannot_be_shadowed_from_the_repo_cwd(tmp_path):
@@ -80,3 +80,92 @@ def test_dump_labels_follow_the_interface_language_but_cell_text_does_not(tmp_pa
     assert "## Sheet: 名單 (1 rows × 1 columns)" in out
     assert "A1: '已聯絡'|fill #FFFF00" in out
     assert dump(tmp_path / "x.rtf").startswith(".rtf is not supported")
+
+
+def test_legacy_formats_are_upgraded_by_libreoffice_in_a_temp_dir(tmp_path, monkeypatch):
+    """原件樹裡早年的 .doc 沒有轉寫快取(7 天後刪):2026-11-02 claude 要跟上一版逐字比對,office-dump 說不支援就放棄了。"""
+    import docx
+
+    from wiki_feeder import office
+
+    seen = {}
+
+    class FakePopen:
+        def __init__(self, cmd, **kw):
+            seen["cmd"] = cmd
+            out = Path(cmd[cmd.index("--outdir") + 1])
+            d = docx.Document()
+            d.add_paragraph("游定森 舊版條文")
+            d.save(out / "舊版.docx")
+            self.returncode, self.pid = 0, 1
+
+        def communicate(self, timeout):
+            seen["timeout"] = timeout
+            return b"", b""
+
+    src = tmp_path / "舊版.DOC"
+    src.write_bytes(b"\xd0\xcf\x11\xe0")
+    monkeypatch.setattr(office, "find_soffice", lambda: Path("/x/soffice"))
+    monkeypatch.setattr(office.subprocess, "Popen", FakePopen)
+    out = dump(src)
+    assert "游定森 舊版條文" in out and "LibreOffice" in out
+    cmd = seen["cmd"]
+    assert "--headless" in cmd and any(a.startswith("-env:UserInstallation=file:") for a in cmd)
+    assert cmd[cmd.index("--convert-to") + 1].startswith("docx:")
+    assert seen["timeout"] == office.CONVERT_TIMEOUT
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["舊版.DOC"]      # 原件旁邊不留東西
+    assert not Path(cmd[cmd.index("--outdir") + 1]).exists()                # 暫存資料夾清掉
+
+
+def test_legacy_dump_says_what_is_missing_and_does_not_trust_exit_code_zero(tmp_path, monkeypatch):
+    """沒裝 LibreOffice 明講要裝(不退回別的方式);soffice 轉失敗常常照樣回 0,沒有成品就是失敗。"""
+    import subprocess
+
+    from wiki_feeder import office
+
+    src = tmp_path / "表.xls"
+    src.write_bytes(b"x")
+    monkeypatch.setattr(office, "find_soffice", lambda: None)
+    assert "要裝 LibreOffice" in dump(src)
+
+    class Silent:
+        def __init__(self, cmd, **kw):
+            self.returncode, self.pid = 0, 1
+
+        def communicate(self, timeout):
+            return b"", b"Error: source file could not be loaded"
+
+    monkeypatch.setattr(office, "find_soffice", lambda: Path("/x/soffice"))
+    monkeypatch.setattr(office.subprocess, "Popen", Silent)
+    assert "轉不出 表.xls" in dump(src) and "could not be loaded" in dump(src)
+
+    killed = []
+
+    class Hang(Silent):
+        def communicate(self, timeout):
+            raise subprocess.TimeoutExpired("soffice", timeout)
+
+        def wait(self):
+            return -9
+
+    monkeypatch.setattr(office.subprocess, "Popen", Hang)
+    monkeypatch.setattr(office, "kill_group", killed.append)
+    assert "超過 180 秒" in dump(src) and killed == [1]
+
+
+def test_windows_finds_the_libreoffice_that_scribe2md_installed_itself(tmp_path, monkeypatch):
+    """沒裝 LibreOffice 的 Windows,scribe2md 轉 .doc 時自己下載到 %LOCALAPPDATA%\\meeting-scribe\\libreoffice;
+    只找 Program Files 的話,朋友的 doc2md 轉得了 .doc、office-dump 卻說要裝 LibreOffice。"""
+    from wiki_feeder import office
+
+    for v in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"):
+        monkeypatch.delenv(v, raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setattr(office, "WINDOWS", True)
+    assert office.find_soffice() is None
+    prog = tmp_path / "meeting-scribe" / "libreoffice" / "program"
+    prog.mkdir(parents=True)
+    (prog / "soffice.exe").write_bytes(b"")
+    assert office.find_soffice() == prog / "soffice.exe"
+    (prog / "soffice.com").write_bytes(b"")
+    assert office.find_soffice() == prog / "soffice.com"     # .exe 會自己開黑視窗等人按 Enter

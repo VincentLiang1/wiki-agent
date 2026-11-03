@@ -67,6 +67,7 @@ class PageRoot:
     personal: bool = False
     raw: Path | None = None     # 這個庫的原件樹:查「來源路徑帶磁碟前綴」用
     basic: bool = False         # 只查通用的幾項(程式代管的庫:朋友的庫沒有公事庫那套 grep 健檢)
+    head: Path | None = None    # index 摘要字數拿哪個 git 庫的 HEAD 比(副本不是 git 庫,比真的個人 WIKI);None 是 path 自己
 
 
 def git_text(repo: Path, *args: str) -> str:
@@ -199,12 +200,28 @@ def check_pages(roots: list[PageRoot], pages: list[str]) -> str:
         if not f.is_file():
             out.append(L("{name}:找不到", name=name))
             continue
-        problems = scan_text(f.read_bytes().decode("utf-8", "replace"), rel, root.personal, root.raw, root.basic)
+        text = f.read_bytes().decode("utf-8", "replace")
+        problems = scan_text(text, rel, root.personal, root.raw, root.basic)
         out += [L("{name}:第 {n} 行 {kind}:{line}", name=name, n=n, kind=kind, line=line.strip()[:80])
                 for n, kind, line in problems]
         if not problems:
             out.append(L("{name}:沒有問題", name=name))
+        if rel == "Wiki_Pages/index.md" and not root.basic:
+            out += [L("{name}:第 {n} 行 摘要 {count} 字:{line}", name=name, n=n, count=count, line=line.strip()[:40])
+                    for n, count, line in changed_summaries(root.head or root.path, rel, text)]
     return "\n".join(out)
+
+
+def changed_summaries(repo: Path, rel: str, text: str) -> list[tuple[int, int, str]]:
+    """index.md 裡跟 HEAD 不同的摘要行:(行號, 摘要字數, 那一行)。兩庫規則的 260 字上限要照頁的種類判斷、
+    程式不判,只給確切字數——攝入不能跑 python 計字,只能目測(2026-10-30～11-02 摘要信)。
+    副本不是 git 庫、HEAD 沒有這個檔就不列:整份 index 幾百行都算「改過」沒有用。"""
+    try:
+        before = set(git_text(repo, "show", f"HEAD:{rel}").split("\n"))
+    except PageToolError:
+        return []
+    return [(n, len(m[1]), line) for n, line in enumerate(text.split("\n"), 1)
+            if line not in before and (m := _INDEX_LINE.match(line))]
 
 
 _TOTAL_ROW = re.compile(r"合計|總計|total", re.I)

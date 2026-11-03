@@ -1,5 +1,13 @@
 [
  {
+  "source": "a1bd0ea",
+  "date": "2026-11-03",
+  "needs_human": false,
+  "zh-Hant": "- 攝入時要核對原件資料夾裡的舊版 Office 檔(.doc／.xls／.ppt,例如上一版),office-dump 會先用 LibreOffice 轉好再印出原文,不再說不支援;電腦上要有 LibreOffice(Windows 上 scribe2md 自己下載的那份也找得到),沒有就照舊以轉寫為準。沒裝 scribe2md 的,舊版 Office 檔照舊留在待處理",
+  "zh-Hans": "- 摄入时要核对原件文件夹里的旧版 Office 文件(.doc／.xls／.ppt,例如上一版),office-dump 会先用 LibreOffice 转好再打印原文,不再说不支持;电脑上要有 LibreOffice(Windows 上 scribe2md 自己下载的那份也找得到),没有就照旧以转写为准。没装 scribe2md 的,旧版 Office 文件照旧留在待处理",
+  "en": "- When an ingest needs to check a legacy Office file in the originals folder (.doc/.xls/.ppt, for example the previous version), office-dump now converts it with LibreOffice first and prints the original text instead of saying the format is not supported. LibreOffice must be on the computer (on Windows the copy scribe2md downloads itself is found too); without it the transcript is used as before. Without scribe2md, legacy Office files still stay in the pending folder"
+ },
+ {
   "source": "6fd3af4",
   "date": "2026-11-03",
   "needs_human": false,

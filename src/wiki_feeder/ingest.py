@@ -54,7 +54,7 @@ from .doc2md import SIDECAR_EXT
 from .i18n import SOURCE, L, N_
 from .ledger import Ledger
 from .mover import pick_names, suffixed
-from .office import DUMPERS
+from .office import DUMPERS, LEGACY
 from .proc import NET_TIMEOUT, run_net
 
 log = logging.getLogger(__name__)
@@ -1183,7 +1183,7 @@ def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: l
         where = "(decision 不可填 skipped;歸本庫還是個人 WIKI 照背景說明與第 5 條判斷)" if scoped else "本庫(decision 不可填 skipped)"
         user += (f"- ⚠️ 使用者已確認這份要攝入{where},背景說明:{side['使用者補充']}\n"
                  f"  請把這個背景寫進頁面,讓日後讀的人知道它為什麼跟本庫有關\n")
-    if raw.suffix.lower() in DUMPERS and not no_scribe:
+    if raw.suffix.lower() in (*DUMPERS, *LEGACY) and not no_scribe:
         user += (f"- 這是 Office 原件。doc2md 的轉寫會繁化人名(例如把「游」轉成「遊」)、看不到儲存格顏色與公式;"
                  f"要核對原文字形、顏色標註、公式時執行(照抄,不要改寫、不要串接其他指令):\n"
                  f"  {dump} {shlex.quote(str(raw))}\n")
@@ -1197,8 +1197,9 @@ def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: l
                  + "".join(f"  {dump} {shlex.quote(str(p))}\n" for p in attached))
     if tools_cmd:
         # 只寫本筆的完整路徑,claude 以為只能傾印這一份(2026-10-27、10-29 要跟上一版逐台比對都放棄了)
-        user += (f"- 要比對原件樹({target.raw_root})裡別份 Office 原件(例如上一版)時,同一個指令把路徑換成那份的完整路徑"
-                 f"(一次一份):\n  {dump} <那份原件的完整路徑>\n")
+        # 舊版 .doc 的上一版沒有轉寫快取(7 天後刪),2026-11-02 claude 以為傾印不了、逐字比對放棄
+        user += (f"- 要比對原件樹({target.raw_root})裡別份 Office 原件(例如上一版,舊版 .doc／.xls／.ppt 也可以)時,"
+                 f"同一個指令把路徑換成那份的完整路徑(一次一份):\n  {dump} <那份原件的完整路徑>\n")
     dest_rel = f"{target.raw_root.name}\\<群組>\\{raw.name}"
     tools = shlex.join(tools_cmd)
     commit_rule = (_COMMIT_MANAGED if target.managed else _COMMIT_SELF).format(tools=tools)
@@ -1206,7 +1207,8 @@ def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: l
                      if stage is not None else "")
     page_checks = (" wikilink [[…]]、來源路徑的磁碟前綴" if target.managed else
                    "本庫規則列的 grep 健檢:wikilink、H2 禁用字元、錨點大寫、跨群組清單項的顯示文字、相關連結的 type label、"
-                   "來源路徑的磁碟前綴、index.md 摘要超過 400 字")
+                   "來源路徑的磁碟前綴、index.md 摘要超過 400 字;"
+                   "查 index.md 時另印這次新增或改過的每一行摘要的確切字數,本庫規則要計字(260 字上限那些)就看它,不必目測")
     stage_check = (f"。個人 WIKI 副本的頁也用它查,路徑寫完整的 `{stage}/Wiki_Pages/…`,照個人 WIKI 的規則判定"
                    if stage is not None else "")
     handout_line = (_HANDOUT_LINE.format(tools=tools)

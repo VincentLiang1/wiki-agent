@@ -297,3 +297,34 @@ def test_tool_output_follows_the_interface_language(repo):
     assert check_pages(roots, ["Wiki_Pages/新頁.md"]) == "Wiki_Pages/新頁.md: no problems"
     with pytest.raises(PageToolError, match="is not a commit hash"):
         commit_detail(repo, "--output=x")
+
+
+def test_check_pages_on_index_prints_exact_lengths_of_changed_summaries(cfg, repo, tmp_path, capsys):
+    """兩庫規則的 260 字上限要計字,攝入不能跑 python、只能目測(2026-10-30～11-02 摘要信三次「未驗」)。
+    只列跟 HEAD 不同的行;個人 WIKI 副本不是 git 庫,拿真的個人 WIKI 的 HEAD 比。"""
+    old = "- [舊頁](群組/舊頁.md) — 單位 2026-01：" + "舊" * 300
+    idx = repo / "Wiki_Pages" / "index.md"
+    idx.write_text(f"# 索引\n{old}\n", encoding="utf-8")
+    git("add", "-A", cwd=repo)
+    git("commit", "-q", "-m", "index", cwd=repo)
+    new = "- [新頁](群組/新頁.md) — 單位 2026-11：" + "新" * 220
+    idx.write_text(f"# 索引\n{old}\n{new}\n", encoding="utf-8")
+    out = check_pages([PageRoot("FWIKI", repo)], ["Wiki_Pages/index.md"]).splitlines()
+    assert out == ["Wiki_Pages/index.md:沒有問題",
+                   f"Wiki_Pages/index.md:第 3 行 摘要 {len(new.split(' — ', 1)[1])} 字:{new[:40]}"]
+    assert check_pages([PageRoot("FWIKI", repo, basic=True)], ["Wiki_Pages/index.md"]) == "Wiki_Pages/index.md:沒有問題"
+
+    wiki = tmp_path / "WIKI"
+    git("init", "-q", "-b", "main", str(wiki), cwd=tmp_path)
+    (wiki / "Wiki_Pages").mkdir()
+    (wiki / "Wiki_Pages" / "index.md").write_text(f"{old}\n", encoding="utf-8")
+    git("add", "-A", cwd=wiki)
+    git("commit", "-q", "-m", "index", cwd=wiki)
+    stage = cfg.wiki_stage_dir
+    (stage / "Wiki_Pages").mkdir(parents=True)
+    (stage / "Wiki_Pages" / "index.md").write_text(f"{old}\n{new}\n", encoding="utf-8")
+    c = replace(cfg, repos=(RepoConfig("company", "公事庫", repo, tmp_path / "FRaw", "me/FWIKI"),
+                            RepoConfig("personal", "個人庫", wiki, tmp_path / "Raw", "me/WIKI")))
+    capsys.readouterr()
+    assert main(["check-pages", str(stage / "Wiki_Pages" / "index.md")], c) == 0
+    assert capsys.readouterr().out.splitlines()[1].startswith("WIKI 副本 Wiki_Pages/index.md:第 2 行 摘要 ")

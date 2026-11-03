@@ -201,7 +201,7 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
         if cfg.has_backfill:
             rc = cfg.repo(cfg.backfill_repo)
             wiki = rc.repo_dir
-            roots += [PageRoot(f"{wiki.name} 副本", cfg.wiki_stage_dir, True, rc.raw_root),
+            roots += [PageRoot(f"{wiki.name} 副本", cfg.wiki_stage_dir, True, rc.raw_root, head=wiki),
                       PageRoot(wiki.name, wiki, True, rc.raw_root)]
         try:
             if args.cmd == "page-history":
