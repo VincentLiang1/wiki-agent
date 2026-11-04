@@ -178,11 +178,12 @@ def _streak(cfg: Config, name: str, reset: bool = False) -> int:
     return n
 
 
-def _mark_offline(cfg: Config, name: str, down: bool) -> None:
+def _mark_offline(cfg: Config, name: str, down: bool, net: bool = True) -> None:
     """記下這個收件匣最近一次讀不到是不是因為連不上網路(`inbox_offline.json`,看門狗看這個不叫修理、不寄信)。
 
     2026-10-20 帶筆電到公司:FUTURES 走 ssh 連不上 GitHub,網路閃一下通的那一刻看門狗就寄了 🛑。
-    連不上網路不是壞掉,警示照樣進當日摘要(一天一則),只是不交給修理。"""
+    連不上網路不是壞掉,警示照樣進當日摘要(一天一則),只是不交給修理。
+    net=False:是 GitHub 那端不穩、本機網路是通的,不記 net_down.json(不然 iCloud 探針整段事故期間都重新計時)。"""
     path = cfg.state_dir / "inbox_offline.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -191,7 +192,8 @@ def _mark_offline(cfg: Config, name: str, down: bool) -> None:
     names = [n for n in data if n != name] if isinstance(data, list) else []
     if down:
         names.append(name)
-        mark_net_down(cfg)
+        if net:
+            mark_net_down(cfg)
     if names != data:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(sorted(names), ensure_ascii=False), encoding="utf-8")
@@ -227,8 +229,12 @@ def _unavailable(cfg: Config, inbox, e: InboxUnavailable, report: Report) -> Non
     ——雲端同步的瞬間狀態。直接發警示會叫人去查一個沒壞的權限。真的壞掉會一直讀不到,幾分鐘內照樣報。
     """
     n = _streak(cfg, inbox.name)
-    _mark_offline(cfg, inbox.name, network_down(str(e)))
-    if n >= cfg.unavailable_alert_after:
+    net = network_down(str(e))
+    _mark_offline(cfg, inbox.name, net or e.network, net=net)
+    if e.network:
+        # 查證過是 GitHub 那端不穩(FuturesInbox.prepare):跟連不上網路一樣只寫 log,不列進摘要、不交給修理
+        log.warning(L("%s(GitHub 那端不穩,比照連不上網路:不列進摘要)"), e)
+    elif n >= cfg.unavailable_alert_after:
         _inbox_alert(inbox, e, report)
     else:
         log.warning(L("%s(連續第 %d 輪,滿 %d 輪才發警示)"), e, n, cfg.unavailable_alert_after)

@@ -204,3 +204,103 @@ def test_remote_is_checked_at_most_every_interval(cfg, futures_cfg, fake_futures
     old = time.time() - 301
     os.utime(stamp, (old, old))
     assert [Path(p).name for p in _run(cfg, fc).moved] == ["new.txt"]
+
+
+# --- publickey 被拒:先查證是不是 GitHub 那端不穩(2026-11-04) ---
+
+def _publickey_rounds(cfg, futures_cfg, monkeypatch, ssh_results, status, rounds=5):
+    """ls-remote 一律回 publickey;ssh 連試照 ssh_results 輪流回(空的 = 一直失敗),githubstatus 回 status。
+    跑 rounds 輪收件,回傳 (最後一輪的 Report, 看門狗看到的 inbox 問題, ssh 試了幾次)。"""
+    import subprocess
+
+    from wiki_feeder import inboxes
+    from wiki_feeder.watchdog import detect
+
+    real_run = inboxes.run_net
+    tries = []
+
+    def ls_remote_denied(cmd, *a, **k):
+        if "ls-remote" in cmd:
+            return subprocess.CompletedProcess(cmd, 128, "", "git@github.com: Permission denied (publickey).\r\n"
+                                                             "fatal: Could not read from remote repository.")
+        return real_run(cmd, *a, **k)
+
+    def ssh_once(target):
+        assert target == "git@github.com"
+        tries.append(target)
+        return bool(ssh_results) and ssh_results[(len(tries) - 1) % len(ssh_results)]
+
+    monkeypatch.setattr(inboxes, "run_net", ls_remote_denied)
+    monkeypatch.setattr(inboxes, "ssh_target", lambda remote: "git@github.com")
+    monkeypatch.setattr(inboxes, "ssh_once", ssh_once)
+    monkeypatch.setattr(inboxes, "git_ops_status", lambda url: status)
+    c = replace(cfg, icloud_inbox=None, onedrive_inbox=None, unavailable_alert_after=3,
+                futures=replace(futures_cfg, status_url="https://status.invalid/summary.json"))
+    for _ in range(rounds):
+        r = collect(c)
+    found = [p for p in detect(c, agents_check=lambda: [], sample=lambda: ([], None, 1), resources_too=False)
+             if p.kind == "inbox"]
+    return r, found, tries
+
+
+def test_publickey_but_ssh_sometimes_works_is_github_not_the_key(cfg, futures_cfg, monkeypatch):
+    """2026-11-04:GitHub 出事,ls-remote 連 9 輪 publickey,看門狗寄 🛑「GitHub 拒絕了部署金鑰」叫人去核對——
+    其實金鑰在、指紋對,同一把金鑰 ssh 6 次成功 2 次。ssh 有一次成功就是 GitHub 不穩:不列進摘要、不交給修理。"""
+    r, found, tries = _publickey_rounds(cfg, futures_cfg, monkeypatch, [False, False, True], "operational")
+    assert not r.alerts and not r.new_alerts
+    assert not found
+    assert len(tries) == 5 * 3                              # 每輪試到第一次成功就停
+    assert json.loads((cfg.state_dir / "inbox_offline.json").read_text(encoding="utf-8")) == ["FUTURES"]
+    assert not (cfg.state_dir / "net_down.json").exists()   # 本機網路是通的:iCloud 探針不該重新計時
+    assert not (cfg.state_dir / "alerts.jsonl").exists() or "publickey" not in \
+        (cfg.state_dir / "alerts.jsonl").read_text(encoding="utf-8")
+
+
+def test_publickey_while_githubstatus_degraded_is_github_not_the_key(cfg, futures_cfg, monkeypatch):
+    """ssh 每次都被拒、但 githubstatus 的 Git Operations 不是 operational:也是 GitHub 那端,不找人。"""
+    r, found, tries = _publickey_rounds(cfg, futures_cfg, monkeypatch, [], "degraded_performance")
+    assert not r.alerts and not r.new_alerts
+    assert not found
+    assert len(tries) == 5 * futures_cfg.ssh_probe_tries
+
+
+@pytest.mark.parametrize("status", ["operational", None])
+def test_publickey_with_every_ssh_denied_and_github_fine_still_escalates(cfg, futures_cfg, monkeypatch, status):
+    """ssh 每次都被拒、githubstatus 正常(或讀不到):金鑰真的被拒,照舊警示、交給修理;警示裡寫明查證了什麼,
+    修理的 claude 才分得出這是驗證過的(repair.PROMPT 第 9 條)。"""
+    r, found, _ = _publickey_rounds(cfg, futures_cfg, monkeypatch, [], status)
+    assert len(r.alerts) == 1 and "publickey" in r.alerts[0]
+    assert f"ssh 連試 {futures_cfg.ssh_probe_tries} 次都被拒" in r.alerts[0]
+    assert ("讀不到" if status is None else "Git Operations 正常") in r.alerts[0]
+    assert [p.key for p in found] == ["inbox:FUTURES"]
+
+
+def test_repair_prompt_knows_how_to_read_the_check():
+    """修理的 claude 不能跑 ssh、不能連外部網站:提示要它沒驗證過就不開處方,並且照警示裡「已查證」那句判斷;
+    兩邊的字要對得上,不然它找不到那句。"""
+    from wiki_feeder.repair import PROMPT
+
+    assert "沒驗證到" in PROMPT and "已查證" in PROMPT
+    assert "ssh 連試 N 次都被拒、githubstatus 的 Git Operations\n   正常" in PROMPT
+
+
+def test_ssh_target_parses_remote_forms():
+    from wiki_feeder.inboxes import ssh_target
+
+    assert ssh_target("git@github.com:owner/repo.git") == "git@github.com"
+    assert ssh_target("ssh://git@github.com/owner/repo.git") == "git@github.com"
+    assert ssh_target("file:///tmp/x/FUTURES.git") is None
+    assert ssh_target("https://github.com/owner/repo.git") is None
+
+
+def test_git_ops_status_reads_the_component(tmp_path):
+    """githubstatus summary.json 的格式:components[].name／status;讀不到、找不到一律 None。"""
+    from wiki_feeder.inboxes import git_ops_status
+
+    f = tmp_path / "summary.json"
+    f.write_text(json.dumps({"components": [{"name": "API Requests", "status": "operational"},
+                                            {"name": "Git Operations", "status": "degraded_performance"}]}))
+    assert git_ops_status(f.as_uri()) == "degraded_performance"
+    f.write_text(json.dumps({"components": []}))
+    assert git_ops_status(f.as_uri()) is None
+    assert git_ops_status((tmp_path / "沒有.json").as_uri()) is None

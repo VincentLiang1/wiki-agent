@@ -122,6 +122,10 @@ PROMPT = """你是 wiki-feeder 的自動修理。看門狗發現常駐程式出�
 7. 不可修改 WIKI／FWIKI 的任何檔(包括它們的 CLAUDE.md);不可 --force;不可刪檔。
 8. 動真資料的指令照抄上面的完整寫法(跑的是已發佈的程式);**不要用 `uv run wiki-feeder`**——那會跑這個目錄裡
    你正在改、還沒測過的程式。其他可用的:`{feeder} reconvert <檔名>`、`{feeder} ledger`。
+9. 你沒有親自驗證過的推論(你不能跑 ssh、不能連外部網站),cause 要寫成「沒驗證到,可能是 X 或 Y」,
+   human_todo **不可**寫成叫使用者去改、去核對某個設定的具體處方。連 GitHub 被拒(publickey):程式已經連試過 ssh、
+   查過 githubstatus,結果在警示的「已查證」那一句;只有寫著「ssh 連試 N 次都被拒、githubstatus 的 Git Operations
+   正常」才可以說是金鑰的問題,其他寫法一律是「沒驗證到,可能是金鑰或 GitHub 不穩」。
 """
 
 

@@ -1,5 +1,13 @@
 [
  {
+  "source": "ceb8bc3",
+  "date": "2026-11-04",
+  "needs_human": false,
+  "zh-Hant": "- 內部調整:只改了作者自己那台的公司收件匣(GitHub 出事時不再誤報金鑰被拒);你的電腦沒有這個收件匣、也不跑這段,照舊運作,不必做任何事",
+  "zh-Hans": "- 内部调整:只改了作者自己那台的公司收件匣(GitHub 出事时不再误报密钥被拒);你的电脑没有这个收件匣、也不跑这段,照旧运作,不必做任何事",
+  "en": "- Internal change: only the author's own company inbox was changed (no more false \"key rejected\" alerts while GitHub has an outage); your computer has no such inbox and does not run this code, so nothing changes and there is nothing to do"
+ },
+ {
   "source": "4dfb617",
   "date": "2026-11-04",
   "needs_human": false,

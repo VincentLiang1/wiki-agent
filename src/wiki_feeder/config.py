@@ -95,6 +95,8 @@ class FuturesConfig:
     git_user: str = "wiki-feeder"
     git_email: str = "wiki-feeder@localhost"
     net_timeout: float = 300            # 每個 git 指令的上限;2026-10-05 ls-remote 經 ssh 卡了 44 分鐘(見 proc.py)
+    ssh_probe_tries: int = 6            # publickey 被拒時連試 ssh 幾次(一次成功就停;2026-11-04 GitHub 出事時 6 次成功 2 次)
+    status_url: str = "https://www.githubstatus.com/api/v2/summary.json"   # 空字串 = 不查(測試)
 
 
 @dataclass(frozen=True)

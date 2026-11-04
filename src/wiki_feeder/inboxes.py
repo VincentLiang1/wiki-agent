@@ -10,9 +10,12 @@ FUTURES 的傳輸方式還沒定案,換成別的做法時只要換掉 FuturesInb
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
+import re
 import subprocess
+import urllib.request
 import time
 from collections import defaultdict
 from dataclasses import dataclass
@@ -29,7 +32,14 @@ log = logging.getLogger(__name__)
 
 
 class InboxUnavailable(Exception):
-    """收件匣不存在、沒權限、或遠端連不上——要大聲失敗。"""
+    """收件匣不存在、沒權限、或遠端連不上——要大聲失敗。
+
+    network=True:查證過是網路或 GitHub 那端的事(錯誤字樣看不出來的,例如 GitHub 出事時回的 publickey),
+    收件比照連不上網路處理(collect._unavailable)。"""
+
+    def __init__(self, msg: str, network: bool = False):
+        super().__init__(msg)
+        self.network = network
 
 
 @dataclass(frozen=True)
@@ -125,6 +135,56 @@ class GitError(Exception):
     pass
 
 
+# GitHub 出事時 ssh 也回 publickey(2026-11-04:金鑰在、指紋對,6 次 ssh 成功 2 次,githubstatus 晚一小時才公告)
+PUBLICKEY = "Permission denied (publickey)"
+SSH_OPTS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=15")
+
+
+def ssh_target(remote: str) -> str | None:
+    """remote 是 ssh(scp 寫法或 ssh:// 開頭)就回 ssh -T 要連的「使用者、主機」那一段;不是 ssh 回 None。"""
+    m = re.match(r"ssh://([^/@]+@[^/:]+)", remote) or re.match(r"([^/@:]+@[^/:]+):", remote)
+    return m.group(1) if m else None
+
+
+def ssh_once(target: str) -> bool:
+    """ssh -T 一次:GitHub 認得金鑰時結束碼是 1、印「successfully authenticated」,所以看字樣不看結束碼。"""
+    r = run_net(["ssh", *SSH_OPTS, "-T", target], 30, text=True)
+    return "successfully authenticated" in (r.stderr + r.stdout)
+
+
+def git_ops_status(url: str) -> str | None:
+    """githubstatus 上「Git Operations」的狀態(operational、degraded_performance…);讀不到回 None。"""
+    try:
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return next(str(c.get("status")) for c in data.get("components", []) if c.get("name") == "Git Operations")
+    except Exception:  # noqa: BLE001 —— 斷網、改版、格式不對都當讀不到
+        return None
+
+
+def github_side(cfg: FuturesConfig) -> tuple[bool, str]:
+    """publickey 被拒時查證是不是 GitHub 那端不穩:(是, 查證結果一句話)。
+
+    連試 ssh,有一次成功就是 GitHub 不穩(金鑰沒壞);githubstatus 的 Git Operations 不是 operational 也算。
+    都沒有才算真的被拒。githubstatus 讀不到不算 GitHub 不穩(金鑰真的被撤時寧可報出來,§3.4)。"""
+    target = ssh_target(cfg.remote)
+    ok = fail = 0
+    if target:
+        for _ in range(cfg.ssh_probe_tries):
+            if ssh_once(target):
+                ok += 1
+                break
+            fail += 1
+    status = git_ops_status(cfg.status_url) if cfg.status_url else None
+    if ok:
+        return True, L("ssh 連試 {n} 次有成功,是 GitHub 不穩、不是金鑰的問題", n=ok + fail)
+    if status and status != "operational":
+        return True, L("githubstatus 的 Git Operations 是 {status},是 GitHub 那端在出事", status=status)
+    tried = L("ssh 連試 {n} 次都被拒", n=fail) if target else L("沒試 ssh(remote 不是 ssh)")
+    seen = L("githubstatus 讀不到") if status is None else L("githubstatus 的 Git Operations 正常")
+    return False, L("已查證:{tried}、{seen}", tried=tried, seen=seen)
+
+
 class FuturesInbox:
     """公司端經 GitHub 投遞:FUTURES repo 的 PROCESS/。
 
@@ -187,7 +247,11 @@ class FuturesInbox:
                 self._git("merge", "--ff-only", "-q", f"origin/{self.cfg.branch}")
             self._head = self._rev("HEAD")
         except GitError as e:
-            raise InboxUnavailable(L("FUTURES 取件準備失敗:{e}", e=e)) from e
+            msg, network = L("FUTURES 取件準備失敗:{e}", e=e), False
+            if PUBLICKEY in str(e):
+                network, why = github_side(self.cfg)
+                msg += "\n" + why
+            raise InboxUnavailable(msg, network=network) from e
         if self.stamp is not None:
             self.stamp.parent.mkdir(parents=True, exist_ok=True)
             self.stamp.touch()

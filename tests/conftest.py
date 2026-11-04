@@ -145,4 +145,5 @@ def cfg(tmp_path) -> Config:
 def futures_cfg(tmp_path, fake_futures) -> FuturesConfig:
     # file:// 才會走真正的傳輸協定、--filter=blob:none 才有作用(純路徑會被 git 當本機複製)
     return FuturesConfig(repo_dir=tmp_path / "FUTURES-process", remote=fake_futures.remote.as_uri(),
-                         check_interval=0)   # 節流另有專門測試;其餘測試每輪都要真的去查
+                         check_interval=0,   # 節流另有專門測試;其餘測試每輪都要真的去查
+                         status_url="")      # 絕不連真的 githubstatus
