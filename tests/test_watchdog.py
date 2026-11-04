@@ -1218,7 +1218,7 @@ def test_icloud_stall_restarts_bird_without_claude(env, dev, monkeypatch):
     assert restarts == [1] and not calls.agent
     assert subject.startswith("✅") and "iCloud" in subject and "恢復同步" in body
     hist = [json.loads(ln) for ln in c.repair_log_path.read_text().splitlines()]
-    assert {h["key"] for h in hist} == {"icloud:stalled"}       # 算進一天 3 次、7 天規則
+    assert {h["key"] for h in hist} == {"icloud:stalled"} and hist[-1]["ok"] is True
 
 
 def test_icloud_restart_that_does_not_help_asks_for_the_mac_screen(env, dev, monkeypatch):
@@ -1230,17 +1230,83 @@ def test_icloud_restart_that_does_not_help_asks_for_the_mac_screen(env, dev, mon
     assert restarts == [1] and subject.startswith("🛑") and "到 Mac 前面" in body
 
 
-def test_icloud_stall_again_within_a_week_only_mails(env, dev, monkeypatch):
+def test_icloud_stall_after_a_fix_is_fixed_again(env, dev, monkeypatch):
+    """使用者 2026-11-04:每次卡住都先自己修,不套「7 天內修過就只寄信」。"""
     c, clock = _icloud(replace(env["cfg"], repair_repo=dev), monkeypatch)
     _stall(c, clock)
     calls, restarts = Calls(), []
     repair.tick(c, _icloud_deps(c, calls, [(False, ""), (True, "")], restarts))
     clock.up += c.icloud_probe_every            # 下一次探針又卡住
     _stall(c, clock)
+    repair.tick(c, _icloud_deps(c, calls, [(False, ""), (True, "")], restarts))
+    assert restarts == [1, 1]
+    assert [s[:1] for s, _ in calls.mail] == ["✅", "✅"] and "先自己修" in calls.mail[1][1]
+
+
+def test_icloud_fix_that_failed_mails_once_until_synced_again(env, dev, monkeypatch):
+    c, clock = _icloud(replace(env["cfg"], repair_repo=dev, icloud_restart_checks=1), monkeypatch)
+    _stall(c, clock)
+    calls, restarts = Calls(), []
+    repair.tick(c, _icloud_deps(c, calls, [(False, ""), (False, "")], restarts))   # 修不好:🛑
+    clock.up += c.icloud_sync_timeout + 1       # 重寫的探針也卡住:同一次卡住
     repair.tick(c, _icloud_deps(c, calls, [(False, "")], restarts))
-    repair.tick(c, _icloud_deps(c, calls, [(False, "")], restarts))   # 找人的信一天一封
-    assert restarts == [1]
-    assert [s[:1] for s, _ in calls.mail] == ["✅", "🛑"] and "到 Mac 前面" in calls.mail[1][1]
+    repair.tick(c, _icloud_deps(c, calls, [(False, "")], restarts))
+    assert restarts == [1] and [s[:1] for s, _ in calls.mail] == ["🛑"]
+    _detect(c, icloud_check=lambda path, since: (True, ""))                      # 後來傳上去了
+    clock.up += c.icloud_probe_every
+    _stall(c, clock)
+    repair.tick(c, _icloud_deps(c, calls, [(False, ""), (True, "")], restarts))   # 新的一次卡住:再修
+    assert restarts == [1, 1] and calls.mail[-1][0].startswith("✅")
+
+
+def test_icloud_fix_tries_fileproviderd_then_finder(env, dev, monkeypatch):
+    """2026-11-04:卡在 fileproviderd 的節流重試,重啟 bird 沒用,在 Finder 點 iCloud 雲碟才好。"""
+    c, clock = _icloud(replace(env["cfg"], repair_repo=dev, icloud_restart_checks=2), monkeypatch)
+    _stall(c, clock)
+    calls, restarts, did = Calls(), [], []
+    deps = _icloud_deps(c, calls, [(False, "")] + [(False, "")] * 4 + [(True, "已上傳")], restarts)
+    deps.fp_evaluate = lambda p: did.append(("fp", p.name)) or "請 fileproviderd 重新看探針檔"
+    deps.open_finder = lambda p: did.append(("finder", p)) or "在背景用 Finder 打開 iCloud 雲碟"
+    repair.tick(c, deps)
+    (subject, body), = calls.mail
+    assert restarts == [1] and did == [("fp", "heartbeat.txt"), ("finder", c.icloud_probe_dir.parent)]
+    assert subject.startswith("✅") and "用 Finder 打開 iCloud 雲碟後 iCloud 恢復同步" in body
+
+
+def test_icloud_fix_mails_only_after_every_step_failed(env, dev, monkeypatch):
+    c, clock = _icloud(replace(env["cfg"], repair_repo=dev, icloud_restart_checks=1), monkeypatch)
+    _stall(c, clock)
+    calls, restarts, did = Calls(), [], []
+    deps = _icloud_deps(c, calls, [(False, "")] * 4, restarts)
+    deps.fp_evaluate = lambda p: did.append("fp") or "fp"
+    deps.open_finder = lambda p: did.append("finder") or "finder"
+    repair.tick(c, deps)
+    (subject, body), = calls.mail
+    assert did == ["fp", "finder"] and subject.startswith("🛑")
+    assert "重啟 bird、請 fileproviderd 重看探針檔、用 Finder 打開 iCloud 雲碟都試過" in body and "先別動" in body
+
+
+def test_icloud_unreachable_is_not_repaired(env, dev, monkeypatch):
+    """使用者 2026-11-04:「網路斷了,怎麼修都不會好」——連不上 iCloud 不重啟、不寄信、不記成修過。"""
+    c, clock = _icloud(replace(env["cfg"], repair_repo=dev), monkeypatch)
+    _stall(c, clock)
+    calls, restarts = Calls(), []
+    deps = _icloud_deps(c, calls, [(False, "")], restarts)
+    deps.icloud_online = lambda: False
+    repair.tick(c, deps)
+    assert restarts == [] and calls.mail == [] and not c.repair_log_path.exists()
+
+
+def test_icloud_fixes_do_not_use_up_the_daily_repairs(env, dev, monkeypatch):
+    c, clock = _icloud(replace(env["cfg"], repair_repo=dev, repair_max_per_day=1), monkeypatch)
+    _stall(c, clock)
+    calls, restarts = Calls(), []
+    monkeypatch.setattr(repair, "run_agent", _agent(calls))
+    repair.tick(c, _icloud_deps(c, calls, [(False, ""), (True, "")], restarts))
+    c.ingest_stop_path.parent.mkdir(parents=True, exist_ok=True)
+    c.ingest_stop_path.write_text(json.dumps({"檔案": "x", "原因": "STOP:怪事"}, ensure_ascii=False))
+    repair.tick(c, _icloud_deps(c, calls, [(True, "")], restarts))
+    assert restarts == [1] and len(calls.agent) == 1
 
 
 def test_restart_bird_spares_the_simulators_bird(monkeypatch):

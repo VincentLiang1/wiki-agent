@@ -2,7 +2,8 @@
 
 使用者 2026-10-05 定案:直接開放自動修;STOP 只在「原因明確、內容無害」時自動解除;一天最多 3 次;
 同一個問題修過一次又出現就不再自己修,改寄信找人;CPU／記憶體被佔用只查原因、寄信。
-iCloud 沒在同步(使用者 2026-10-09 要求)不叫 claude:程式自己重啟 bird、再寫一次探針確認,次數規矩相同。
+iCloud 沒在同步(使用者 2026-10-09 要求)不叫 claude:程式自己重啟 bird、叫 fileproviderd、開 Finder,逐招確認;
+每次卡住都先自己修(使用者 2026-11-04),不套一天 3 次與 7 天規則,同一次卡住修不好才找人。
 iCloud 下載端(使用者 2026-10-22):沒有訊號可查,定時重啟 bird(_kick_icloud);不算次數、不寄信。
 
 分工(都是踩過才定的):
@@ -39,7 +40,7 @@ from .proc import run_net
 from .notify import send
 from .osplat import friend_claude_hint, friend_update_hint
 from .watchdog import (BIRD, Problem, _descendants, bird_running, brctl_status, deploying, detect, icloud_kick,
-                       icloud_log, icloud_synced, idle_of, inbox_placeholders, mark_kicked, net_id, probe_path,
+                       icloud_confirmed, icloud_log, icloud_synced, idle_of, inbox_placeholders, mark_kicked, net_id, probe_path,
                        processes, running, write_probe)
 
 log = logging.getLogger(__name__)
@@ -135,6 +136,8 @@ class Deps:
     sample: Callable[[], tuple] = None
     icloud_synced: Callable[[Path, float], tuple] = None
     restart_bird: Callable[[], str] = None
+    fp_evaluate: Callable[[Path], str] = None   # 請 fileproviderd 重看一個檔;None = 不試這招(測試、非 Mac)
+    open_finder: Callable[[Path], str] = None   # 在背景開 Finder 的 iCloud 雲碟;None = 不試這招
     vp_kick: Callable[[str], str] = None        # 立刻重跑一次聲紋橋樑(launchctl kickstart -k)
     vp_download: Callable[[Path], str] = None   # 要求 iCloud 把佔位檔載下來(brctl download)
     brctl_status: Callable[[], str | None] = None   # None = 不做定時重啟、重啟後也不叫醒 bird(測試、非 Mac)
@@ -248,12 +251,30 @@ def _vp_download(path: Path) -> str:
     return f"要求 iCloud 下載 {path.name}" + ("" if r.returncode == 0 else f"(brctl 失敗:{(r.stderr or r.stdout).strip()[:200]})")
 
 
+def _fp_evaluate(path: Path) -> str:
+    """2026-11-04 探針卡 42 分鐘:bird 好好的,是 fileproviderd 把探針的上傳排進節流重試、一直沒排到(重啟 bird 碰不到);
+    使用者在 Finder 點 iCloud 雲碟才叫醒它。evaluate 是唯讀的查詢(問 Finder 能對這個檔做什麼),會經過 fileproviderd。"""
+    import subprocess
+    r = subprocess.run(["fileproviderctl", "evaluate", str(path)], capture_output=True, text=True, timeout=60)
+    return "請 fileproviderd 重新看探針檔(fileproviderctl evaluate)" + (
+        "" if r.returncode == 0 else f"(失敗:{(r.stderr or r.stdout).strip()[:200]})")
+
+
+def _open_finder(path: Path) -> str:
+    """照使用者 2026-11-04 修好的做法:Finder 打開 iCloud 雲碟。-g 不搶前景;視窗會留在 Mac 畫面上。"""
+    import subprocess
+    r = subprocess.run(["open", "-g", str(path)], capture_output=True, text=True, timeout=60)
+    return "在背景用 Finder 打開 iCloud 雲碟(open -g)" + (
+        "" if r.returncode == 0 else f"(失敗:{(r.stderr or r.stdout).strip()[:200]})")
+
+
 def default_deps() -> Deps:
     from .watchdog import agents_not_loaded
     return Deps(online=_online, deploy=_deploy, resume=_resume, mail=_mail, agents_check=agents_not_loaded,
                 icloud_synced=icloud_synced, restart_bird=_restart_bird, vp_kick=_vp_kick, vp_download=_vp_download,
                 icloud_online=_icloud_online, ip_families=_ip_families, sync=_sync,
-                **({"brctl_status": brctl_status, "bird_running": bird_running, "net_id": net_id}
+                **({"brctl_status": brctl_status, "bird_running": bird_running, "net_id": net_id,
+                    "fp_evaluate": _fp_evaluate, "open_finder": _open_finder}
                    if sys.platform == "darwin" else {}))
 
 
@@ -751,6 +772,13 @@ def _round(cfg: Config, deps: Deps, now: float) -> str:
         return "收件匣讀不到的次數是連得上網路之前累積的,等收件再跑一輪"
 
     hist = _history(cfg)
+    # iCloud 不叫 claude(它沒辦法重啟 bird,kill／killall 在 DISALLOWED),所以也不準備修理的 clone;
+    # 每次卡住都先自己修,不套 7 天規則、不算一天 3 次(使用者 2026-11-04)
+    mine = [p for p in problems if p.kind == "icloud"]
+    icloud_msg = _icloud_round(cfg, deps, now, mine, hist) if mine else ""
+    problems = [p for p in problems if p.kind != "icloud"]
+    if not problems:
+        return icloud_msg
     void = {h["time"] for h in hist if h.get("void")}   # claude 連不上 API 的那幾次:不算修過、不算次數
     tried = {h["key"]: h for h in hist
              if h.get("type") == "repair" and h["time"] > now - SAME_PROBLEM_DAYS * DAY and h["time"] not in void}
@@ -761,14 +789,13 @@ def _round(cfg: Config, deps: Deps, now: float) -> str:
         _escalate(cfg, deps, now, p.key, p.title,
                   f"{p.title}\n\n{p.detail}\n\n這個問題 {_day(h['time'])} 已經自動處理過一次"
                   f"({h.get('summary', '')}),這次又發生,不再自動修,需要你看一下。"
-                  + (f"\n\n{ICLOUD_HUMAN}" if p.kind == "icloud" else "")
                   + (f"\n\n{VP_BRIDGE_HUMAN}" if p.kind == "vpbridge" else ""))
     if not fresh:
         return "都是修過又再發生的問題,已寄信找人"
 
     # 一次修理會寫好幾行(每個問題各一行、修理中與結果各一行):以開始時間算次數
     today = {h["time"] for h in hist if h.get("type") == "repair" and h.get("day") == _day(now)
-             and h["time"] not in void}
+             and h["time"] not in void and h.get("key") != "icloud:stalled"}
     if len(today) >= cfg.repair_max_per_day:
         # 鍵含這批問題:只用 "cap" 的話,當天第一封之後新冒出來的問題(例如下午的卡住)整天都不會再寄
         _escalate(cfg, deps, now, "cap:" + _keys(fresh), "今天的自動修理次數用完了",
@@ -776,13 +803,6 @@ def _round(cfg: Config, deps: Deps, now: float) -> str:
                   + _problems_text(fresh))
         return "今天的修理次數用完,已寄信找人"
 
-    # iCloud 不叫 claude(它沒辦法重啟 bird,kill／killall 在 DISALLOWED),所以也不準備修理的 clone
-    mine = [p for p in fresh if p.kind == "icloud"]
-    if mine:
-        msg = _fix_icloud(cfg, deps, now, mine)
-        fresh = [p for p in fresh if p.kind != "icloud"]
-        if not fresh:
-            return msg
     # 聲紋橋樑也不叫 claude:它的程式在另一個 repo(scribe2md-ios),能做的就是要求下載、重跑、重啟 bird
     mine = [p for p in fresh if p.kind == "vpbridge"]
     if mine:
@@ -831,47 +851,88 @@ def _round(cfg: Config, deps: Deps, now: float) -> str:
                           **({"void": True} if res.get("void") else {})})
 
 
+def _icloud_round(cfg: Config, deps: Deps, now: float, problems: list[Problem], hist: list[dict]) -> str:
+    """探針卡住:上一次修理沒修好、之後探針也還沒傳上去過 → 同一次卡住,只寄找人的信(一天一封);否則修。
+    只看寫了 ok 的紀錄:修到一半當掉的、2026-11-04 以前的舊紀錄都不擋。
+    連不上 iCloud 不修、不寄(使用者 2026-11-04:「網路斷了,怎麼修都不會好」):記斷網,探針從網路恢復後重新計時。"""
+    if deps.icloud_online and not deps.icloud_online():
+        mark_net_down(cfg)
+        return "iCloud 卡住但連不上 iCloud,不修,網路恢復後重新計時"
+    done = [h for h in hist if h.get("type") == "repair" and h.get("key") == "icloud:stalled" and "ok" in h]
+    last = max(done, key=lambda h: h["time"], default=None)
+    if last and not last["ok"] and icloud_confirmed(cfg) < last["time"]:
+        p = problems[0]
+        _escalate(cfg, deps, now, p.key, p.title,
+                  f"{p.title}\n\n{p.detail}\n\n{datetime.fromtimestamp(last['time']):%m-%d %H:%M} 已經自動試過"
+                  f"({last.get('summary', '')}),到現在還沒恢復,需要你看一下。\n\n{ICLOUD_KEEP}\n\n{ICLOUD_HUMAN}")
+        return "iCloud 自動修過還卡著,已寄信找人"
+    return _fix_icloud(cfg, deps, now, problems)
+
+
 ICLOUD_HUMAN = ("""到 Mac 前面(或用 VNC 螢幕共享)看:
 1. 系統設定 → 最上面的 Apple 帳號 → iCloud:還在登入、「iCloud 雲碟」開著、儲存空間沒滿
 2. Finder 側邊欄的 iCloud 雲碟有沒有出現驚嘆號或「已暫停」
 3. 都正常的話重開機一次(FileVault 開著,重開後要有人在 Mac 上登入,常駐程式才會跑)""")
 
+ICLOUD_KEEP = ("想查出原因的話先別動 Mac:開 Claude Code 請它看 feeder.log 與 `brctl log -f`"
+               "(iCloud 的紀錄只留一陣子),查完再照下面做。")
+
 
 def _fix_icloud(cfg: Config, deps: Deps, now: float, problems: list[Problem]) -> str:
-    """重啟 bird → 重寫探針 → 每 15 秒查一次有沒有傳上去。先記次數再動手(跟 claude 的修理共用次數與 7 天規則)。"""
+    """一招一招試,每招之後每 15 秒查一次、最多 icloud_restart_checks 次,傳上去就停:
+    (1) 重啟 bird、重寫探針;(2) 請 fileproviderd 重看探針檔;(3) 在背景用 Finder 打開 iCloud 雲碟。
+    2026-11-04 卡住的是 fileproviderd 的節流重試,重啟 bird 碰不到,使用者在 Finder 點 iCloud 才好(§7.7)。
+    先記一筆再動手:修到一半當掉也看得出來。結果記 ok,_icloud_round 用它分辨要不要再修。"""
     base = {"type": "repair", "day": _day(now), "time": now, "keys": [p.key for p in problems]}
     for p in problems:
         _record(cfg, {**base, "key": p.key, "summary": "(重啟 bird 中)"})
-    actions, ok, detail = [], False, ""
+    root = cfg.icloud_probe_dir.parent
+    steps = [("重啟 bird", lambda: _kick_bird(cfg, deps)[0])]   # 定時重啟從這裡重新計時
+    if deps.fp_evaluate:
+        steps.append(("請 fileproviderd 重看探針檔", lambda: deps.fp_evaluate(probe_path(cfg))))
+    if deps.open_finder:
+        steps.append(("用 Finder 打開 iCloud 雲碟", lambda: deps.open_finder(root)))
+    actions, ok, detail, used = [], False, "", ""
     try:
-        actions.append(_kick_bird(cfg, deps)[0])   # 定時重啟從這裡重新計時
-        deps.sleep(15)
-        written = deps.now()
-        write_probe(cfg, written)
-        actions.append(f"重寫探針檔 {probe_path(cfg)}")
-        for _ in range(cfg.icloud_restart_checks):
-            deps.sleep(15)   # 剛寫完的幾秒內「已上傳」還是舊的 true,先等再查
-            ok, detail = deps.icloud_synced(probe_path(cfg), written)
+        for i, (name, step) in enumerate(steps):
+            used = name
+            actions.append(step())
+            if i == 0:
+                deps.sleep(15)
+                written = deps.now()
+                write_probe(cfg, written)
+                actions.append(f"重寫探針檔 {probe_path(cfg)}")
+            for _ in range(cfg.icloud_restart_checks):
+                deps.sleep(15)   # 剛寫完的幾秒內「已上傳」還是舊的 true,先等再查
+                ok, detail = deps.icloud_synced(probe_path(cfg), written)
+                if ok:
+                    break
             if ok:
                 break
     except Exception as e:  # noqa: BLE001 —— 寫不進去、砍不了 bird:一樣寄信
         ok, detail = False, f"{type(e).__name__}: {e}"
-    summary = ("重啟 bird 後 iCloud 恢復同步" if ok else "重啟 bird 後 iCloud 還是沒同步") + f"({detail})"
+    tried = "、".join(n for n, _ in steps)
+    summary = (f"{used}後 iCloud 恢復同步" if ok else f"{tried}都試過,iCloud 還是沒同步") + f"({detail})"
     for p in problems:
-        _record(cfg, {**base, "key": p.key, "summary": summary})
+        _record(cfg, {**base, "key": p.key, "summary": summary, "ok": bool(ok)})
     lines = ["## 發生什麼事", _problems_text(problems), "", "## 做了什麼"] + [f"- {a}" for a in actions]
     lines += ["", "## 結果", summary]
     if ok:
         subject = "✅ wiki-feeder 已自動修復｜iCloud 沒在同步"
-        lines += ["", "7 天內又發生的話不會再自動重啟,會直接寄信找你。"]
+        lines += ["", "下次再卡住一樣會先自己修,試過都不行才寄信找你。"]
     else:
         subject = "🛑 wiki-feeder 修不好、需要你｜iCloud 沒在同步"
-        lines += ["", "## 需要你做的事", ICLOUD_HUMAN,
-                  "", "這段期間 iPhone 丟進 _WikiBox 的檔不會掉,只是 Mac 收不到,同步恢復後會照常收件。"]
+        lines += ["", "## 需要你做的事", ICLOUD_KEEP, "", ICLOUD_HUMAN,
+                  "", "這段期間 iPhone 丟進 _WikiBox 的檔不會掉,只是 Mac 收不到,同步恢復後會照常收件。",
+                  "同一次卡住只寄這一封(之後每天提醒一次);恢復同步之後再卡住,會重新自己修。"]
     try:
         deps.mail(cfg, subject, "\n".join(lines))
     except Exception as e:  # noqa: BLE001
         log.error("iCloud 修理結果寄不出去:%s", e)
+        return subject
+    if not ok:   # 這封就是找人的信:今天 _icloud_round 不再寄第二封
+        _record(cfg, {"type": "escalate", "key": problems[0].key, "day": _day(now), "time": now,
+                      "subject": "iCloud 沒在同步"})
     return subject
 
 

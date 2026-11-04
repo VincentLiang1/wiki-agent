@@ -397,13 +397,25 @@ def icloud_synced(path: Path, since: float) -> tuple[bool | None, str]:
 
 
 def write_probe(cfg: Config, now: float) -> None:
-    """覆寫探針檔、記下寫入時間。資料夾只建一層:iCloud 雲碟整個不見(登出)要寫失敗,不可替它建出來。"""
+    """覆寫探針檔、記下寫入時間。資料夾只建一層:iCloud 雲碟整個不見(登出)要寫失敗,不可替它建出來。
+    上一次確認傳上去的時間(confirmed)留著:修理看它分辨「修過還卡著」與「好過之後又卡住」。"""
     cfg.icloud_probe_dir.mkdir(exist_ok=True)
     probe_path(cfg).write_text(f"wiki-feeder 看門狗的 iCloud 同步探針,可以不理它。{datetime.fromtimestamp(now)}\n",
                                encoding="utf-8")
     cfg.icloud_probe_state_path.parent.mkdir(parents=True, exist_ok=True)
-    cfg.icloud_probe_state_path.write_text(json.dumps({"written": now, "up": uptime(), "pending": True}),
-                                           encoding="utf-8")
+    state = {"written": now, "up": uptime(), "pending": True}
+    if confirmed := icloud_confirmed(cfg):
+        state["confirmed"] = confirmed
+    cfg.icloud_probe_state_path.write_text(json.dumps(state), encoding="utf-8")
+
+
+def icloud_confirmed(cfg: Config) -> float:
+    """探針最後一次確認傳上去的牆上時間;沒有就 0。"""
+    try:
+        v = json.loads(cfg.icloud_probe_state_path.read_text(encoding="utf-8")).get("confirmed")
+    except (OSError, ValueError, AttributeError):
+        return 0
+    return v if isinstance(v, (int, float)) else 0
 
 
 def _rewrite_probe(cfg: Config, now: float) -> list[Problem]:
@@ -437,7 +449,7 @@ def icloud_probe(cfg: Config, now: float, synced=icloud_synced) -> list[Problem]
         return _rewrite_probe(cfg, now)
     ok, detail = synced(probe_path(cfg), written)
     if ok:
-        state["pending"] = False
+        state["pending"], state["confirmed"] = False, now
         cfg.icloud_probe_state_path.write_text(json.dumps(state), encoding="utf-8")
         return []
     if ok is False and last_net_down(cfg) >= written:

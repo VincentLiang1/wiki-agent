@@ -1,5 +1,13 @@
 [
  {
+  "source": "4dfb617",
+  "date": "2026-11-04",
+  "needs_human": false,
+  "zh-Hant": "- 內部調整:只改了作者自己那台的看門狗(iCloud 上傳卡住時的自動修理);你的電腦沒有探針、也不跑這段,照舊運作,不必做任何事",
+  "zh-Hans": "- 内部调整:只改了作者自己那台的看门狗(iCloud 上传卡住时的自动修理);你的电脑没有探针、也不跑这段,照旧运作,不必做任何事",
+  "en": "- Internal change: only the author's own machine's watchdog was changed (automatic repair when iCloud uploads get stuck); your computer has no probe and does not run this code, so nothing changes and there is nothing to do"
+ },
+ {
   "source": "a1bd0ea",
   "date": "2026-11-03",
   "needs_human": false,
