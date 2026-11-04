@@ -405,7 +405,8 @@ def test_inbox_streak_from_offline_waits_for_another_collect_round(env, dev, mon
 
 def test_inbox_unreadable_because_offline_is_never_repaired(cfg, monkeypatch):
     """2026-10-20 帶筆電到公司:FUTURES 走 ssh 連不上 GitHub,網路閃一下通的那一刻看門狗寄了 🛑「FUTURES 連續 5 輪讀不到」。
-    最近一次是連不上網路的就不算收件匣壞了(警示照樣進當日摘要);換成別的錯(金鑰、權限、資料夾不見)照常交給修理。"""
+    最近一次是連不上網路的就不算收件匣壞了(只寫 log);換成別的錯(金鑰、權限、資料夾不見)連續 3 輪照常交給修理
+    ——斷網那幾輪不累積次數,斷網後第一輪讀不到不會當場越過門檻(2026-11-05)。"""
     from wiki_feeder import collect as collect_mod
     from wiki_feeder.inboxes import FolderInbox, InboxUnavailable
 
@@ -420,6 +421,9 @@ def test_inbox_unreadable_because_offline_is_never_repaired(cfg, monkeypatch):
     assert not [p for p in _detect(c) if p.kind == "inbox"]
 
     why["msg"] = "FUTURES 取件準備失敗:git@github.com: Permission denied (publickey)."
+    collect_mod.collect(c)
+    assert not [p for p in _detect(c) if p.kind == "inbox"]
+    collect_mod.collect(c)
     collect_mod.collect(c)
     assert {p.key for p in _detect(c) if p.kind == "inbox"} == {f"inbox:{i.name}" for i in build_inboxes(c)}
 

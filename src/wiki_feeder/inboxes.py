@@ -15,7 +15,6 @@ import logging
 import os
 import re
 import subprocess
-import urllib.request
 import time
 from collections import defaultdict
 from dataclasses import dataclass
@@ -23,7 +22,7 @@ from pathlib import Path
 
 from . import gitsync
 from .config import FuturesConfig
-from .i18n import L
+from .i18n import L, N_
 from .mover import is_dataless
 from .osplat import download_cmd
 from .proc import run_net
@@ -34,12 +33,17 @@ log = logging.getLogger(__name__)
 class InboxUnavailable(Exception):
     """收件匣不存在、沒權限、或遠端連不上——要大聲失敗。
 
-    network=True:查證過是網路或 GitHub 那端的事(錯誤字樣看不出來的,例如 GitHub 出事時回的 publickey),
-    收件比照連不上網路處理(collect._unavailable)。"""
+    offline:查證過不是收件匣壞掉(錯誤字樣看不出來的,例如 GitHub 出事時回的 publickey),收件比照連不上網路處理
+    (collect._unavailable)——NET_DOWN 是本機連不上網路(記 net_down.json),REMOTE_SIDE 是 GitHub 那端不穩。
+    沒標的由 collect 照錯誤字樣(network_down)判斷。"""
 
-    def __init__(self, msg: str, network: bool = False):
+    def __init__(self, msg: str, offline: str | None = None):
         super().__init__(msg)
-        self.network = network
+        self.offline = offline
+
+
+NET_DOWN = "net_down"
+REMOTE_SIDE = "remote_side"
 
 
 @dataclass(frozen=True)
@@ -138,51 +142,83 @@ class GitError(Exception):
 # GitHub 出事時 ssh 也回 publickey(2026-11-04:金鑰在、指紋對,6 次 ssh 成功 2 次,githubstatus 晚一小時才公告)
 PUBLICKEY = "Permission denied (publickey)"
 SSH_OPTS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=15")
+# 警示「已查證」那句的兩段(checked_sentence 接起來;repair.PROMPT 第 9 條插入同一句)。
+# 這句不隨 githubstatus 讀不讀得到而變:警示以全文去重(§7.2),讀到什麼只寫 log
+DENIED_ALL = N_("ssh 連試 {n} 次都被拒")
+NO_NOTICE = N_("githubstatus 沒有公告 Git Operations 出事")
 
 
 def ssh_target(remote: str) -> str | None:
-    """remote 是 ssh(scp 寫法或 ssh:// 開頭)就回 ssh -T 要連的「使用者、主機」那一段;不是 ssh 回 None。"""
-    m = re.match(r"ssh://([^/@]+@[^/:]+)", remote) or re.match(r"([^/@:]+@[^/:]+):", remote)
+    """remote 是 ssh 就回 ssh -T 要連的目標;不是 ssh 回 None。
+
+    ssh:// 寫法回 `ssh://[使用者@]主機[:埠]`(ssh 認得這種寫法,埠號不會丟);scp 寫法回冒號前那段
+    (沒寫使用者的照 ~/.ssh/config 補)。單一字母接冒號是 Windows 的磁碟機,不算。"""
+    m = re.match(r"(?:git\+)?(ssh://[^/]+)", remote)
+    if m:
+        return m.group(1)
+    if "://" in remote:
+        return None
+    m = re.match(r"([^/:]{2,}):", remote)
     return m.group(1) if m else None
 
 
-def ssh_once(target: str) -> bool:
-    """ssh -T 一次:GitHub 認得金鑰時結束碼是 1、印「successfully authenticated」,所以看字樣不看結束碼。"""
+def ssh_once(target: str) -> tuple[bool | None, str]:
+    """ssh -T 一次:(True 認得金鑰／False 被拒／None 沒有結論, ssh 印的最後一行)。
+
+    GitHub 認得金鑰時結束碼是 1、印「successfully authenticated」,所以看字樣不看結束碼。只有印著 publickey
+    才算被拒;逾時、連線被重設、DNS 查不到、host key 不對都不是金鑰被拒的證據(2026-11-04 同一段時間也有逾時)。"""
     r = run_net(["ssh", *SSH_OPTS, "-T", target], 30, text=True)
-    return "successfully authenticated" in (r.stderr + r.stdout)
+    out = f"{r.stderr or ''}\n{r.stdout or ''}".strip()
+    if "successfully authenticated" in out:
+        return True, ""
+    last = out.splitlines()[-1].strip() if out else L("ssh 結束碼 {code}", code=r.returncode)
+    return (False if PUBLICKEY in out else None), last
 
 
 def git_ops_status(url: str) -> str | None:
-    """githubstatus 上「Git Operations」的狀態(operational、degraded_performance…);讀不到回 None。"""
+    """githubstatus 上「Git Operations」的狀態(operational、degraded_performance…);讀不到、格式不對回 None。"""
+    import urllib.request   # 只有 publickey 查證用得到:不拖慢每次啟動(collect、process 每分鐘各起一次)
+
     try:
         with urllib.request.urlopen(url, timeout=15) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        return next(str(c.get("status")) for c in data.get("components", []) if c.get("name") == "Git Operations")
+        s = next((c.get("status") for c in data.get("components", []) if c.get("name") == "Git Operations"), None)
     except Exception:  # noqa: BLE001 —— 斷網、改版、格式不對都當讀不到
         return None
+    return s if isinstance(s, str) and s else None
 
 
-def github_side(cfg: FuturesConfig) -> tuple[bool, str]:
-    """publickey 被拒時查證是不是 GitHub 那端不穩:(是, 查證結果一句話)。
+def github_side(cfg: FuturesConfig, remote: str | None = None) -> tuple[str | None, str]:
+    """publickey 被拒時查證是不是 GitHub 那端不穩:(REMOTE_SIDE／NET_DOWN／None 真的被拒, 查證結果一句話)。
+    remote:git 實際在連的那一個。
 
-    連試 ssh,有一次成功就是 GitHub 不穩(金鑰沒壞);githubstatus 的 Git Operations 不是 operational 也算。
-    都沒有才算真的被拒。githubstatus 讀不到不算 GitHub 不穩(金鑰真的被撤時寧可報出來,§3.4)。"""
-    target = ssh_target(cfg.remote)
-    ok = fail = 0
+    連試 ssh:有一次成功 → GitHub 不穩(金鑰沒壞);有一次沒有結論(逾時、斷線)→ 停下、當成連不上網路(NET_DOWN),
+    那不是被拒的證據;githubstatus 的 Git Operations 不是 operational 也算 GitHub 不穩。每次都真的被拒、
+    githubstatus 也沒公告才算被拒。githubstatus 讀不到不算 GitHub 不穩(金鑰真的被撤時寧可報出來,§3.4)。"""
+    target = ssh_target(remote or cfg.remote)
+    n = 0
     if target:
-        for _ in range(cfg.ssh_probe_tries):
-            if ssh_once(target):
-                ok += 1
-                break
-            fail += 1
+        for n in range(1, cfg.ssh_probe_tries + 1):
+            got, last = ssh_once(target)
+            log.info(L("FUTURES 查證:ssh -T 第 %d 次:%s"), n, last or L("成功"))
+            if got is None:
+                # 直接標成斷網:ssh 的說法千奇百怪(kex_exchange_identification…),不靠 collect.network_down 的字樣
+                return NET_DOWN, L("ssh 沒有連上 GitHub(不是被拒),比照連不上網路:{err}", err=last)
+            if got:
+                return REMOTE_SIDE, L("ssh 連試 {n} 次有成功,是 GitHub 不穩、不是金鑰的問題", n=n)
     status = git_ops_status(cfg.status_url) if cfg.status_url else None
-    if ok:
-        return True, L("ssh 連試 {n} 次有成功,是 GitHub 不穩、不是金鑰的問題", n=ok + fail)
+    log.info("FUTURES:%s", L("githubstatus 讀不到") if status is None
+             else L("githubstatus 的 Git Operations 是 {status}", status=status))
     if status and status != "operational":
-        return True, L("githubstatus 的 Git Operations 是 {status},是 GitHub 那端在出事", status=status)
-    tried = L("ssh 連試 {n} 次都被拒", n=fail) if target else L("沒試 ssh(remote 不是 ssh)")
-    seen = L("githubstatus 讀不到") if status is None else L("githubstatus 的 Git Operations 正常")
-    return False, L("已查證:{tried}、{seen}", tried=tried, seen=seen)
+        return REMOTE_SIDE, L("githubstatus 的 Git Operations 是 {status},是 GitHub 那端在出事", status=status)
+    tried = L(DENIED_ALL, n=n) if target else L("沒試 ssh(remote 不是 ssh)")
+    return None, checked_sentence(tried)
+
+
+def checked_sentence(tried: str) -> str:
+    """警示裡「已查證」那一句。repair.PROMPT 第 9 條插入 checked_sentence(L(DENIED_ALL, n="N")):兩邊由同一個函式、
+    同一個語系組出來,修理的 claude 才找得到那句(寫死在提示裡的話,英文語系的警示永遠對不上)。"""
+    return L("已查證:{tried}、{seen}", tried=tried, seen=L(NO_NOTICE))
 
 
 class FuturesInbox:
@@ -202,10 +238,16 @@ class FuturesInbox:
         self._released: list[str] = []
         self._head = ""
 
+    def _stamp_age(self) -> float | None:
+        """距上次連上遠端(stamp 的修改時間)幾秒;沒有 stamp、讀不到回 None。"""
+        try:
+            return time.time() - self.stamp.stat().st_mtime if self.stamp is not None else None
+        except OSError:
+            return None
+
     def _checked_recently(self) -> bool:
-        if self.stamp is None or not self.stamp.exists() or not (self.repo / ".git").exists():
-            return False
-        return time.time() - self.stamp.stat().st_mtime < self.cfg.check_interval
+        ago = self._stamp_age() if (self.repo / ".git").exists() else None
+        return ago is not None and ago < self.cfg.check_interval
 
     # -- git ----------------------------------------------------------------
     def _git(self, *args: str, cwd: Path | None = None, check: bool = True,
@@ -247,14 +289,35 @@ class FuturesInbox:
                 self._git("merge", "--ff-only", "-q", f"origin/{self.cfg.branch}")
             self._head = self._rev("HEAD")
         except GitError as e:
-            msg, network = L("FUTURES 取件準備失敗:{e}", e=e), False
+            msg, offline = L("FUTURES 取件準備失敗:{e}", e=e), None
             if PUBLICKEY in str(e):
-                network, why = github_side(self.cfg)
+                offline, why = self._github_side()
                 msg += "\n" + why
-            raise InboxUnavailable(msg, network=network) from e
+            raise InboxUnavailable(msg, offline=offline) from e
         if self.stamp is not None:
             self.stamp.parent.mkdir(parents=True, exist_ok=True)
             self.stamp.touch()
+
+    def _github_side(self) -> tuple[str | None, str]:
+        """publickey 的查證(§3.4)。上次連上遠端(stamp)不到 github_hold 秒:金鑰剛剛還能用,先當成 GitHub 不穩、
+        不連試——2026-11-04 事故中 ls-remote 連 9 輪被拒、前後幾分鐘都有連上的輪,只看當輪的連試總會碰上一輪全被拒。
+        查證本身出錯(找不到 ssh 之類)當成沒查到、照舊警示,不讓例外蓋掉原本的錯誤、跳過連續 3 輪的門檻。"""
+        ago = self._stamp_age()
+        if ago is not None and ago < self.cfg.github_hold:
+            return REMOTE_SIDE, L("上次連上 GitHub 是 {m} 分鐘前,金鑰剛剛還能用:先當成 GitHub 不穩", m=int(ago // 60))
+        try:
+            remote = self._origin_url() or self.cfg.remote
+            return github_side(self.cfg, remote)
+        except Exception as e:  # noqa: BLE001 —— 查證本身的錯
+            return None, L("查證時出錯,沒能查證:{e}", e=e)
+
+    def _origin_url(self) -> str:
+        """git 實際在連的 origin(套過 insteadOf);讀不到回空字串。clone 之後設定裡的 remote 改過的話兩者不同,
+        查證要連 git 真正在連的那一個:否則新的連得上、舊的一直被拒,永遠被當成 GitHub 不穩、不警示。"""
+        if not (self.repo / ".git").exists():
+            return ""
+        r = self._git("remote", "get-url", "origin", check=False, timeout=30)
+        return r.stdout.strip() if r.returncode == 0 else ""
 
     def _clone(self) -> None:
         self.repo.parent.mkdir(parents=True, exist_ok=True)

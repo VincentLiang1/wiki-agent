@@ -35,6 +35,7 @@ from .config import Config
 from .ingest import _API_DOWN, STOP_LEFTOVER, IngestError, unverified_commits
 from .ingest import git as repo_git
 from .i18n import L
+from .inboxes import DENIED_ALL, checked_sentence
 from .ledger import Ledger
 from .proc import run_net
 from .notify import send
@@ -122,10 +123,11 @@ PROMPT = """你是 wiki-feeder 的自動修理。看門狗發現常駐程式出�
 7. 不可修改 WIKI／FWIKI 的任何檔(包括它們的 CLAUDE.md);不可 --force;不可刪檔。
 8. 動真資料的指令照抄上面的完整寫法(跑的是已發佈的程式);**不要用 `uv run wiki-feeder`**——那會跑這個目錄裡
    你正在改、還沒測過的程式。其他可用的:`{feeder} reconvert <檔名>`、`{feeder} ledger`。
-9. 你沒有親自驗證過的推論(你不能跑 ssh、不能連外部網站),cause 要寫成「沒驗證到,可能是 X 或 Y」,
-   human_todo **不可**寫成叫使用者去改、去核對某個設定的具體處方。連 GitHub 被拒(publickey):程式已經連試過 ssh、
-   查過 githubstatus,結果在警示的「已查證」那一句;只有寫著「ssh 連試 N 次都被拒、githubstatus 的 Git Operations
-   正常」才可以說是金鑰的問題,其他寫法一律是「沒驗證到,可能是金鑰或 GitHub 不穩」。
+9. 要連外部才確認得了的推論(GitHub、外部網站;你不能跑 ssh、不能連外部網站),cause 要寫成「沒驗證到,
+   可能是 X 或 Y」,human_todo **不可**寫成叫使用者去改、去核對那一頭設定的具體處方(第 6 條要人到 Mac 畫面上
+   操作的步驟照寫)。連 GitHub 被拒(publickey):程式已經連試過 ssh、查過 githubstatus,結果在警示的「已查證」那一句;
+   只有寫著「{checked}」(N 是次數)
+   才可以說是金鑰的問題,其他寫法一律是「沒驗證到,可能是金鑰或 GitHub 不穩」。
 """
 
 
@@ -710,7 +712,7 @@ def run_agent(cfg: Config, problems: list[Problem]) -> dict:
             "--disallowedTools", *DISALLOWED,
             "--json-schema", json.dumps(SCHEMA, ensure_ascii=False)]
     prompt = PROMPT.format(problems=_problems_text(problems), facts=facts(cfg, problems),
-                           feeder=shlex.join(feeder_cmd()))
+                           feeder=shlex.join(feeder_cmd()), checked=checked_sentence(L(DENIED_ALL, n="N")))
     r = run_net(args, cfg.repair_timeout, input=prompt, cwd=cfg.repair_clone, text=True)
     try:
         out = json.loads(r.stdout)

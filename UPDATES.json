@@ -1,5 +1,13 @@
 [
  {
+  "source": "384dd71",
+  "date": "2026-11-05",
+  "needs_human": false,
+  "zh-Hant": "- 內部調整:作者自己那台的公司收件匣在斷網剛恢復時不再誤報金鑰被拒;自動修理讀取查證結果的那句話改成跟警示同一個語系。你的電腦照舊運作,不必做任何事",
+  "zh-Hans": "- 内部调整:作者自己那台的公司收件匣在断网刚恢复时不再误报密钥被拒;自动修理读取查证结果的那句话改成跟警示同一个语系。你的电脑照旧运作,不必做任何事",
+  "en": "- Internal change: the author's own company inbox no longer falsely reports a rejected key right after the network comes back; automatic repair now reads the check result in the same language as the alert. Your computer works as before; there is nothing to do"
+ },
+ {
   "source": "7a4dff1",
   "date": "2026-11-04",
   "needs_human": false,

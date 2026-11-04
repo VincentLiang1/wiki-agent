@@ -22,7 +22,7 @@ from pathlib import Path
 
 from .config import Config
 from .i18n import L
-from .inboxes import Candidate, FolderInbox, FuturesInbox, InboxUnavailable
+from .inboxes import NET_DOWN, Candidate, FolderInbox, FuturesInbox, InboxUnavailable
 from .ledger import Ledger
 from .mover import copy_verified, pick_names, sha256_of
 from .osplat import WINDOWS, try_lock, unlock
@@ -182,7 +182,7 @@ def _mark_offline(cfg: Config, name: str, down: bool, net: bool = True) -> None:
     """記下這個收件匣最近一次讀不到是不是因為連不上網路(`inbox_offline.json`,看門狗看這個不叫修理、不寄信)。
 
     2026-10-20 帶筆電到公司:FUTURES 走 ssh 連不上 GitHub,網路閃一下通的那一刻看門狗就寄了 🛑。
-    連不上網路不是壞掉,警示照樣進當日摘要(一天一則),只是不交給修理。
+    連不上網路不是壞掉:只寫 log,不列進當日摘要(§7.2,2026-10-20 起)、不交給修理。
     net=False:是 GitHub 那端不穩、本機網路是通的,不記 net_down.json(不然 iCloud 探針整段事故期間都重新計時)。"""
     path = cfg.state_dir / "inbox_offline.json"
     try:
@@ -227,14 +227,20 @@ def _unavailable(cfg: Config, inbox, e: InboxUnavailable, report: Report) -> Non
 
     實測(2026-10-04):launchd 每分鐘一輪,OneDrive 有一輪回 Operation not permitted、前後都正常
     ——雲端同步的瞬間狀態。直接發警示會叫人去查一個沒壞的權限。真的壞掉會一直讀不到,幾分鐘內照樣報。
+
+    連不上網路、查證過是 GitHub 那端不穩的那一輪(e.offline,FuturesInbox.prepare)把連續次數歸零:每輪的查證
+    各看各的、看機率,不歸零的話事故期間、斷網期間累積的次數會讓單獨一輪沒查到就當場越過門檻(2026-11-04 那種
+    事故幾乎一定碰上;斷網兩輪接著一輪被拒也一樣,2026-11-05 檢討)。收件匣沒標的照錯誤字樣判斷斷網。
     """
+    offline = e.offline or (NET_DOWN if network_down(str(e)) else None)
+    _mark_offline(cfg, inbox.name, offline is not None, net=offline == NET_DOWN)
+    if offline:
+        # 只寫 log,不列進摘要、不交給修理
+        _streak(cfg, inbox.name, reset=True)
+        log.warning(L("%s(連不上網路或 GitHub 那端不穩:不列進摘要)"), e)
+        return
     n = _streak(cfg, inbox.name)
-    net = network_down(str(e))
-    _mark_offline(cfg, inbox.name, net or e.network, net=net)
-    if e.network:
-        # 查證過是 GitHub 那端不穩(FuturesInbox.prepare):跟連不上網路一樣只寫 log,不列進摘要、不交給修理
-        log.warning(L("%s(GitHub 那端不穩,比照連不上網路:不列進摘要)"), e)
-    elif n >= cfg.unavailable_alert_after:
+    if n >= cfg.unavailable_alert_after:
         _inbox_alert(inbox, e, report)
     else:
         log.warning(L("%s(連續第 %d 輪,滿 %d 輪才發警示)"), e, n, cfg.unavailable_alert_after)

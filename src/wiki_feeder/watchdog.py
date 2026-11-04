@@ -240,7 +240,8 @@ def detect(cfg: Config, now: float | None = None, agents_check=agents_not_loaded
     # 只看設定裡的收件匣:同一個檔也記著轉寫的 doc2md(轉寫一整輪跑完才歸零,修好後還會掛著好幾十分鐘),
     # 拿掉或改名的收件匣也會一直留著舊的次數——都不是收件匣讀不到
     inboxes = {i.name for i in build_inboxes(cfg)}
-    # 最近一次是連不上網路(collect._mark_offline):帶筆電出門是常態,不叫修理、不寄信,只在當日摘要報一則
+    # 最近一次是連不上網路或查證過是 GitHub 那端不穩(collect._mark_offline):帶筆電出門是常態,不叫修理、不寄信,
+    # 當日摘要也不列(§7.2)
     try:
         offline = json.loads((cfg.state_dir / "inbox_offline.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
