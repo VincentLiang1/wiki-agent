@@ -210,11 +210,11 @@ def test_remote_is_checked_at_most_every_interval(cfg, futures_cfg, fake_futures
 
 def _publickey_rounds(cfg, futures_cfg, monkeypatch, ssh_results, status, rounds=5):
     """ls-remote 一律回 publickey;ssh 連試照 ssh_results 輪流回(空的 = 一直失敗),githubstatus 回 status。
-    跑 rounds 輪收件,回傳 (最後一輪的 Report, 看門狗看到的 inbox 問題, ssh 試了幾次)。"""
+    跑 rounds 輪收件,回傳 (最後一輪的 Report, 看門狗看到的 inbox 問題, ssh 試了幾次)。
+    看門狗只在 Mac(detect 會 import fcntl):Windows 上看門狗那一項回 None、不驗,收件端的判斷照驗。"""
     import subprocess
 
     from wiki_feeder import inboxes
-    from wiki_feeder.watchdog import detect
 
     real_run = inboxes.run_net
     tries = []
@@ -238,6 +238,9 @@ def _publickey_rounds(cfg, futures_cfg, monkeypatch, ssh_results, status, rounds
                 futures=replace(futures_cfg, status_url="https://status.invalid/summary.json"))
     for _ in range(rounds):
         r = collect(c)
+    if sys.platform == "win32":
+        return r, None, tries
+    from wiki_feeder.watchdog import detect
     found = [p for p in detect(c, agents_check=lambda: [], sample=lambda: ([], None, 1), resources_too=False)
              if p.kind == "inbox"]
     return r, found, tries
@@ -248,7 +251,7 @@ def test_publickey_but_ssh_sometimes_works_is_github_not_the_key(cfg, futures_cf
     其實金鑰在、指紋對,同一把金鑰 ssh 6 次成功 2 次。ssh 有一次成功就是 GitHub 不穩:不列進摘要、不交給修理。"""
     r, found, tries = _publickey_rounds(cfg, futures_cfg, monkeypatch, [False, False, True], "operational")
     assert not r.alerts and not r.new_alerts
-    assert not found
+    assert found in ([], None)
     assert len(tries) == 5 * 3                              # 每輪試到第一次成功就停
     assert json.loads((cfg.state_dir / "inbox_offline.json").read_text(encoding="utf-8")) == ["FUTURES"]
     assert not (cfg.state_dir / "net_down.json").exists()   # 本機網路是通的:iCloud 探針不該重新計時
@@ -260,7 +263,7 @@ def test_publickey_while_githubstatus_degraded_is_github_not_the_key(cfg, future
     """ssh 每次都被拒、但 githubstatus 的 Git Operations 不是 operational:也是 GitHub 那端,不找人。"""
     r, found, tries = _publickey_rounds(cfg, futures_cfg, monkeypatch, [], "degraded_performance")
     assert not r.alerts and not r.new_alerts
-    assert not found
+    assert found in ([], None)
     assert len(tries) == 5 * futures_cfg.ssh_probe_tries
 
 
@@ -272,7 +275,7 @@ def test_publickey_with_every_ssh_denied_and_github_fine_still_escalates(cfg, fu
     assert len(r.alerts) == 1 and "publickey" in r.alerts[0]
     assert f"ssh 連試 {futures_cfg.ssh_probe_tries} 次都被拒" in r.alerts[0]
     assert ("讀不到" if status is None else "Git Operations 正常") in r.alerts[0]
-    assert [p.key for p in found] == ["inbox:FUTURES"]
+    assert found is None or [p.key for p in found] == ["inbox:FUTURES"]
 
 
 def test_repair_prompt_knows_how_to_read_the_check():
