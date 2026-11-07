@@ -28,9 +28,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from wiki_feeder import i18n, syncdirs  # noqa: E402
+from wiki_feeder import doc2md, i18n, scribecore, syncdirs  # noqa: E402
 from wiki_feeder.config import (CONFIG_FILE, DISCARD, INTAKE, LEGACY, LEGACY_PENDING, PENDING,  # noqa: E402
-                                SYSTEM_DIRS, Config, ConfigError, custom_dir_ok, folder_names, state_dir_for)
+                                SYSTEM_DIRS, Config, ConfigError, custom_dir_ok, folder_names, scribe_root_for,
+                                state_dir_for)
 from wiki_feeder.i18n import L, N_  # noqa: E402
 
 SMTP_SERVICE = "wiki-feeder-smtp"
@@ -128,8 +129,8 @@ def check_doc2md(exe: Path) -> tuple[bool, str]:
         except (OSError, subprocess.TimeoutExpired) as e:
             return False, L("執行失敗:{e}", e=e)
     out = (r.stdout + r.stderr).decode("utf-8", "replace")
-    if "執行記錄" not in out:
-        return False, L("沒有印出「執行記錄:」——這是舊版的 meeting-scribe,請裝新版(scribe2md)")
+    if "執行記錄" not in out and "SCRIBE2MD-LOG:" not in out:
+        return False, L("沒有印出「執行記錄:」——這是舊版的 meeting-scribe,請改裝 Scribe2MD")
     return True, L("可以用")
 
 
@@ -375,12 +376,12 @@ def ask_scribe_sync(a: dict) -> str:
     """(選做)scribe2md 同步資料夾——手機與電腦共用聲紋、名詞對照表(安裝說明第 7 節):朋友自己選、寫進設定檔 [scribe2md] sync_dir
     (使用者 2026-10-29:預設目錄不可以是中文、讓客戶自己選)。沒做第 7 節就回空字串(不產生對照表)。
     對照表含真名,不可跟收件匣、原件資料夾、知識庫重疊(在裡面或包著它們),重疊就重問;還沒有就問要不要建。"""
-    if not yes(L("【scribe2md 同步資料夾】有做安裝說明第 7 節(手機與電腦共用聲紋與名詞對照表)嗎?"), default=False):
+    if not yes(L("【聲紋同步資料夾】有做安裝說明第 7 節(手機與電腦共用聲紋與名詞對照表)嗎?"), default=False):
         return ""
     inbox = Path(a["icloud"])
     guarded = [inbox, Path(a["wiki"]), Path(a["raw"])]
     while True:
-        p = Path(pick(L("  scribe2md 同步資料夾(iCloud 雲碟裡、跟 _WikiBox 同一層;不可在 _WikiBox 裡)"), True,
+        p = Path(pick(L("  聲紋同步資料夾(iCloud 雲碟裡、跟 _WikiBox 同一層;不可在 _WikiBox 裡)"), True,
                       str(inbox.parent / SCRIBE_SYNC_DIR)))
         if (hit := overlapping(p, guarded)) is not None:
             say(L("  {path} 跟 {hit} 重疊(對照表含真名,會被收件或攝入),請換一個", path=p, hit=hit))
@@ -775,37 +776,67 @@ def ask_library(default_new: str, existing: Path | None, claude: Path | None,
     return w, r, None
 
 
-# scribe2md 選裝(使用者 2026-10-29:「scribe2md 是可以節省 TOKEN 不安裝也OK」,spec §4.8):找不到才問;兩個平台共用
-SCRIBE2MD_QUESTION = N_("【轉寫】有裝 scribe2md 嗎?(選裝:錄音、影片要靠它才會處理;文件與圖片不裝也能讀,只是較花 token、Office 文件裡的圖讀不到。之後要裝,再跑一次安裝就好)")
+# Scribe2MD 選裝(使用者 2026-10-29:「scribe2md 是可以節省 TOKEN 不安裝也OK」,spec §4.8);2026-11-07 起改由安裝程式
+# 從 wiki-agent 的 Release 下載核心(§4.9)。兩個平台共用
+CORE_QUESTION = N_("【轉寫】要下載安裝 Scribe2MD 嗎?(選裝,約 1 GB:錄音、影片要靠它才會處理;文件與圖片不裝也能讀,只是較花 token、Office 文件裡的圖讀不到。之後要裝,再跑一次安裝就好)")
+
+
+def core_root(home: Path) -> Path:
+    return scribe_root_for(sys.platform, home, os.environ)
+
+
+def installed_core(home: Path) -> str:
+    """Scribe2MD 的固定入口問得出版本就回它的路徑,否則空字串。"""
+    exe = doc2md.entry_exe(core_root(home), sys.platform)
+    info = doc2md.probe(exe, 60)
+    if info is None:
+        return ""
+    say(L("【轉寫】找到 Scribe2MD {version}:{path}", version=info.get("version", "?"), path=exe))
+    return str(exe)
+
+
+def offer_core(home: Path) -> str:
+    """問要不要下載安裝 Scribe2MD;裝好回固定入口,不裝或放棄回空字串(錄音、影片要裝了才處理,§4.8)。"""
+    if not yes(L(CORE_QUESTION), default=False):
+        return ""
+    while True:
+        try:
+            info = scribecore.install(core_root(home), state_dir_for(sys.platform, home, os.environ) / "downloads",
+                                      say, platform=sys.platform)
+        except scribecore.CoreError as e:
+            say(L("  {e}", e=e))
+            if not yes(L("  再試一次?(n = 先不裝 Scribe2MD,之後再跑一次安裝補上)")):
+                return ""
+            continue
+        say(L("  Scribe2MD {version} 裝好了", version=info.get("version", "?")))
+        return str(doc2md.entry_exe(core_root(home), sys.platform))
 
 
 def ask_doc2md(home: Path) -> str:
-    """【轉寫】找得到 scribe2md 就照舊試轉;找不到就問有沒有裝,沒裝回空字串(錄音、影片要裝了才處理,
-    文件與圖片直接讀或由程式轉,§4.8);試轉不過也可以先不裝,之後再跑一次安裝補上。"""
+    """【轉寫】Scribe2MD 的固定入口能用就用它;沒有的話找舊版電腦版(meeting-scribe 解壓的資料夾)照舊試轉;
+    都沒有就問要不要下載安裝 Scribe2MD,不裝回空字串。"""
+    if exe := installed_core(home):
+        return exe
     roots = [home, home / "Desktop", home / "Downloads", home / "Documents", Path("C:/")]
     found = find_doc2md([r for r in roots if r.is_dir()])
-    if not found and not yes(L(SCRIBE2MD_QUESTION), default=False):
-        return ""
+    if not found:
+        return offer_core(home)
     while True:
-        if found:
-            say(L("【轉寫】找到這些 meeting-scribe 的 doc2md:"))
-            for i, p in enumerate(found, 1):
-                say(f"  {i}. {p}")
-            v = input(L("  輸入編號(直接按 Enter = 1);不是這些就貼上 doc2md.exe 的路徑,輸入 0 開選擇視窗:")).strip().strip('"')
-            v = v or "1"
-            exe = found[int(v) - 1] if v.isdigit() and 0 < int(v) <= len(found) else None if v == "0" else Path(v)
-            if exe is None:
-                exe = Path(pick(L("doc2md.exe 在 meeting-scribe 資料夾的 .venv\\Scripts 底下"), False) or ".")
-        else:
-            say(L("【轉寫】找不到 meeting-scribe。請先照它的說明解壓縮、跑它的 Install.bat。"))
-            exe = Path(pick(L("doc2md.exe(在 meeting-scribe 資料夾的 .venv\\Scripts 底下)"), False) or ".")
+        say(L("【轉寫】找到這些 meeting-scribe 的 doc2md:"))
+        for i, p in enumerate(found, 1):
+            say(f"  {i}. {p}")
+        v = input(L("  輸入編號(直接按 Enter = 1);不是這些就貼上 doc2md.exe 的路徑,輸入 0 開選擇視窗:")).strip().strip('"')
+        v = v or "1"
+        exe = found[int(v) - 1] if v.isdigit() and 0 < int(v) <= len(found) else None if v == "0" else Path(v)
+        if exe is None:
+            exe = Path(pick(L("doc2md.exe 在 meeting-scribe 資料夾的 .venv\\Scripts 底下"), False) or ".")
         say(L("  試轉一個小檔(最多幾十秒)…"))
         ok, msg = check_doc2md(exe)
         say(L("  {path}:{msg}", path=exe, msg=msg))
         if ok:
             return str(exe)
-        if not yes(L("  再試一次?(n = 先不裝 scribe2md,之後再跑一次安裝補上)")):
-            return ""
+        if not yes(L("  再試一次?(n = 改成下載 Scribe2MD 或先不裝)")):
+            return offer_core(home)
 
 
 def ask_mail(default: str = "") -> tuple[str, str]:

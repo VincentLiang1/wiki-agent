@@ -317,7 +317,7 @@ def test_without_scribe2md_audio_and_old_office_wait_without_counting_as_failure
     _drop(c, "talk.m4a", b"a")
     _drop(c, "memo.doc", b"d")
     first = convert(c)
-    assert first.failed == [] and first.done == [] and len(first.alerts) == 1 and "scribe2md" in first.alerts[0]
+    assert first.failed == [] and first.done == [] and len(first.alerts) == 1 and "Scribe2MD" in first.alerts[0]
     assert "memo.doc" in first.alerts[0] and "talk.m4a" in first.alerts[0]
     for _ in range(c.convert_max_attempts):
         assert convert(c).alerts == first.alerts                 # 每輪同一句,全文去重後一天一封
@@ -465,3 +465,132 @@ def test_timeouts_in_english_are_not_mistaken_for_network_down():
     for lang in i18n.LANGS:
         assert not network_down(i18n.L("doc2md 超過 {seconds} 秒沒跑完", lang, seconds="3600"))
         assert not network_down(i18n.L("{cmd} 逾時 {seconds} 秒,已中止", lang, cmd="git push", seconds="300"))
+
+
+# --- Scribe2MD 核心的固定入口(spec §4.9;與電腦版的契約,2026-11-07) ---
+posix_only = pytest.mark.skipif(sys.platform == "win32", reason="假的固定入口是 sh 腳本;Windows 的入口是真的 .exe")
+CORE_INFO = {"name": "Scribe2MD", "version": "1.12.0", "build": "core", "audio": True, "format_version": 2,
+             "ffmpeg": None, "libreoffice": None, "root": "x", "entry_contract": 1}
+
+
+def _entry(root: Path, target: Path | None = None) -> Path:
+    """在 <root>/bin/doc2md 放一個轉交給假 doc2md 的 sh 腳本(真的是 venv 入口的 symlink)。"""
+    from wiki_feeder.doc2md import entry_exe
+    exe = target or entry_exe(root)
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    exe.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKE}" "$@"\n', encoding="utf-8")
+    exe.chmod(0o755)
+    return exe
+
+
+@posix_only
+def test_fixed_entry_wins_over_the_configured_path(ccfg, tmp_path, monkeypatch):
+    """固定入口問得出新版的版本資訊就用它(含它回報的 ffmpeg),設定檔的路徑只是退路。"""
+    root = tmp_path / "meeting-scribe"
+    exe = _entry(root)
+    ff = tmp_path / "ffmpeg"
+    ff.write_bytes(b"")
+    monkeypatch.setenv("FAKE_DOC2MD_VERSION", json.dumps({**CORE_INFO, "ffmpeg": str(ff)}))
+    c = replace(ccfg, doc2md_root=root, doc2md_cmd=(str(tmp_path / "舊的" / "doc2md"),))
+    p = _drop(c, "a.pdf", b"%PDF-a")
+    r = convert(c)
+    assert r.ok and r.done == ["a.pdf"] and _side(p)["md"]
+    from wiki_feeder.convert import resolve_doc2md
+    got = resolve_doc2md(c)
+    assert got.doc2md_cmd == (str(exe),) and got.ffmpeg == str(ff)
+
+
+@posix_only
+def test_old_version_at_the_fixed_entry_falls_back_to_the_configured_path(ccfg, tmp_path, monkeypatch):
+    """固定入口問不出版本(舊版離開碼 2、或 JSON 沒有 entry_contract):照設定檔的 doc2md 轉,錄音不會卡住。"""
+    from wiki_feeder.convert import resolve_doc2md
+    root = tmp_path / "meeting-scribe"
+    _entry(root)
+    monkeypatch.delenv("FAKE_DOC2MD_VERSION", raising=False)
+    c = replace(ccfg, doc2md_root=root)
+    assert resolve_doc2md(c).doc2md_cmd == ccfg.doc2md_cmd
+    monkeypatch.setenv("FAKE_DOC2MD_VERSION", json.dumps({k: v for k, v in CORE_INFO.items() if k != "entry_contract"}))
+    assert resolve_doc2md(c).doc2md_cmd == ccfg.doc2md_cmd
+    p = _drop(c, "a.pdf", b"%PDF-a")
+    assert convert(c).done == ["a.pdf"] and _side(p)["md"]
+
+
+def test_no_core_and_no_configured_path_is_still_not_installed(ccfg, tmp_path):
+    """什麼都沒裝:照「沒裝 scribe2md」處理(PDF 直接讀),不可變成「裝了但跑不起來」。"""
+    c = replace(ccfg, doc2md_root=tmp_path / "meeting-scribe", doc2md_cmd=())
+    p = _drop(c, "a.pdf", b"%PDF-a")
+    r = convert(c)
+    assert r.ok and _side(p)["直接讀原件"] and _calls(c) == []
+
+
+def test_broken_core_without_a_configured_path_is_reported_as_down_not_missing(ccfg, tmp_path):
+    """核心在、但入口問不出版本也沒有設定檔的路徑:是「裝了但跑不起來」(§4.5,整輪略過、不扣次數),
+    不可叫朋友「去裝 scribe2md」——他已經裝了。"""
+    root = tmp_path / "meeting-scribe"
+    (root / "core").mkdir(parents=True)
+    c = replace(ccfg, doc2md_root=root, doc2md_cmd=(), unavailable_alert_after=1)
+    _drop(c, "a.m4a", b"audio")
+    r = convert(c)
+    assert r.needs_scribe2md == [] and any("doc2md 跑不起來" in a for a in r.alerts)
+    with Ledger(c.ledger_path) as led:
+        assert len(led.pending_conversions(c.convert_max_attempts)) == 1
+
+
+@posix_only
+def test_dangling_entry_asks_the_core_to_relink_with_backoff(ccfg, tmp_path, monkeypatch):
+    """固定入口斷了(其中一份被刪)而核心還在:叫核心 --relink;一直失敗就放慢,不每分鐘叫。"""
+    from wiki_feeder import doc2md as d2m
+    from wiki_feeder.convert import resolve_doc2md
+    root = tmp_path / "meeting-scribe"
+    (root / "core").mkdir(parents=True)
+    calls = []
+    monkeypatch.setattr(d2m, "relink", lambda r, t: calls.append(r) or False)
+    c = replace(ccfg, doc2md_root=root, doc2md_relink_tries=2, doc2md_relink_every=5)
+    for _ in range(10):
+        assert resolve_doc2md(c).doc2md_cmd == ccfg.doc2md_cmd
+    assert len(calls) == 4              # 第 1、2 輪,放慢後第 5、10 輪
+    # 第 15 輪重指成功:改用固定入口,計數歸零
+    monkeypatch.setenv("FAKE_DOC2MD_VERSION", json.dumps(CORE_INFO))
+    monkeypatch.setattr(d2m, "relink", lambda r, t: bool(_entry(r)))
+    for _ in range(4):
+        assert resolve_doc2md(c).doc2md_cmd == ccfg.doc2md_cmd
+    assert resolve_doc2md(c).doc2md_cmd == (str(d2m.entry_exe(root)),)
+
+
+@posix_only
+def test_current_json_is_the_fallback_when_the_link_is_broken(ccfg, tmp_path, monkeypatch):
+    """bin 連結有問題但 current.json 記的那顆能用:用它。"""
+    from wiki_feeder.convert import resolve_doc2md
+    root = tmp_path / "meeting-scribe"
+    real = _entry(root, tmp_path / "full" / ".venv" / "bin" / "doc2md")
+    (root / "bin").mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "current.json").write_text(json.dumps({"doc2md": str(real), "build": "full"}), encoding="utf-8")
+    monkeypatch.setenv("FAKE_DOC2MD_VERSION", json.dumps(CORE_INFO))
+    assert resolve_doc2md(replace(ccfg, doc2md_root=root)).doc2md_cmd == (str(real),)
+
+
+def test_log_marker_is_preferred_and_chinese_line_still_works(ccfg, monkeypatch):
+    """新版核心另印 SCRIBE2MD-LOG(語言無關),舊版只有「執行記錄:」:兩種都認、標記優先。"""
+    monkeypatch.setenv("FAKE_DOC2MD_MARKER", "1")
+    p = _drop(ccfg, "a.pdf", b"%PDF-a")
+    convert(ccfg)
+    assert _side(p)["doc2md紀錄"] == "/tmp/fake-scribe2md.log"
+    monkeypatch.delenv("FAKE_DOC2MD_MARKER")
+    q = _drop(ccfg, "b.pdf", b"%PDF-b")
+    convert(ccfg)
+    assert _side(q)["doc2md紀錄"] == "/tmp/fake-doc2md.log"
+
+
+def test_entry_and_relink_paths_per_platform(tmp_path):
+    """Windows 的入口是真的 .exe、重指走 PowerShell;Mac 用 zsh 叫 install.command(不靠執行權限位元)。"""
+    from wiki_feeder.config import scribe_root_for
+    from wiki_feeder.doc2md import entry_exe, relink_cmd
+    win = scribe_root_for("win32", tmp_path, {"LOCALAPPDATA": str(tmp_path / "L")})
+    assert win == tmp_path / "L" / "meeting-scribe"
+    assert entry_exe(win, "win32").name == "doc2md.exe"
+    assert relink_cmd(win, "win32")[-2:] == [str(win / "core" / "install.ps1"), "-Relink"]
+    mac = scribe_root_for("darwin", tmp_path, {})
+    assert mac == tmp_path / "Library" / "Application Support" / "meeting-scribe"
+    assert entry_exe(mac, "darwin") == mac / "bin" / "doc2md"
+    assert relink_cmd(mac, "darwin") == ["/bin/zsh", str(mac / "core" / "install.command"), "--relink"]

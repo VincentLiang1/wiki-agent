@@ -82,6 +82,14 @@ def state_dir_for(platform: str, home: Path, env: Mapping[str, str]) -> Path:
     return home / "Library" / "Application Support" / "wiki-feeder"
 
 
+def scribe_root_for(platform: str, home: Path, env: Mapping[str, str]) -> Path:
+    """Scribe2MD 核心與電腦版共用的資料夾(spec §4.9):底下 core/ 是核心、bin/ 是固定入口、模型與 libreoffice
+    也放這裡。名字是電腦版的內部名、使用者看不到(與 meeting-scribe-native 的契約,2026-11-07)。"""
+    if platform == "win32":
+        return Path(env.get("LOCALAPPDATA") or home / "AppData" / "Local") / "meeting-scribe"
+    return home / "Library" / "Application Support" / "meeting-scribe"
+
+
 @dataclass(frozen=True)
 class FuturesConfig:
     repo_dir: Path                      # 本機稀疏副本
@@ -135,6 +143,13 @@ class Config:
     # --- M2 轉寫與 OCR ---
     doc2md_cmd: tuple[str, ...] = ()    # 呼叫 doc2md 的命令(不含檔案與參數);測試換成假腳本
     doc2md_timeout: float = 6 * 3600    # 長錄音可能要數十分鐘
+    # Scribe2MD 核心的固定入口(spec §4.9):None = 不看(測試、使用者本人那台照 owner_mac 的路徑);
+    # 有的話每輪有檔要轉時先問固定入口,能用就用它、不能用才退回上面的 doc2md_cmd
+    doc2md_root: Path | None = None
+    doc2md_probe_timeout: float = 60.0  # `doc2md --version --json` 的上限(不載入模型,正常幾秒)
+    doc2md_relink_timeout: float = 300.0   # 固定入口斷掉時叫核心 `--relink` 重指的上限
+    doc2md_relink_tries: int = 3        # 重指連續失敗幾輪後放慢
+    doc2md_relink_every: int = 60       # 放慢後每幾輪再試一次(每分鐘一輪 ≈ 一小時)
     ffmpeg: str = ""                    # 量長段空白解音檔用;Mac 用系統的 afconvert、不用它(osplat.decode_cmd)
     convert_max_attempts: int = 3       # 轉檔失敗重試幾輪後改發警示
     silence_window: float = 1.0         # 長段空白:每幾秒算一次音量
@@ -332,6 +347,14 @@ class Config:
         return self.state_dir / "autoupdate.lock"     # 換版程式(scripts/winautoupdate.py)正在跑:{pid, started}
 
     @property
+    def core_update_lock_path(self) -> Path:
+        return self.state_dir / "core-update.lock"    # Scribe2MD 核心的更新正在背景跑:{pid, target}(§4.9)
+
+    @property
+    def core_update_result_path(self) -> Path:
+        return self.state_dir / "core-update-result.json"   # 核心更新的結果,下一輪 watch 寄信、寫 log
+
+    @property
     def update_result_path(self) -> Path:
         return self.state_dir / "autoupdate-result.json"   # 換版程式的結果,下一輪 watch 寄信、寫 log
 
@@ -495,6 +518,7 @@ class Config:
             mail_from=mail.get("from", ""),
             mail_to=mail.get("to", ""),
             doc2md_cmd=(tools["doc2md"],) if tools.get("doc2md") else (),
+            doc2md_root=scribe_root_for(PLATFORM, Path.home(), os.environ),
             ffmpeg=tools.get("ffmpeg") or (find_ffmpeg(Path(tools["doc2md"])) if tools.get("doc2md") else ""),
             lang=lang,
         )

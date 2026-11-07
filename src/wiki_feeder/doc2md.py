@@ -5,9 +5,13 @@ WIKI CLAUDE.md〈二進位文件的預先轉檔〉的硬規則在這裡落地:
 - 絕不 `--no-ocr`(掃描件會產出只有頁面圖、沒有內文的 md,之後還被當成已轉過)
 - `--prune-days 0`(預設 14 天會把還沒攝入的產出清掉)
 - 沒印出「執行記錄:」= 指令根本沒跑到,跟「轉檔失敗」是兩回事
+
+Scribe2MD 核心的固定入口(spec §4.9):`entry_exe`、`probe`、`relink`。
 """
 from __future__ import annotations
 
+import json
+import logging
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -16,6 +20,8 @@ from pathlib import Path
 from .config import PLATFORM
 from .i18n import L
 from .office import DUMPERS as OFFICE_DUMP_EXTS
+
+log = logging.getLogger(__name__)
 
 TEXT_EXTS = {".md", ".txt"}  # 本來就是文字:不轉,直接攝入
 AUDIO_EXTS = {".m4a", ".mp3", ".wav", ".mp4", ".mov", ".avi"}
@@ -96,7 +102,8 @@ def run(cmd: tuple[str, ...], src: Path, out_dir: Path, timeout: float) -> tuple
     except subprocess.TimeoutExpired as e:
         raise ConvertError(L("doc2md 超過 {seconds} 秒沒跑完", seconds=f"{timeout:.0f}")) from e
     out = (r.stdout or "") + "\n" + (r.stderr or "")
-    m = re.search(r"執行記錄[::]\s*(\S.*)", out)
+    # 新版核心另印語言無關的標記(stderr);舊版只有中文那行,兩種都認、標記優先(§4.9)
+    m = LOG_MARKER.search(out) or LEGACY_LOG.search(out)
     tail = " / ".join(x for x in out.strip().splitlines()[-3:])
     if not m:
         raise Doc2mdUnavailable(L("doc2md 沒有真的執行(沒有印出「執行記錄:」):{tail}", tail=tail),
@@ -107,6 +114,81 @@ def run(cmd: tuple[str, ...], src: Path, out_dir: Path, timeout: float) -> tuple
     if r.returncode != 0 or not mds or not Path(mds[-1]).is_file():
         raise ConvertError(L("doc2md 轉換失敗(紀錄檔 {log}):{tail}", log=log_path, tail=tail), log_path)
     return Path(mds[-1]), log_path
+
+
+# --- Scribe2MD 核心的固定入口(spec §4.9;與電腦版 meeting-scribe-native 的契約,2026-11-07) ---
+# <root>/bin 是連結(Mac symlink、Windows junction),指向核心或電腦版裡較新那份的 venv 執行檔資料夾,
+# 由兩邊的安裝／更新／電腦版啟動時重指;<root>/current.json(不放 bin/:那是連結,寫進去等於寫進某一份 venv)記同一個選擇,junction 出狀況時的退路。
+ENTRY_CONTRACT = 1
+LOG_MARKER = re.compile(r"SCRIBE2MD-LOG:[ \t]*(\S.*)")
+LEGACY_LOG = re.compile(r"執行記錄[::][ \t]*(\S.*)")
+
+
+def entry_exe(root: Path, platform: str = PLATFORM) -> Path:
+    """固定入口:Windows 是真的 .exe(不經 cmd.exe:檔名來自收件匣,`&` `%` 會被解讀成指令)。"""
+    return root / "bin" / ("doc2md.exe" if platform == "win32" else "doc2md")
+
+
+def relink_cmd(root: Path, platform: str = PLATFORM) -> list[str]:
+    """核心自己的重指指令:只重比版本、重建 bin 與 current.json,不下載、不重裝。
+    Mac 用 zsh 叫、不靠執行權限位元。"""
+    if platform == "win32":
+        return ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+                str(root / "core" / "install.ps1"), "-Relink"]
+    return ["/bin/zsh", str(root / "core" / "install.command"), "--relink"]
+
+
+def current_exe(root: Path) -> Path | None:
+    """<root>/current.json 記的那顆 doc2md;讀不到、不是絕對路徑就回 None。"""
+    try:
+        v = json.loads((root / "current.json").read_text(encoding="utf-8")).get("doc2md")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return Path(v) if isinstance(v, str) and Path(v).is_absolute() else None
+
+
+def probe(exe: Path, timeout: float) -> dict | None:
+    """`<exe> --version --json`:離開碼 0、最後一行是 JSON、`entry_contract` 是不小於 ENTRY_CONTRACT 的整數,
+    才算新版核心;其他一律 None(舊版是 argparse 報錯、離開碼 2,不會把參數當檔名去轉)。"""
+    if not exe.is_file():
+        return None
+    try:
+        r = subprocess.run([str(exe), "--version", "--json"], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log.warning(L("doc2md 的版本查不到(%s):%s"), exe, e)
+        return None
+    lines = [ln for ln in (r.stdout or "").splitlines() if ln.strip()]
+    if r.returncode != 0 or not lines:
+        return None
+    try:
+        info = json.loads(lines[-1])
+    except ValueError:
+        return None
+    contract = info.get("entry_contract") if isinstance(info, dict) else None
+    if not isinstance(contract, int) or isinstance(contract, bool) or contract < ENTRY_CONTRACT:
+        return None
+    return info
+
+
+def tool_path(info: dict, key: str) -> str:
+    """版本資訊裡 ffmpeg／libreoffice 的路徑:要是存在的檔才算,其他回空字串。"""
+    v = info.get(key)
+    return v if isinstance(v, str) and v and Path(v).is_file() else ""
+
+
+def relink(root: Path, timeout: float) -> bool:
+    """叫核心 `--relink` 重指一次;回傳離開碼是不是 0。"""
+    cmd = relink_cmd(root)
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log.warning(L("Scribe2MD 的固定入口重指失敗:%s"), e)
+        return False
+    if r.returncode != 0:
+        log.warning(L("Scribe2MD 的固定入口重指失敗(離開碼 %d):%s"), r.returncode,
+                    " / ".join((r.stderr or r.stdout or "").strip().splitlines()[-3:]))
+    return r.returncode == 0
 
 
 @dataclass

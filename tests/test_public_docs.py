@@ -70,14 +70,31 @@ def test_simplified_docs_link_to_simplified_guides():
         assert ".zh-TW.md" not in body, name
 
 
+def test_docs_no_longer_send_friends_to_the_old_scribe2md_download():
+    """2026-11-07 起 Scribe2MD 核心由安裝程式從 wiki-agent 的 Release 下載(spec §4.9);舊的 scribe2md repo 停在橋接版,
+    說明書不可再叫朋友去那裡下載 zip、自己解壓到 C:\\scribe2md。"""
+    for f in PUBLIC.glob("*.md"):
+        text = f.read_text(encoding="utf-8")
+        assert "scribe2md/releases" not in text and "scribe2md-mac.zip" not in text and "scribe2md-win.zip" not in text, f.name
+
+
+def test_docs_use_the_public_app_names():
+    """iPhone App 對外叫「會議助手」/ Notetaker(2026-10-16 起),電腦版叫「會議助手電腦版」/ Notetaker Desktop;
+    scribe2md 只是 bundle id 與 repo 這些內部名稱,說明書不可再叫朋友去開「scribe2md App」(scribe2md-ios 2026-11-07)。"""
+    for f in PUBLIC.glob("*.md"):
+        text = f.read_text(encoding="utf-8")
+        for bad in ("scribe2md iPhone app", "scribe2md app", "scribe2md App", "[scribe2md sync folder]", "【scribe2md 同步資料夾】"):
+            assert bad not in text, f"{f.name}:{bad}"
+
+
 def test_guides_name_the_files_that_really_exist():
     for zh_or_en in GUIDES["mac"]:
         mac = (PUBLIC / zh_or_en).read_text(encoding="utf-8")
         for name in ("Update.command", "Remove-Schedule.command"):
             assert name in mac and (ROOT / name).is_file()
-        assert "scribe2md-mac.zip" in mac
+        assert "Scribe2MD" in mac and "notetaker-desktop/releases" in mac
     for zh_or_en in GUIDES["win"]:
         win = (PUBLIC / zh_or_en).read_text(encoding="utf-8")
         for name in ("Install.bat", "Update.bat", "Remove-Schedule.bat"):
             assert name in win and (ROOT / name).is_file()
-        assert "scribe2md-win.zip" in win
+        assert "Scribe2MD" in win and "notetaker-desktop/releases" in win

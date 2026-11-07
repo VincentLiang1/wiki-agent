@@ -15,10 +15,10 @@ echo ==================================================
 call :msg "  wiki-feeder 安裝（第一次安裝、重新設定都用這個）" "  wiki-feeder 安装（第一次安装、重新设置都用这个）" "  wiki-feeder setup - for the first install and for changing settings"
 echo ==================================================
 echo.
-call :msg "開始之前請先做好這三件事：" "开始之前请先做好这三件事：" "Before you start, please do these three things:"
+call :msg "開始之前請先做好這兩件事：" "开始之前请先做好这两件事：" "Before you start, please do these two things:"
 call :msg "  1. 裝好 iCloud for Windows，打開「iCloud 雲碟」" "  1. 装好 iCloud for Windows，打开「iCloud 云盘」" "  1. Install iCloud for Windows and turn on iCloud Drive"
 call :msg "  2. 裝好 Claude Code，開一個命令視窗打 claude，登入你自己的帳號" "  2. 装好 Claude Code，开一个命令窗口打 claude，登录你自己的账号" "  2. Install Claude Code, open a Command Prompt, type claude and sign in with your own account"
-call :msg "  3. 照 meeting-scribe 的說明解壓縮、跑它的 Install.bat" "  3. 照 meeting-scribe 的说明解压缩、跑它的 Install.bat" "  3. Unzip meeting-scribe as its instructions say and run its Install.bat"
+call :msg "  （錄音轉文字用的 Scribe2MD 不用先裝：問答時會問要不要下載）" "  （录音转文字用的 Scribe2MD 不用先装：问答时会问要不要下载）" "  No need to install Scribe2MD for recordings first - the questions will offer to download it"
 echo.
 call :pause
 

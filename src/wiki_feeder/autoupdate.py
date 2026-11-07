@@ -67,6 +67,7 @@ class UpdateDeps:
     spawn: Callable[[list[str]], int] = None                      # 開換版程式,回傳 pid
     alive: Callable[[int], bool] = pid_alive
     enable: Callable[[str], None] = None                          # 換版程式死掉時把排程重新啟用／裝回去
+    core_manifest: Callable[[], dict] = None                      # Scribe2MD 核心的 manifest(scribecore.fetch_manifest)
     windows: bool = WINDOWS
     extra: dict = field(default_factory=dict)
 
@@ -105,8 +106,9 @@ def default_deps(root: Path, windows: bool = WINDOWS) -> UpdateDeps:
                 else [str(root / "scripts" / "macsched.py"), "install", "--prefix"])
         subprocess.run([str(_python(root, windows)), *args, folder], capture_output=True, timeout=600,
                        stdin=subprocess.DEVNULL)
+    from .scribecore import fetch_manifest
     return UpdateDeps(run=_git_local, get=_get, mail=send, spawn=_spawn if windows else _spawn_mac, enable=enable,
-                      windows=windows)
+                      windows=windows, core_manifest=fetch_manifest)
 
 
 # -- 狀態與紀錄 ----------------------------------------------------------------------
@@ -427,11 +429,69 @@ def tick(cfg: Config, root: Path, folder: str, deps: UpdateDeps | None = None) -
     cfg.state_dir.mkdir(parents=True, exist_ok=True)
     state = _load(cfg.update_state_path)
     try:
+        try:
+            core_tick(cfg, root, deps, now, state)
+        except Exception as e:  # noqa: BLE001 —— 核心的更新出錯不可拖垮 wiki-feeder 本身的更新
+            log.warning("Scribe2MD 核心的自動更新出錯:%s", e)
         busy = _tick(cfg, root, folder, deps, now, state)
     finally:
         _flush(cfg, state, deps, now)
         _save(cfg.update_state_path, state)
     return busy
+
+
+def core_tick(cfg: Config, root: Path, deps: UpdateDeps, now: float, state: dict) -> None:
+    """Scribe2MD 核心的自動更新(spec §4.9、§7.9):只管裝了核心(meeting-scribe/core)的朋友;一天查一次 Release 上的
+    manifest,比核心自己那份新就開一個獨立行程(`wiki-feeder core-update`)重跑核心的安裝程式——下載加安裝要好幾分鐘,
+    不可卡住 watch 這一輪。同一個版本裝失敗就不再自動重試,等下一版;結果另寄一封信,同一版同一種結果只寄一次。"""
+    from . import scribecore
+    if not cfg.auto_update or cfg.doc2md_root is None or not (cfg.doc2md_root / "core").is_dir():
+        return
+    core = state.setdefault("core", {})
+    lock = _load(cfg.core_update_lock_path)
+    if lock:
+        if deps.alive(int(lock.get("pid", 0))):
+            return
+        cfg.core_update_lock_path.unlink(missing_ok=True)
+    res = _load(cfg.core_update_result_path)
+    if res:
+        cfg.core_update_result_path.unlink(missing_ok=True)
+        v, kind = res.get("target", ""), res.get("result", "")
+        update_log(cfg, now, "Scribe2MD", v, f"core_{kind}", res.get("detail", ""))
+        if kind == "ok":
+            _queue(state, f"core:{v}:ok", L("Scribe2MD 已自動更新到 {v}", v=v),
+                   L("錄音與文件的轉寫引擎 Scribe2MD 換成新版了,不必做任何事。"))
+        elif kind == "failed":
+            core.setdefault("failed", []).append(v)
+            _queue(state, f"core:{v}:failed", L("🚨 需要處理｜Scribe2MD 自動更新失敗"),
+                   L("要把 Scribe2MD 換到 {v} 時失敗了,這一版不再自動重試、等下一版。\n\n原因:\n{detail}\n\n"
+                     "之後摘要信如果說轉寫跑不起來,{human},問要不要下載 Scribe2MD 時回 y 重裝;"
+                     "要查原因的話{claude},把這封信貼給 Claude",
+                     v=v, detail=res.get("detail", "")[-1500:], human=_human(deps), claude=_claude(deps)))
+        elif kind == "busy":
+            core["retry"] = True
+    elif lock:                                 # 行程死了又沒留結果(關機、被砍):寫 log,照下面的節奏再查
+        update_log(cfg, now, "Scribe2MD", lock.get("target", ""), "core_interrupted")
+        core["retry"] = True
+    wait = cfg.update_retry_after if core.get("retry") else cfg.update_check_every
+    if now - float(core.get("checked", 0)) < wait:
+        return
+    core["checked"], core["retry"] = now, False
+    try:
+        m = deps.core_manifest()
+    except scribecore.CoreError as e:
+        core["retry"] = True
+        update_log(cfg, now, "Scribe2MD", "", "core_check_failed", str(e))
+        return
+    have, want = scribecore.installed_version(cfg.doc2md_root), m["version"]
+    if not scribecore.newer(want, have) or want in core.get("failed", []):
+        return
+    py = _python(root, deps.windows)
+    if deps.windows:
+        py = py.with_name("pythonw.exe")
+    pid = deps.spawn([str(py), "-m", "wiki_feeder", "core-update", "--target", want])
+    _save(cfg.core_update_lock_path, {"pid": pid, "started": now, "target": want})
+    update_log(cfg, now, f"Scribe2MD {have}", want, "core_started")
 
 
 def _tick(cfg: Config, root: Path, folder: str, deps: UpdateDeps, now: float, state: dict) -> bool:

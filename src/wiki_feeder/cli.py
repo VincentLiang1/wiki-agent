@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -123,6 +124,8 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     fs = sub.add_parser("finish-stopped", help=L("STOP 那筆檢查過 commit 後,照攝入回報把原件搬好、記成完成(不重攝入)"))
     fs.add_argument("name")
     sub.add_parser("unstick", help=L("結束超過心跳上限那一輪卡住的子行程"))
+    cu = sub.add_parser("core-update", help=L("重裝 Scribe2MD 核心到 Release 上的版本(自動更新在背景叫;結果寫給下一輪寄信)"))
+    cu.add_argument("--target", required=True, help=L("要換到的版本"))
     od = sub.add_parser("office-dump", help=L("只讀印出 Office 原件的原文、儲存格顏色與公式(攝入時核對用)"))
     od.add_argument("path")
     ph = sub.add_parser("page-history", help=L("公事庫某頁的 commit 歷史,或 commit message 含關鍵字的 commit(攝入時查用)"))
@@ -149,7 +152,7 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     tg.add_argument("--resolved", metavar=L("關鍵字"), action="append", default=[],
                     help=L("已經補好(可重複):在這之前的紀錄不再提醒,之後又出現的照樣列、標「修好後又出現」"))
     gl = sub.add_parser("glossary", help=L("重產給手機的名詞對照表 name-corrections.json(平常每輪攝入後自動做,內容沒變不寫)"))
-    gl.add_argument("--out", help=L("寫到這個資料夾(預設是設定的 scribe2md 同步資料夾)"))
+    gl.add_argument("--out", help=L("寫到這個資料夾(預設是設定的聲紋同步資料夾)"))
     gl.add_argument("--before", metavar="YYYY-MM-DD", help=L("評測用:只收這天以前的整理頁"))
     gl.add_argument("--print", action="store_true", help=L("只印出來,不寫檔"))
     ts = sub.add_parser("table-sums", help=L("公事庫某頁每張表各數字欄的加總、與合計列比對(攝入重算統計表時驗算用)"))
@@ -244,7 +247,7 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
             if args.out:
                 out = Path(args.out)
                 if not out.is_dir():
-                    print(L("失敗:沒有 scribe2md 同步資料夾 {out}(用 --out 指定)", out=out))
+                    print(L("失敗:沒有聲紋同步資料夾 {out}(用 --out 指定)", out=out))
                     return 1
                 if (hit := glossary.unsafe_out(cfg, out)) is not None:
                     print(L("失敗:{out} 跟 {hit} 重疊(對照表含真名,會被收件或攝入)", out=out, hit=hit))
@@ -256,7 +259,7 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
                 for a in alerts:
                     print(a, file=sys.stderr)
                 if not outs:
-                    print(L("失敗:沒有 scribe2md 同步資料夾 {out}(用 --out 指定)", out=cfg.glossary_dir))
+                    print(L("失敗:沒有聲紋同步資料夾 {out}(用 --out 指定)", out=cfg.glossary_dir))
                     return 1
             written = glossary.write_all(outs, doc)
             for out in outs:
@@ -324,6 +327,14 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
         from .watchdog import unstick
         print(unstick(cfg))
         return 0
+
+    if args.cmd == "core-update":
+        from .scribecore import update
+        res = update(cfg, args.target)
+        cfg.core_update_result_path.parent.mkdir(parents=True, exist_ok=True)
+        cfg.core_update_result_path.write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
+        print(res["result"])
+        return 0 if res["result"] != "failed" else 1
 
     if args.cmd == "resume":
         from .ingest import resume

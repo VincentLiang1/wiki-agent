@@ -370,7 +370,7 @@ def targets(cfg: Config) -> tuple[list[Path], list[str]]:
     for out in _all_dirs(cfg):
         if (hit := unsafe_out(cfg, out)) is not None:
             alerts.append(L("名詞對照表不寫:輸出資料夾 {out} 跟 {hit} 重疊(對照表含真名,會被收件或攝入);"
-                            "scribe2md 同步資料夾要另外建在雲碟最上層", out=out, hit=hit))
+                            "聲紋同步資料夾要另外建在雲碟最上層", out=out, hit=hit))
             continue
         if out.is_dir():
             outs.append(out)

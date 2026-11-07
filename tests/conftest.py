@@ -43,6 +43,7 @@ def pytest_configure(config):
 def _fake_home(tmp_path_factory, monkeypatch):
     home = tmp_path_factory.mktemp("home")
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("LOCALAPPDATA", str(home / "AppData" / "Local"))   # Windows 的 Scribe2MD 固定入口、執行狀態
     # 測試裡的 git 不讀使用者的全域設定(簽章、hooks、別名都可能讓結果不同)
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(home / ".gitconfig-none"))
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")

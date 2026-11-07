@@ -1,5 +1,13 @@
 [
  {
+  "source": "ab2a21f",
+  "date": "2026-11-07",
+  "needs_human": false,
+  "zh-Hant": "- 把錄音、文件轉成文字的引擎改叫 Scribe2MD,改由 wiki-agent 提供下載:安裝程式會問「要下載安裝 Scribe2MD 嗎?」,不必再到別的網站下載、自己解壓縮。之前裝的舊版 scribe2md 照常能用;裝了 Scribe2MD 之後會自動改用它,之後也會跟著自動更新\n- 電腦版改名「會議助手電腦版」(Notetaker Desktop),iPhone App 是「會議助手」;安裝時的問句改成「聲紋同步資料夾」,資料夾 _ScribeSync 不變\n- 你的電腦照舊運作,不必做任何事;還沒裝轉寫引擎、想轉錄音的話,再跑一次安裝、問要不要下載 Scribe2MD 時回 y",
+  "zh-Hans": "- 把录音、文件转成文字的引擎改叫 Scribe2MD,改由 wiki-agent 提供下载:安装程序会问「要下载安装 Scribe2MD 吗?」,不必再到别的网站下载、自己解压缩。之前装的旧版 scribe2md 照常能用;装了 Scribe2MD 之后会自动改用它,之后也会跟着自动更新\n- 电脑版改名「会议助手电脑版」(Notetaker Desktop),iPhone App 是「会议助手」;安装时的问句改成「声纹同步文件夹」,文件夹 _ScribeSync 不变\n- 你的电脑照旧运作,不必做任何事;还没装转写引擎、想转录音的话,再跑一次安装、问要不要下载 Scribe2MD 时回 y",
+  "en": "- The engine that turns recordings and documents into text is now called Scribe2MD and is downloaded through wiki-agent: the installer asks \"Download and install Scribe2MD?\", so there is no separate website to download from and nothing to unzip yourself. An older scribe2md you already installed keeps working; once Scribe2MD is installed it is used automatically and kept up to date\n- The desktop app is now Notetaker Desktop and the iPhone app is Notetaker; the installer's question now says \"Voiceprint sync folder\", and the _ScribeSync folder stays the same\n- Your computer works as before; there is nothing to do. If you haven't installed a transcription engine and want recordings transcribed, run the installer again and answer y when it offers to download Scribe2MD"
+ },
+ {
   "source": "384dd71",
   "date": "2026-11-05",
   "needs_human": false,

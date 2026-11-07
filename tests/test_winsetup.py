@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -77,15 +78,49 @@ def test_scribe2md_is_optional_in_the_config(tmp_path):
 
 
 def test_transcription_question_lets_the_friend_skip_scribe2md(monkeypatch, tmp_path):
-    """找不到 scribe2md 時問「有裝嗎?」,直接 Enter(預設 n)就跳過;找得到就照舊試轉、不問。"""
+    """什麼都沒裝時問「要下載安裝 Scribe2MD 嗎?」,直接 Enter(預設 n)就跳過、不下載;
+    找得到舊版電腦版就照舊試轉、不問(§4.8、§4.9)。"""
     m = _mod()
     monkeypatch.setattr(m, "find_doc2md", lambda roots: [])
+    monkeypatch.setattr(m.scribecore, "install", lambda *a, **k: pytest.fail("沒答 y 就下載了"))
     prompts = []
     monkeypatch.setattr("builtins.input", lambda p="": prompts.append(p) or "")
-    assert m.ask_doc2md(tmp_path) == "" and len(prompts) == 1 and "scribe2md" in prompts[0]
+    assert m.ask_doc2md(tmp_path) == "" and len(prompts) == 1 and "Scribe2MD" in prompts[0]
     monkeypatch.setattr(m, "find_doc2md", lambda roots: [tmp_path / "doc2md.exe"])
     monkeypatch.setattr(m, "check_doc2md", lambda exe: (True, "ok"))
     assert m.ask_doc2md(tmp_path) == str(tmp_path / "doc2md.exe")
+
+
+def test_installed_scribe2md_core_wins_over_the_old_desktop_app(monkeypatch, tmp_path):
+    """Scribe2MD 的固定入口問得出版本就用它,不再找、不再問舊版電腦版的 doc2md(§4.9)。"""
+    m = _mod()
+    monkeypatch.setattr(m, "installed_core", lambda home: "/core/bin/doc2md")
+    monkeypatch.setattr(m, "find_doc2md", lambda roots: pytest.fail("固定入口能用還去找舊版"))
+    assert m.ask_doc2md(tmp_path) == "/core/bin/doc2md"
+
+
+def test_answering_yes_downloads_the_core_and_returns_the_fixed_entry(monkeypatch, tmp_path):
+    """答 y 就下載安裝;失敗可以再試或放棄(放棄 = 先不裝,設定不寫 doc2md)。"""
+    m = _mod()
+    monkeypatch.setattr(m, "installed_core", lambda home: "")
+    monkeypatch.setattr(m, "find_doc2md", lambda roots: [])
+    tries = []
+
+    def install(root, work, say, **k):
+        tries.append(root)
+        if len(tries) == 1:
+            raise m.scribecore.CoreError("下載 Scribe2MD 失敗:斷線")
+        return {"version": "1.12.0"}
+
+    monkeypatch.setattr(m.scribecore, "install", install)
+    answers = iter(["y", "y"])
+    monkeypatch.setattr("builtins.input", lambda p="": next(answers))
+    assert m.ask_doc2md(tmp_path) == str(m.doc2md.entry_exe(m.core_root(tmp_path), sys.platform))
+    assert len(tries) == 2
+    answers = iter(["y", "n"])
+    tries.clear()
+    monkeypatch.setattr(m.scribecore, "install", lambda *a, **k: (_ for _ in ()).throw(m.scribecore.CoreError("x")))
+    assert m.ask_doc2md(tmp_path) == ""
 
 
 def test_path_with_a_single_quote_is_refused():

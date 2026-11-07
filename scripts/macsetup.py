@@ -35,7 +35,6 @@ def _script(name: str):
 
 ws = _script("winsetup")          # 共用:toml_path、render_config、write_config、check_doc2md、claude_logged_in、問答
 say, ask, yes = ws.say, ws.ask, ws.yes
-SCRIBE2MD = "https://github.com/VincentLiang1/scribe2md/releases/latest"
 HEADER = N_("# wiki-feeder 設定檔(install.sh 問答產生;要改就用「文字編輯」改,改完下一分鐘生效)")
 
 
@@ -44,7 +43,7 @@ def icloud_drive(home: Path) -> Path:
 
 
 def scribe2md_doc2md(home: Path) -> Path:
-    """scribe2md 的 Mac 版(.app)第一次打開時把程式裝到這裡;與使用者本人那台同一個位置。"""
+    """舊版電腦版(scribe2md 的 .app,橋接期)第一次打開時把程式裝到這裡;新裝的一律走 Scribe2MD 固定入口(§4.9)。"""
     return home / "Library" / "Application Support" / "meeting-scribe" / "app" / ".venv" / "bin" / "doc2md"
 
 
@@ -104,29 +103,22 @@ def ask_inbox(home: Path) -> str:
 
 
 def ask_doc2md(home: Path) -> str:
-    """【轉寫】scribe2md 選裝(§4.8):App 沒裝就問有沒有裝,沒裝回空字串;路徑問答裡打 - 也是先不裝。"""
+    """【轉寫】Scribe2MD 的固定入口能用就用它(§4.9);沒有的話舊版電腦版在就照舊試轉;都沒有就問要不要下載安裝,
+    不裝回空字串(§4.8)。試轉不過打 - 改成下載或先不裝。"""
+    if exe := ws.installed_core(home):
+        return exe
     exe = scribe2md_doc2md(home)
-    if not exe.is_file() and not yes(L(ws.SCRIBE2MD_QUESTION), default=False):
-        return ""
+    if not exe.is_file():
+        return ws.offer_core(home)
     while True:
-        if not exe.is_file():
-            say(L("【轉寫】找不到 scribe2md 的 doc2md({path})。", path=exe))
-            say(L("  請先到 {url} 下載 scribe2md-mac.zip、解壓縮,把 App 拖進「應用程式」、打開一次", url=SCRIBE2MD))
-            say(L("  (第一次打開會自己裝好),關掉它再回到這裡。"))
-            v = input(L("  裝好了按 Enter;doc2md 在別的地方就貼上路徑;打 - 先不裝 scribe2md:")).strip().strip("'\"").replace("\\ ", " ")
-            if v == "-":
-                return ""
-            if v:
-                exe = Path(v).expanduser()
-            continue
         say(L("  試轉一個小檔(最多幾十秒)…"))
         ok, msg = ws.check_doc2md(exe)
         say(L("  {path}:{msg}", path=exe, msg=msg))
         if ok:
             return str(exe)
-        v = input(L("  換一個路徑(直接按 Enter 再試一次;打 - 先不裝 scribe2md):")).strip().strip("'\"").replace("\\ ", " ")
+        v = input(L("  換一個路徑(直接按 Enter 再試一次;打 - 改成下載 Scribe2MD 或先不裝):")).strip().strip("'\"").replace("\\ ", " ")
         if v == "-":
-            return ""
+            return ws.offer_core(home)
         if v:
             exe = Path(v).expanduser()
 

@@ -16,7 +16,7 @@ import re
 import subprocess
 import zipfile
 from html.parser import HTMLParser
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -57,7 +57,10 @@ def convert(cfg: Config) -> ConvertReport:
             return report
         with Ledger(cfg.ledger_path) as ledger:
             try:
-                for sha, dest in ledger.pending_conversions(cfg.convert_max_attempts):
+                todo = list(ledger.pending_conversions(cfg.convert_max_attempts))
+                if any(doc2md.classify(Path(d)) in ("transcript", "document") for _, d in todo if Path(d).exists()):
+                    cfg = resolve_doc2md(cfg)
+                for sha, dest in todo:
                     path = Path(dest)
                     if path.exists():
                         heartbeat(cfg.convert_lock_path)
@@ -104,6 +107,38 @@ def _convert_one(cfg: Config, ledger: Ledger, sha: str, path: Path, report: Conv
     log.info("%s → %s", path.name, result.get("md") or result["類型"])
 
 
+def resolve_doc2md(cfg: Config) -> Config:
+    """Scribe2MD 核心的固定入口能用就換成它(spec §4.9),不能用照設定檔的 doc2md;兩種同時認,
+    核心第一版發佈前後、舊版電腦版還在的機器都不斷。
+
+    固定入口斷了(使用者刪了其中一份)而核心還在:叫核心 `--relink` 重指,連續失敗就放慢、不每分鐘叫。
+    核心或固定入口在、但問不出版本也沒有設定檔的路徑:照「裝了但跑不起來」處理(§4.5),
+    不可落到「沒裝 scribe2md」的提醒(叫朋友去裝一個已經裝了的東西)。"""
+    root = cfg.doc2md_root
+    if root is None:
+        return cfg
+    exe = doc2md.entry_exe(root)
+    info = doc2md.probe(exe, cfg.doc2md_probe_timeout)
+    if info is None and not exe.exists() and (root / "core").is_dir():
+        n = _streak(cfg, "doc2md-relink")
+        if n <= cfg.doc2md_relink_tries or n % cfg.doc2md_relink_every == 0:
+            log.warning(L("Scribe2MD 的固定入口不見了(%s),叫核心重指"), exe)
+            if doc2md.relink(root, cfg.doc2md_relink_timeout):
+                info = doc2md.probe(exe, cfg.doc2md_probe_timeout)
+    if info is None and (alt := doc2md.current_exe(root)) is not None and alt != exe:
+        info = doc2md.probe(alt, cfg.doc2md_probe_timeout)
+        exe = alt if info is not None else exe
+    if info is None:
+        installed = (root / "core").is_dir() or exe.exists()
+        if installed:
+            log.warning(L("Scribe2MD 的固定入口問不出版本,改用設定檔的 doc2md"))
+        if not cfg.doc2md_cmd and installed:
+            return replace(cfg, doc2md_cmd=(str(doc2md.entry_exe(root)),))
+        return cfg
+    _streak(cfg, "doc2md-relink", reset=True)
+    return replace(cfg, doc2md_cmd=(str(exe),), ffmpeg=doc2md.tool_path(info, "ffmpeg") or cfg.ffmpeg)
+
+
 def _doc2md_down(cfg: Config, e: doc2md.Doc2mdUnavailable, report: ConvertReport) -> None:
     """doc2md 跑不起來:這輪不轉、不扣任何檔的次數。連續幾輪才警示(重新安裝 meeting-scribe 的那一分鐘
     也會碰到,不必每次都寄信);警示文字固定,卡著的期間每天寄一次。"""
@@ -118,7 +153,7 @@ def _remind_needs_scribe2md(cfg: Config, report: ConvertReport) -> None:
     """沒裝 scribe2md 時 claude 讀不了的檔:每輪列進警示(文字固定、全文去重、一天一封),裝好後下一輪自動處理,
     沒有要解除的狀態。跟 §4.5「doc2md 跑不起來」不同:那是裝了但壞了,這是正常狀態,第一輪就提醒。"""
     if report.needs_scribe2md:
-        report.alerts.append(L("有 {n} 個檔要裝 scribe2md 才會處理(錄音、影片、舊版 .doc／.xls／.ppt、Outlook .msg 等),"
+        report.alerts.append(L("有 {n} 個檔要裝 Scribe2MD 才會處理(錄音、影片、舊版 .doc／.xls／.ppt、Outlook .msg 等),"
                                "先留在 {dir}/:{names}。裝好之後不必做任何事,下一輪自動轉寫",
                                n=len(report.needs_scribe2md), dir=cfg.pending_dir.name,
                                names=L("、").join(sorted(report.needs_scribe2md)[:10])))

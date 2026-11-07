@@ -726,3 +726,79 @@ def test_mac_spawn_survives_the_launchd_job_in_its_own_session():
         os.kill(pid, 15)
         os.waitpid(pid, 0)
 
+
+
+# --- Scribe2MD 核心的自動更新(core_tick,spec §4.9、§7.9) ---
+
+def _core(ucfg, tmp_path, have="1.11.0"):
+    root = tmp_path / "meeting-scribe"
+    (root / "core").mkdir(parents=True)
+    (root / "core" / "VERSION").write_text(f"abc1234 2026-11-01\nversion={have}\n", encoding="utf-8")
+    return replace(ucfg, doc2md_root=root)
+
+
+def _manifest(v="1.12.0"):
+    return lambda: {"version": v, "sha256": "0" * 64, "size": 1}
+
+
+def test_core_update_starts_in_the_background_when_the_release_is_newer(ucfg, tmp_path):
+    """Release 上的核心比較新:開獨立行程跑 `wiki-feeder core-update`,不在 watch 這一輪下載 1 GB;跑著的時候不再開。"""
+    c, box = _core(ucfg, tmp_path), Box()
+    d = _deps(box, core_manifest=_manifest())
+    state = {}
+    au.core_tick(c, tmp_path, d, NOW, state)
+    assert len(box.spawned) == 1 and box.spawned[0][-5:] == ["-m", "wiki_feeder", "core-update", "--target", "1.12.0"]
+    assert json.loads(c.core_update_lock_path.read_text(encoding="utf-8"))["target"] == "1.12.0"
+    d.alive = lambda pid: True
+    au.core_tick(c, tmp_path, d, NOW + 2 * c.update_check_every, state)
+    assert len(box.spawned) == 1
+
+
+def test_core_update_does_nothing_when_current_or_not_installed_or_owner(ucfg, tmp_path):
+    box = Box()
+    d = _deps(box, core_manifest=_manifest("1.11.0"))
+    au.core_tick(_core(ucfg, tmp_path), tmp_path, d, NOW, {})                 # 一樣新
+    au.core_tick(replace(ucfg, doc2md_root=tmp_path / "none"), tmp_path, d, NOW, {})   # 沒裝核心
+    d.core_manifest = _manifest()
+    au.core_tick(replace(_core(ucfg, tmp_path / "o"), auto_update=False), tmp_path, d, NOW, {})   # 使用者本人
+    assert box.spawned == []
+
+
+def test_core_update_result_is_mailed_once_and_a_failed_version_is_not_retried(ucfg, tmp_path):
+    """裝好寄一封;失敗寄 🚨,同一版不再自動重試(等下一版);忙(轉寫正在跑)不算失敗、一小時後再試。"""
+    c, box = _core(ucfg, tmp_path), Box()
+    d = _deps(box, core_manifest=_manifest())
+    state = {}
+    c.core_update_result_path.write_text(json.dumps({"result": "failed", "target": "1.12.0", "detail": "uv sync 失敗"}),
+                                         encoding="utf-8")
+    au.core_tick(c, tmp_path, d, NOW, state)
+    au._flush(c, state, d, NOW)
+    assert box.spawned == [] and len(box.mails) == 1 and "Scribe2MD" in box.mails[0][0] and "uv sync" in box.mails[0][1]
+    au.core_tick(c, tmp_path, d, NOW + 2 * c.update_check_every, state)
+    assert box.spawned == []
+    d.core_manifest = _manifest("1.13.0")
+    au.core_tick(c, tmp_path, d, NOW + 4 * c.update_check_every, state)
+    assert len(box.spawned) == 1
+    c.core_update_lock_path.unlink()
+    c.core_update_result_path.write_text(json.dumps({"result": "busy", "target": "1.13.0"}), encoding="utf-8")
+    box.spawned.clear()
+    au.core_tick(c, tmp_path, d, NOW + 4 * c.update_check_every + c.update_retry_after + 1, state)
+    assert len(box.spawned) == 1
+
+
+def test_core_update_worker_waits_for_a_running_conversion(ucfg, tmp_path, monkeypatch):
+    """背景的核心更新要先拿到轉寫的鎖:doc2md 正在跑就回 busy,不在 core/ 底下換檔。"""
+    from wiki_feeder import scribecore
+    from wiki_feeder.collect import run_lock
+    c = _core(ucfg, tmp_path)
+    monkeypatch.setattr(scribecore, "install", lambda *a, **k: pytest.fail("轉寫在跑還去裝"))
+    with run_lock(c.convert_lock_path) as got:
+        assert got and scribecore.update(c, "1.12.0")["result"] == "busy"
+    monkeypatch.setattr(scribecore, "install", lambda *a, **k: {"version": "1.12.0"})
+    assert scribecore.update(c, "1.12.0") == {"result": "ok", "target": "1.12.0", "version": "1.12.0"}
+
+
+def test_version_compare_never_downgrades():
+    from wiki_feeder.scribecore import newer
+    assert newer("1.12.0", "1.11.9") and newer("1.10.0", "1.9.0")
+    assert not newer("1.12.0", "1.12.0") and not newer("1.11.0", "1.12.0") and not newer("x", "1.0") and not newer("1.2", "")

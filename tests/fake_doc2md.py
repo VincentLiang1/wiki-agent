@@ -16,6 +16,15 @@ if log_args:
     with open(log_args, "a", encoding="utf-8") as f:
         f.write(json.dumps(args, ensure_ascii=False) + "\n")
 
+if args[:1] == ["--version"]:
+    # 新版核心印一行 JSON(FAKE_DOC2MD_VERSION 給內容);沒給 = 舊版:argparse 報錯、離開碼 2(電腦版 2026-11-07 實測)
+    info = os.environ.get("FAKE_DOC2MD_VERSION")
+    if not info:
+        print("doc2md: error: unrecognized arguments: --version", file=sys.stderr)
+        sys.exit(2)
+    print(info)
+    sys.exit(0)
+
 mode = os.environ.get("FAKE_DOC2MD_MODE", "ok")
 if mode == "norun":
     print("error: 系統找不到指定的檔案。 (os error 2)", file=sys.stderr)
@@ -23,6 +32,8 @@ if mode == "norun":
 
 src = Path(args[0])
 out_dir = Path(args[args.index("--out-dir") + 1])
+if os.environ.get("FAKE_DOC2MD_MARKER"):   # 新版核心:語言無關的標記在中文那行前面
+    print("SCRIBE2MD-LOG: /tmp/fake-scribe2md.log", file=sys.stderr)
 print("執行記錄:/tmp/fake-doc2md.log", file=sys.stderr)
 if mode == "fail":
     print("轉換失敗:1 個", file=sys.stderr)

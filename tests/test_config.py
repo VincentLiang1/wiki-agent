@@ -78,6 +78,14 @@ def test_doc2md_is_optional(tmp_path):
         Config.from_file(_write(tmp_path, re.sub(r"doc2md = .*", "doc2md = 3", GOOD)), tmp_path / "state")
 
 
+def test_friend_config_looks_at_the_scribe2md_fixed_entry(tmp_path):
+    """朋友版不論設定檔有沒有填 doc2md,都看 Scribe2MD 核心的固定入口(§4.9):後來才裝核心的不必重跑安裝。"""
+    from wiki_feeder.config import PLATFORM, scribe_root_for
+    want = scribe_root_for(PLATFORM, Path.home(), os.environ)
+    for text in (GOOD, GOOD.replace("doc2md = ", "# doc2md = ")):
+        assert Config.from_file(_write(tmp_path, text), tmp_path / "state").doc2md_root == want
+
+
 def test_state_dir_per_platform(tmp_path):
     assert state_dir_for("win32", tmp_path, {"LOCALAPPDATA": str(tmp_path / "L")}) == tmp_path / "L" / "wiki-feeder"
     assert state_dir_for("win32", tmp_path, {}) == tmp_path / "AppData" / "Local" / "wiki-feeder"
