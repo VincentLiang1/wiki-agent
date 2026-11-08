@@ -1,5 +1,13 @@
 [
  {
+  "source": "b1c944c",
+  "date": "2026-11-08",
+  "needs_human": false,
+  "zh-Hant": "- 裝了 Scribe2MD 的話:錄音逐字稿認得繁中、簡中、英文三種寫法,英文、簡中的會議也能正確判斷空白錄音、列出還沒命名的講者\n- 英文介面轉出的空白掃描、沒字的圖片,現在會正確標成捨棄候選,不再整份交給 Claude 處理;英文文件裡剛好有「Speaker diagnostics」這種標題時,不會再被誤標成捨棄候選\n- 語音辨識卡在重複迴圈、只剩異常標記的錄音也會標出來,理由寫明請對照原始錄音,不會說成「沒有文字」\n- 你的電腦照舊運作,不必做任何事",
+  "zh-Hans": "- 装了 Scribe2MD 的话:录音逐字稿认得繁中、简中、英文三种写法,英文、简中的会议也能正确判断空白录音、列出还没命名的讲者\n- 英文界面转出的空白扫描、没字的图片,现在会正确标成舍弃候选,不再整份交给 Claude 处理;英文文件里刚好有「Speaker diagnostics」这种标题时,不会再被误标成舍弃候选\n- 语音识别卡在重复循环、只剩异常标记的录音也会标出来,理由写明请对照原始录音,不会说成「没有文字」\n- 你的电脑照旧运作,不必做任何事",
+  "en": "- With Scribe2MD installed: transcripts are read correctly in Traditional Chinese, Simplified Chinese and English, so empty recordings and unnamed speakers are detected for English and Simplified Chinese meetings too\n- Blank scans and images without text converted under the English interface are now marked as discard candidates instead of being sent to Claude in full; an English document that happens to have a heading like \"Speaker diagnostics\" is no longer wrongly marked as a discard candidate\n- Recordings where speech recognition got stuck in a repeating loop, leaving only the problem markers, are now flagged too, with a reason that says to check the original recording rather than \"no text\"\n- Your computer works as before; there is nothing to do"
+ },
+ {
   "source": "ab2a21f",
   "date": "2026-11-07",
   "needs_human": false,

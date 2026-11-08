@@ -197,11 +197,18 @@ class MdInfo:
     body_chars: int = 0          # 扣掉標題、圖片、工具註記、診斷段之後的實際內文字數
     unnamed_speakers: list[str] = field(default_factory=list)
     machine_named: list[str] = field(default_factory=list)
+    loop_markers: int = 0        # 跳針標記的行數(轉錄卡在重複迴圈、那段內容已略去;不算內文)
 
     @property
     def lossy_kinds(self) -> list[str]:
         v = self.front.get("lossy_kinds", [])
         return v if isinstance(v, list) else []
+
+    @property
+    def format_version(self) -> int:
+        """檔頭自報的逐字稿格式版本(讀進來是字串);沒有這一欄是 1(文件、2026-11-07 以前的逐字稿),同電腦版 vocab.format_version。"""
+        v = str(self.front.get("format_version", "")).strip()
+        return int(v) if v.isascii() and v.isdigit() else 1
 
 
 def _parse_value(v: str):
@@ -213,7 +220,41 @@ def _parse_value(v: str):
     return v.strip('"')
 
 
-def parse_md(path: Path) -> MdInfo:
+# 逐字稿的三語寫法(繁中、簡中、英文;iPhone、Android、電腦版共用):以 scribe2md-ios 的
+# Tests/Resources/contract_samples.json 為準,tests/test_contract_samples.py 逐字對照(§4.2);
+# 要多認舊寫法另外放常數,不混進這幾組
+TRANSCRIPT_FORMAT_VERSION = 2   # 讀得懂的最新格式;檔頭比它新的逐字稿,convert 加一句警告(§4.2)
+DIAG_HEADINGS = ("## 講者辨識診斷", "## 讲者识别诊断", "## Speaker diagnostics")
+NAME_SOURCE_NONE = {"未命名", "unnamed"}
+NAME_SOURCE_AUTO = {"機器辨識", "机器识别", "auto-named"}
+PAUSE_MARKS = (("〔錄音在此暫停 ", ",這段時間的發言沒有錄進來〕"), ("〔录音在此暂停 ", ",这段时间的发言没有录进来〕"),
+               ("[Recording paused here for ", "; nothing said during this time was recorded]"))
+# 重點說明行整句比對(同電腦版 vocab.is_legend):只比開頭的話,文件裡碰巧這樣開頭的真內容會被整行扣掉
+HIGHLIGHT_NOTES = ("> 〔重點〕= 開會時有人在現場按了「重點」的發言，整理時請優先處理。",
+                   "> 〔重点〕= 开会时有人在现场按了「重点」的发言，整理时请优先处理。",
+                   '> [highlight] = someone at the meeting tapped "Highlight" during this turn. '
+                   "Give it priority when writing minutes.")
+# 講者標頭:名字後面可接中文〔標記〕或英文 [標記](2026-11-07 以前的英文 md 也用〔〕)
+SPEAKER_HEADER = re.compile(r"^\*\*[^*]+\*\*(?:〔[^〕]*〕|\s*\[[^\]]*\])?\s*\(\d+:\d+:\d+\)")
+# 跳針標記:核心把轉錄卡在重複迴圈的那段換成這一行(內容已略去),三語開頭照電腦版 vocab.is_marker;
+# 約定樣本沒收,由 test_convert 的字面值守
+MARKER_PREFIXES = ("(此段轉錄異常", "(此段转录异常", "(Transcription problem")
+# 工具註記整行:中文〔…〕;英文介面的核心 2026-11-07 起寫半形 […]——裡面沒有方括號才算([[連結]]、[a][1] 是內文)
+HALF_WIDTH_NOTE = re.compile(r"\[[^\[\]]*\]")
+# 診斷段從行首的標題開始(同電腦版 export.starts_diagnostics):### 開頭的、行中間提到的不算
+DIAG_START = re.compile(r"^[ \t]*(?:" + "|".join(map(re.escape, DIAG_HEADINGS)) + ")", re.M)
+
+
+def _is_boilerplate(s: str) -> bool:
+    """工具自己寫的整行(不是講的話、也不是文件內容):工具註記、暫停行、重點說明行。
+    暫停行三語本來就是整行註記(〔…〕或 […]),PAUSE_MARKS 照約定列出、互為備援。"""
+    return ((s.startswith("〔") and s.endswith("〕")) or HALF_WIDTH_NOTE.fullmatch(s) is not None
+            or any(s.startswith(h) and s.endswith(t) for h, t in PAUSE_MARKS)
+            or s in HIGHLIGHT_NOTES)
+
+
+def parse_md(path: Path, *, transcript: bool) -> MdInfo:
+    """transcript=False(文件):不找講者辨識診斷段——文件裡碰巧有同名的標題,不可把後面的內文截掉(§4.2)。"""
     text = path.read_text(encoding="utf-8", errors="replace")
     info = MdInfo()
     body = text
@@ -225,21 +266,24 @@ def parse_md(path: Path) -> MdInfo:
                     k, v = line.split(":", 1)
                     info.front[k.strip()] = _parse_value(v)
             body = text[end + 4:]
-    diag_at = body.find("## 講者辨識診斷")
-    diag = body[diag_at:] if diag_at != -1 else ""
-    content = body[:diag_at] if diag_at != -1 else body
+    m = DIAG_START.search(body) if transcript else None
+    cut = m.start() if m else len(body)
+    content, diag = body[:cut], body[cut:]
     kept = []
     for line in content.splitlines():
         s = line.strip()
-        if not s or s.startswith("#") or s.startswith("![") or (s.startswith("〔") and s.endswith("〕")):
+        if not s or s.startswith("#") or s.startswith("![") or _is_boilerplate(s):
             continue
-        s = re.sub(r"^\*\*[^*]+\*\*(〔[^〕]*〕)?\s*\(\d+:\d+:\d+\)", "", s)  # 講者標頭(含機器辨識的名字)
+        if s.startswith(MARKER_PREFIXES):
+            info.loop_markers += 1
+            continue
+        s = SPEAKER_HEADER.sub("", s)  # 講者標頭(含機器辨識的名字)
         kept.append(s)
     info.body_chars = len(re.sub(r"\s", "", "".join(kept)))
     for row in re.findall(r"^\|\s*([^|]+?)\s*\|.*\|\s*([^|]+?)\s*\|\s*$", diag, flags=re.M):
         speaker, source = row
-        if source == "未命名":
+        if source in NAME_SOURCE_NONE:
             info.unnamed_speakers.append(speaker)
-        elif source == "機器辨識":
+        elif source in NAME_SOURCE_AUTO:
             info.machine_named.append(speaker)
     return info

@@ -30,6 +30,9 @@ from .ledger import Ledger
 log = logging.getLogger(__name__)
 
 MIN_BODY_CHARS = 5  # 少於這個字數視為「轉不出內文」
+# 捨棄候選的理由(sidecar 的值,不翻):只剩跳針標記的錄音可能真的有人講話、只是轉錄卡住,要人對照原音(§4.3)
+NO_TEXT = "轉不出內文(OCR 或語音辨識沒有文字)"
+LOOP_ONLY = "語音辨識卡在重複迴圈、那幾段內容已略去(只剩跳針標記;有人講話的話對照原始錄音重轉)"
 _TS = re.compile(r"^(\d{4}-\d{2}-\d{2}_\d{6})_")
 
 
@@ -196,13 +199,13 @@ def _result_for(cfg: Config, kind: str, path: Path) -> dict:
         return _without_scribe2md(cfg, path, base)
 
     md, log_path = doc2md.run(cfg.doc2md_cmd, path, cfg.md_cache, cfg.doc2md_timeout)
-    info = doc2md.parse_md(md)
+    info = doc2md.parse_md(md, transcript=kind == "transcript")
     out = {**base, "md": str(md), "doc2md紀錄": log_path,
            "lossy_kinds": info.lossy_kinds, "ocr_used": info.front.get("ocr_used")}
     if "garbled_text_layer" in info.lossy_kinds:
         out["警告"] = "PDF 文字層是亂碼(garbled_text_layer),內容可能不可靠;必要時用 --force-ocr 重轉"
     if info.body_chars < MIN_BODY_CHARS:
-        out["捨棄候選"] = "轉不出內文(OCR 或語音辨識沒有文字)"
+        out["捨棄候選"] = (LOOP_ONLY if info.loop_markers else NO_TEXT)
     if kind == "transcript":
         # 長段空白只是摘要裡的提示:量不出來(例如 afconvert 開不了影片檔)不可連累已轉好的逐字稿
         try:
@@ -216,6 +219,11 @@ def _result_for(cfg: Config, kind: str, path: Path) -> dict:
             out["警告"] = f"無法分析音訊的長段空白:{e}"
         out["未命名講者"] = info.unnamed_speakers
         out["機器辨識講者"] = info.machine_named
+        if info.format_version > doc2md.TRANSCRIPT_FORMAT_VERSION:
+            # 核心或電腦版先換了新格式、wiki-feeder 還沒跟上:照舊規則讀可能讀錯,不擋、但要明講(§4.2)
+            newer = (f"逐字稿格式第 {info.format_version} 版,比這版 wiki-feeder 認得的第 "
+                     f"{doc2md.TRANSCRIPT_FORMAT_VERSION} 版新:捨棄候選與未命名講者可能判斷錯,請更新 wiki-feeder")
+            out["警告"] = f"{out['警告']};{newer}" if out.get("警告") else newer
     return out
 
 
@@ -231,7 +239,7 @@ def _without_scribe2md(cfg: Config, path: Path, base: dict) -> dict:
     if ext in doc2md.EPUB_EXTS:
         md = _epub_text(path, cfg.md_cache)
         out = {**base, "md": str(md), "直接讀原件": "沒裝 scribe2md,EPUB 由 wiki-feeder 抽成純文字"}
-        if doc2md.parse_md(md).body_chars < MIN_BODY_CHARS:
+        if doc2md.parse_md(md, transcript=False).body_chars < MIN_BODY_CHARS:
             out["捨棄候選"] = "轉不出內文(EPUB 裡沒有文字)"
         return out
     return {**base, "md": None, "直接讀原件": "沒裝 scribe2md,攝入時直接讀原件"}

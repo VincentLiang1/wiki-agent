@@ -418,7 +418,7 @@ def test_parse_md_counts_only_real_text(tmp_path):
         "![第 1 頁](a.assets/img-0001.png)\n\n〔以下文字由第 1 頁的整頁影像辨識而來,可能有誤〕\n\n八個字的內文在這\n",
         encoding="utf-8",
     )
-    info = parse_md(md)
+    info = parse_md(md, transcript=False)
     assert info.lossy_kinds == ["scanned_page", "ocr"]
     assert info.front["ocr_used"] is True
     assert info.body_chars == 8
@@ -432,7 +432,119 @@ def test_transcript_with_only_speaker_headers_is_empty(tmp_path):
         "## 講者辨識診斷\n\n| 講者 | 發言輪次 | 總時長 | 群內一致性 | 名字來源 |\n",
         encoding="utf-8",
     )
-    assert parse_md(md).body_chars == 0
+    assert parse_md(md, transcript=True).body_chars == 0
+
+
+@pytest.mark.parametrize("header, heading, none, auto", [
+    ("**Speaker 1** [identity unsure · crosstalk] (00:00:05)", "## Speaker diagnostics", "unnamed", "auto-named"),
+    ("**讲者 1**〔身份存疑・多人交错〕(00:00:05)", "## 讲者识别诊断", "未命名", "机器识别"),
+])
+def test_english_and_simplified_transcripts_are_read(tmp_path, header, heading, none, auto):
+    """英文、簡中介面的逐字稿(朋友版)不靠約定樣本也要測得到——約定測試在 Windows、公開版、沒有 iPhone repo
+    的 Mac 一律跳過:只有講者標頭 → 0 字;診斷表最後一欄的未命名／機器辨識都認得(字串照核心 vocab.py)。"""
+    name = header.split("**")[1]
+    md = tmp_path / "t.md"
+    md.write_text(
+        f"---\nlossy_kinds: []\nformat_version: 2\n---\n\n# 錄音\n\n{header}\n\n{heading}\n\n"
+        "| A | B | C | D | E |\n| --- | ---: | ---: | ---: | --- |\n"
+        f"| {name} | 1 | 00:00:05 | 0.80 | {none} |\n| Bob | 1 | 00:00:03 | 0.70 | {auto} |\n",
+        encoding="utf-8",
+    )
+    info = parse_md(md, transcript=True)
+    assert (info.body_chars, info.unnamed_speakers, info.machine_named) == (0, [name], ["Bob"])
+
+
+def test_english_ui_tool_notes_are_not_text(tmp_path):
+    """英文介面的核心(2026-11-07 起)工具註記寫半形 […]:空白掃描照樣 0 字、會被標捨棄候選;
+    裡面還有方括號的不是註記([[連結]]、[a][1] 照算)。"""
+    md = tmp_path / "scan.md"
+    md.write_text(
+        "---\nlossy_kinds: [scanned_page, ocr]\nocr_used: true\n---\n\n# scan\n\n"
+        "[This document has 1 page(s). 1 of them had no extractable text layer, so whole-page text "
+        "recognition (OCR) was used instead]\n\n## Page 1\n\n![Page 1](scan.assets/img-0001.png)\n\n"
+        "[Page 1 has no extractable text layer, and no text was recognized either]\n",
+        encoding="utf-8",
+    )
+    assert parse_md(md, transcript=False).body_chars == 0
+    links = tmp_path / "links.md"
+    links.write_text("# notes\n\n[[Weekly sync]]\n\n[a][1]\n", encoding="utf-8")
+    assert parse_md(links, transcript=False).body_chars == len("[[Weeklysync]][a][1]")
+
+
+def test_transcript_loop_markers_are_not_speech(tmp_path):
+    """跳針標記(轉錄卡在重複迴圈、那段內容已略去)三語都不算內文:只有標記的雜訊錄音 → 0 字(字串照核心 vocab.py)。"""
+    md = tmp_path / "noise.md"
+    md.write_text(
+        "---\nlossy_kinds: [transcript_gap]\nformat_version: 2\n---\n\n# 錄音\n\n**講者 1** (00:00:00)\n"
+        "(此段轉錄異常:模型在 00:00~05:00 輸出重複雜訊,內容不可信、已略去;需要這段內容請對照原始錄音)\n\n"
+        "**讲者 1** (00:05:00)\n"
+        "(此段转录异常:模型在 05:00~06:00 输出重复杂音,内容不可信、已略去;需要这段内容请对照原始录音)\n\n"
+        "**Speaker 1** [identity unsure] (00:06:00)\n"
+        '(Transcription problem: from 06:00 to 07:00 the model kept repeating "Thank". This part is unreliable '
+        "and was left out; check the original recording if you need it)\n",
+        encoding="utf-8",
+    )
+    info = parse_md(md, transcript=True)
+    assert (info.body_chars, info.loop_markers) == (0, 3)
+
+
+def test_real_text_that_starts_like_a_highlight_legend_is_kept(tmp_path):
+    """重點說明行要整句一樣才扣(同電腦版 vocab.is_legend):整句的說明行 0 字,碰巧這樣開頭的真內容照算。"""
+    legend = tmp_path / "legend.md"
+    legend.write_text("# 錄音\n\n> 〔重點〕= 開會時有人在現場按了「重點」的發言，整理時請優先處理。\n", encoding="utf-8")
+    assert parse_md(legend, transcript=True).body_chars == 0
+    memo = tmp_path / "memo.md"
+    memo.write_text("# 會議紀錄\n\n> 〔重點〕= 本季營收目標上調至三億元\n", encoding="utf-8")
+    assert parse_md(memo, transcript=False).body_chars == len(">〔重點〕=本季營收目標上調至三億元")
+
+
+def test_documents_are_never_cut_at_a_diagnostics_heading(tmp_path):
+    """講者辨識診斷段只在逐字稿裡找、而且要在行首(§4.2):英文說明書第一節叫 Speaker diagnostics、
+    ### 的同名小節、內文提到的字樣,後面的內文都照算,不可整份被誤標捨棄候選。"""
+    manual = tmp_path / "manual.md"
+    manual.write_text("---\nlossy_kinds: []\n---\n\n# Manual\n\n## Speaker diagnostics and self-test\n\n"
+                      "Hold the power button for ten seconds.\n", encoding="utf-8")
+    assert parse_md(manual, transcript=False).body_chars == len("Holdthepowerbuttonfortenseconds.")
+    talk = tmp_path / "talk.md"
+    talk.write_text("# 錄音\n\n**講者 1** (00:00:00)\n請看 ## 講者辨識診斷 那一節\n\n"
+                    "## 講者辨識診斷\n\n| 講者 | 發言輪次 | 總時長 | 群內一致性 | 名字來源 |\n"
+                    "| --- | ---: | ---: | ---: | --- |\n| 講者 1 | 1 | 00:00:05 | 0.80 | 未命名 |\n", encoding="utf-8")
+    info = parse_md(talk, transcript=True)
+    assert (info.body_chars, info.unnamed_speakers) == (len("請看##講者辨識診斷那一節"), ["講者 1"])
+
+
+def _convert_md(ccfg, monkeypatch, text: str) -> dict:
+    """doc2md 換成直接寫出這份 md、長段空白不量,轉一個錄音:回傳 sidecar 的轉寫欄。"""
+    from wiki_feeder import doc2md
+
+    def fake_run(cmd, src, out_dir, timeout):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        md = out_dir / "t.md"
+        md.write_text(text, encoding="utf-8")
+        return md, "/tmp/fake-doc2md.log"
+
+    monkeypatch.setattr(doc2md, "run", fake_run)
+    monkeypatch.setattr(silence, "analyze", lambda *a, **k: (2.0, []))
+    p = _drop(ccfg, "會議.m4a", b"not-really-audio")
+    convert(ccfg)
+    return _side(p)
+
+
+@pytest.mark.parametrize("version, warned", [(3, True), (2, False)])
+def test_newer_transcript_format_is_warned(ccfg, monkeypatch, version, warned):
+    """核心或電腦版先換了新的逐字稿格式、wiki-feeder 還沒跟上:照舊規則讀可能讀錯,轉寫欄加一句警告、照常攝入
+    (同電腦版 vocab.check_readable 的「不硬讀」,§4.2)。"""
+    side = _convert_md(ccfg, monkeypatch, f"---\nlossy_kinds: []\nformat_version: {version}\n---\n\n# 錄音\n\n"
+                                          "**講者 1** (00:00:00)\n今天討論預算。\n")
+    assert ("格式第 3 版" in (side.get("警告") or "")) is warned
+
+
+def test_loop_only_transcript_says_so_in_the_discard_reason(ccfg, monkeypatch):
+    """只剩跳針標記的錄音照樣是捨棄候選,但理由要說是轉錄卡住(可能真的有人講話,要對照原音重轉),
+    不是「沒有文字」——人照理由決定要不要刪(§4.3)。"""
+    side = _convert_md(ccfg, monkeypatch, "---\nlossy_kinds: [transcript_gap]\n---\n\n# 錄音\n\n**講者 1** (00:00:00)\n"
+                       "(此段轉錄異常:模型在 00:00~05:00 輸出重複雜訊,內容不可信、已略去;需要這段內容請對照原始錄音)\n")
+    assert "重複迴圈" in side["捨棄候選"]
 
 
 
