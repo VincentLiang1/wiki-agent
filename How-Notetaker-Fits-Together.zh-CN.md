@@ -1,0 +1,53 @@
+# 会议助手全套服务架构
+
+[English](How-Notetaker-Fits-Together.md) | [繁體中文](How-Notetaker-Fits-Together.zh-TW.md) | **简体中文**
+
+**从手机上的会议助手 App 开始,加上会议助手电脑版,再由 Wiki Agent 串起来,最后做到 LLM Wiki 自动化。分三层,要多少装多少。**
+
+```mermaid
+flowchart TD
+    App["会议助手 App<br/>iPhone · Android"]
+    Desktop["会议助手电脑版<br/>Windows · Mac<br/>(内含同一颗 Scribe2MD 核心)"]
+    Box["_WikiBox<br/>iCloud 云盘的收件文件夹"]
+    Agent["Wiki Agent + Scribe2MD<br/>转文字、整理成笔记"]
+    Wiki["LLM Wiki<br/>你电脑上的知识库"]
+
+    App <-->|"声纹、名单同步"| Desktop
+    App -->|"按「发送」"| Box
+    Desktop -.->|"手动把 md 丢进去"| Box
+    Box -->|"电脑每分钟收件"| Agent
+    Agent -->|"写页、互相链接"| Wiki
+```
+
+## 第 1 层:只要手机
+
+- 录音、分出讲者、产生逐字稿
+- 不上网 AI 整理成会议记录草稿
+- 分享给同事,或交给 ChatGPT、Claude
+
+## 第 2 层:加上电脑版
+
+- 在电脑上录在线会议、转现成录音
+- Word、PDF、演示文稿转成 AI 好读的 md
+- 声纹与名单跟手机同步
+
+免费下载,Windows 与 Mac 都有:看〈[会议助手电脑版使用手册](https://github.com/VincentLiang1/notetaker-desktop/blob/main/README.zh-CN.md)〉(开头就是下载链接)。
+
+## 第 3 层:自动进知识库
+
+- 手机按「发送」,电脑上的 Wiki Agent 收件
+- 录音转文字,整理进你的 LLM Wiki
+- 跟旧数据连起来,越用越完整
+
+要一台常开的电脑与 Claude 付费账号(Pro 以上)。目前收件文件夹 `_WikiBox` 在 iCloud 云盘里:手机是 iPhone;电脑是 Windows 的话要装 iCloud for Windows。Wiki Agent 每分钟看一次收件文件夹。
+
+- 没听过 LLM Wiki?看〈[什么是 LLM Wiki](What-is-LLM-Wiki.zh-CN.md)〉
+- Wiki Agent 介绍与安装:[README](README.zh-CN.md)、[Mac 安装说明](Mac-Install-Guide.zh-CN.md)、[Windows 安装说明](Windows-Install-Guide.zh-CN.md)
+
+## Scribe2MD 是什么
+
+- 电脑版里负责转文字的核心
+- 只要转文件、或在 Claude Code 用 doc2md 技能,可以单独装
+- 装了电脑版就不用另装
+
+Wiki Agent 的安装程序会问要不要下载 Scribe2MD(约 1 GB,选装)。没装时文档与照片由 Claude 直接读,录音与视频要装了才处理。

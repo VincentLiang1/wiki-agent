@@ -82,7 +82,8 @@ def extract(files=EXTRACT) -> dict[str, str]:
 PUBLIC = REPO / "public"
 # 檔名與頁首比照 scribe2md(使用者 2026-10-23):X.md 英文、X.zh-TW.md 繁中、X.zh-CN.md 簡中;頁首 English | 繁體中文 | 简体中文
 DOCS = {"README.zh-TW.md": "README.zh-CN.md", "Mac-Install-Guide.zh-TW.md": "Mac-Install-Guide.zh-CN.md", "Windows-Install-Guide.zh-TW.md": "Windows-Install-Guide.zh-CN.md",
-        "What-is-LLM-Wiki.zh-TW.md": "What-is-LLM-Wiki.zh-CN.md"}   # 〈什麼是 LLM Wiki〉:會議助手 App 連過來(使用者 2026-10-24);簡中手修過「资料／数据」,重轉後看 diff
+        "What-is-LLM-Wiki.zh-TW.md": "What-is-LLM-Wiki.zh-CN.md",   # 〈什麼是 LLM Wiki〉:會議助手 App 連過來(使用者 2026-10-24);簡中手修過「资料／数据」,重轉後看 diff
+        "How-Notetaker-Fits-Together.zh-TW.md": "How-Notetaker-Fits-Together.zh-CN.md"}   # 〈會議助手全套服務架構〉:內容對齊 iOS 設定 › 關於(使用者 2026-11-09)
 
 
 # 說明文件專用的用詞修正(自動轉完才套,左邊寫自動轉出來的簡體):使用者只寫繁中,簡中那份一律由 --docs 整份重轉,
@@ -111,6 +112,9 @@ DOC_FIX = {
         # 資料(素材)≠ 數據;「数据在你自己手上」那句本來就是數據,不改
         "原始数据": "原始资料", "新数据": "新资料", "数据越多": "资料越多", "公开数据": "公开资料",
         "整理数据": "整理资料", "把数据丢进": "把资料丢进", "**数据要挑": "**资料要挑", "关的数据丢太": "关的资料丢太",
+    },
+    "How-Notetaker-Fits-Together.zh-CN.md": {
+        "Scribe2MD 内核": "Scribe2MD 核心",              # 同 iOS 的简中与本文其他处
     },
 }
 

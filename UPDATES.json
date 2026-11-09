@@ -1,5 +1,13 @@
 [
  {
+  "source": "0d322fa",
+  "date": "2026-11-09",
+  "needs_human": false,
+  "zh-Hant": "- 新增說明〈會議助手全套服務架構〉:一張架構圖講清楚手機上的會議助手 App、會議助手電腦版、Scribe2MD 與 Wiki Agent 怎麼串起來,分三層,要多少裝多少;README 開頭也連過去\n- 只改說明文件,你的電腦照舊運作,不必做任何事",
+  "zh-Hans": "- 新增说明〈会议助手全套服务架构〉:一张架构图讲清楚手机上的会议助手 App、会议助手电脑版、Scribe2MD 与 Wiki Agent 怎么串起来,分三层,要多少装多少;README 开头也链接过去\n- 只改说明文档,你的电脑照旧运作,不必做任何事",
+  "en": "- New guide, \"How Notetaker Fits Together\": one diagram showing how the Notetaker app on your phone, Notetaker Desktop, Scribe2MD and Wiki Agent connect, in three levels so you install only as much as you need; the README links to it near the top\n- Documentation only: your computer works as before, and there is nothing to do"
+ },
+ {
   "source": "b1c944c",
   "date": "2026-11-08",
   "needs_human": false,

@@ -17,6 +17,8 @@ You do just two things: **drop files** and **read the summary**. If something is
 
 > **Your files are never lost**: every move copies first and deletes the source only after the copy's content has been verified identical. If any step fails, the original stays where it is and is retried on the next round.
 
+wiki-agent is level 3 of the Notetaker family: the Notetaker app on your phone records and transcribes, Notetaker Desktop records and converts files on your computer, and wiki-agent files what they send into your knowledge base. For how the three fit together, see [How Notetaker Fits Together](How-Notetaker-Fits-Together.md).
+
 ## Requirements
 
 | | Mac | Windows |

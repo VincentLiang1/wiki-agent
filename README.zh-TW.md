@@ -15,6 +15,8 @@ wiki-agent 是一支在你電腦上常駐的小程式,替你照 Andrej Karpathy 
 
 > **檔案絕不會丟**:搬檔一律先複製、比對內容一致才刪來源;任何一步失敗就留著原檔,下一輪再試。
 
+wiki-agent 是「會議助手」全套的第 3 層:手機上的會議助手 App 負責錄音與逐字稿、會議助手電腦版負責在電腦上錄音與轉檔,wiki-agent 把它們送來的東西整理進你的知識庫。三者怎麼串起來見〈[會議助手全套服務架構](How-Notetaker-Fits-Together.zh-TW.md)〉。
+
 ## 需要什麼
 
 | | Mac | Windows |
