@@ -4,20 +4,7 @@
 
 **从手机上的会议助手 App 开始,加上会议助手电脑版,再由 Wiki Agent 串起来,最后做到 LLM Wiki 自动化。分三层,要多少装多少。**
 
-```mermaid
-flowchart TD
-    App["会议助手 App<br/>iPhone · Android"]
-    Desktop["会议助手电脑版<br/>Windows · Mac<br/>(内含同一颗 Scribe2MD 核心)"]
-    Box["_WikiBox<br/>iCloud 云盘的收件文件夹"]
-    Agent["Wiki Agent + Scribe2MD<br/>转文字、整理成笔记"]
-    Wiki["LLM Wiki<br/>你电脑上的知识库"]
-
-    App <-->|"声纹、名单同步"| Desktop
-    App -->|"按「发送」"| Box
-    Desktop -.->|"手动把 md 丢进去"| Box
-    Box -->|"电脑每分钟收件"| Agent
-    Agent -->|"写页、互相链接"| Wiki
-```
+![会议助手全套服务架构:会议助手 App 与电脑版同步声纹、名单;手机按「发送」或电脑版手动丢 md 到 iCloud 云盘的 _WikiBox,Wiki Agent + Scribe2MD 每分钟收件、转文字,写进你电脑上的 LLM Wiki](How-Notetaker-Fits-Together.zh-CN.svg)
 
 ## 第 1 层:只要手机
 

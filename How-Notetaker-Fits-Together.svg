@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 590" width="760" height="590" role="img" aria-labelledby="title" xml:lang="en" font-family="-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif">
+<title id="title">How Notetaker Fits Together</title>
+<style>
+.card{fill:#ffffff;stroke-width:1.5}
+.t{fill:#1f2328;font-weight:600;font-size:16px}
+.s{fill:#59636e;font-size:12.5px}
+.lbl{fill:#59636e;font-size:12px}
+.cap{font-weight:600;font-size:13px}
+.line{stroke:#8c959f;stroke-width:1.6;fill:none}
+.dash{stroke-dasharray:5 4}
+.head{fill:#8c959f}
+.k1{stroke:#0969da}.f1{fill:#0969da}
+.k2{stroke:#8250df}.f2{fill:#8250df}
+.k3{stroke:#1a7f37}.f3{fill:#1a7f37}
+.group{fill:#1a7f37;fill-opacity:.05;stroke:#1a7f37;stroke-opacity:.45;stroke-width:1.2}
+@media (prefers-color-scheme: dark){
+.card{fill:#151b23}
+.t{fill:#f0f6fc}
+.s,.lbl{fill:#9198a1}
+.line{stroke:#656c76}.head{fill:#656c76}
+.k1{stroke:#4493f8}.f1{fill:#4493f8}
+.k2{stroke:#ab7df8}.f2{fill:#ab7df8}
+.k3{stroke:#3fb950}.f3{fill:#3fb950}
+.group{fill:#3fb950;fill-opacity:.07;stroke:#3fb950;stroke-opacity:.5}
+}
+</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head"/></marker></defs>
+<rect x="20" y="190" width="720" height="380" rx="16" class="group"/>
+<text x="170.0" y="28" class="cap f1" text-anchor="middle">Level 1: Phone only</text>
+<text x="590.0" y="28" class="cap f2" text-anchor="middle">Level 2: Add Notetaker Desktop</text>
+<text x="380.0" y="216" class="cap f3" text-anchor="middle">Level 3: Automatic knowledge base</text>
+<rect x="30" y="40" width="280" height="100" rx="12" class="card k1"/>
+<text x="170.0" y="85.5" class="t" text-anchor="middle">Notetaker App</text>
+<text x="170.0" y="104.5" class="s" text-anchor="middle">iPhone · Android</text>
+<rect x="450" y="40" width="280" height="100" rx="12" class="card k2"/>
+<text x="590.0" y="76.0" class="t" text-anchor="middle">Notetaker Desktop</text>
+<text x="590.0" y="95.0" class="s" text-anchor="middle">Windows · Mac</text>
+<text x="590.0" y="114.0" class="s" text-anchor="middle">Includes the same Scribe2MD engine</text>
+<path d="M314 90.0 H446" class="line" marker-start="url(#a)" marker-end="url(#a)"/>
+<text x="380.0" y="65.0" class="lbl" text-anchor="middle">Voiceprints and</text>
+<text x="380.0" y="80.0" class="lbl" text-anchor="middle">lists sync</text>
+<path d="M170 140 V269.0 H228" class="line" marker-end="url(#a)"/>
+<text x="180" y="168" class="lbl" text-anchor="start">Tap Send</text>
+<path d="M590 140 V269.0 H532" class="line dash" marker-end="url(#a)"/>
+<text x="580" y="168" class="lbl" text-anchor="end">Drop md files in by hand</text>
+<rect x="230" y="234" width="300" height="70" rx="12" class="card k3"/>
+<text x="380.0" y="264.5" class="t" text-anchor="middle">_WikiBox</text>
+<text x="380.0" y="283.5" class="s" text-anchor="middle">Inbox folder in iCloud Drive</text>
+<path d="M380.0 304 V350" class="line" marker-end="url(#a)"/>
+<text x="392.0" y="333" class="lbl" text-anchor="start">Computer checks every minute</text>
+<rect x="200" y="352" width="360" height="76" rx="12" class="card k3"/>
+<text x="380.0" y="385.5" class="t" text-anchor="middle">Wiki Agent + Scribe2MD</text>
+<text x="380.0" y="404.5" class="s" text-anchor="middle">Transcribes and writes notes</text>
+<path d="M380.0 428 V476" class="line" marker-end="url(#a)"/>
+<text x="392.0" y="457" class="lbl" text-anchor="start">Writes linked pages</text>
+<rect x="230" y="478" width="300" height="70" rx="12" class="card k3"/>
+<text x="380.0" y="508.5" class="t" text-anchor="middle">LLM Wiki</text>
+<text x="380.0" y="527.5" class="s" text-anchor="middle">Knowledge base on your computer</text>
+</svg>

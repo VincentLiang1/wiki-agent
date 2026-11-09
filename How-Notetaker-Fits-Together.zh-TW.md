@@ -4,20 +4,7 @@
 
 **從手機上的會議助手 App 開始,加上會議助手電腦版,再由 Wiki Agent 串起來,最後做到 LLM Wiki 自動化。分三層,要多少裝多少。**
 
-```mermaid
-flowchart TD
-    App["會議助手 App<br/>iPhone · Android"]
-    Desktop["會議助手電腦版<br/>Windows · Mac<br/>(內含同一顆 Scribe2MD 核心)"]
-    Box["_WikiBox<br/>iCloud 雲碟的收件資料夾"]
-    Agent["Wiki Agent + Scribe2MD<br/>轉文字、整理成筆記"]
-    Wiki["LLM Wiki<br/>你電腦上的知識庫"]
-
-    App <-->|"聲紋、名單同步"| Desktop
-    App -->|"按「送出」"| Box
-    Desktop -.->|"手動把 md 丟進去"| Box
-    Box -->|"電腦每分鐘收件"| Agent
-    Agent -->|"寫頁、互相連結"| Wiki
-```
+![會議助手全套服務架構:會議助手 App 與電腦版同步聲紋、名單;手機按「送出」或電腦版手動丟 md 到 iCloud 雲碟的 _WikiBox,Wiki Agent + Scribe2MD 每分鐘收件、轉文字,寫進你電腦上的 LLM Wiki](How-Notetaker-Fits-Together.zh-TW.svg)
 
 ## 第 1 層:只要手機
 

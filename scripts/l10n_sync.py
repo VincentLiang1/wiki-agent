@@ -114,7 +114,7 @@ DOC_FIX = {
         "整理数据": "整理资料", "把数据丢进": "把资料丢进", "**数据要挑": "**资料要挑", "关的数据丢太": "关的资料丢太",
     },
     "How-Notetaker-Fits-Together.zh-CN.md": {
-        "Scribe2MD 内核": "Scribe2MD 核心",              # 同 iOS 的简中与本文其他处
+        "Together.zh-TW.svg": "Together.zh-CN.svg",      # 架構圖(scripts/overview_svg.py 產生)換成簡中那張
     },
 }
 

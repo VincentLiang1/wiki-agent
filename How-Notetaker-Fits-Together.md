@@ -4,20 +4,7 @@
 
 **Start with the Notetaker app on your phone, add Notetaker Desktop, and let Wiki Agent tie them together into an automated LLM Wiki. Three levels: install only as much as you need.**
 
-```mermaid
-flowchart TD
-    App["Notetaker App<br/>iPhone · Android"]
-    Desktop["Notetaker Desktop<br/>Windows · Mac<br/>(includes the same Scribe2MD engine)"]
-    Box["_WikiBox<br/>Inbox folder in iCloud Drive"]
-    Agent["Wiki Agent + Scribe2MD<br/>Transcribes and writes notes"]
-    Wiki["LLM Wiki<br/>Knowledge base on your computer"]
-
-    App <-->|"Voiceprints and lists sync"| Desktop
-    App -->|"Tap Send"| Box
-    Desktop -.->|"Drop md files in by hand"| Box
-    Box -->|"Computer checks every minute"| Agent
-    Agent -->|"Writes linked pages"| Wiki
-```
+![How Notetaker Fits Together: the Notetaker app and Notetaker Desktop sync voiceprints and lists; tapping Send on the phone, or dropping md files in from the desktop, puts files in the _WikiBox folder in iCloud Drive; Wiki Agent + Scribe2MD checks it every minute, transcribes, and writes linked pages into the LLM Wiki on your computer](How-Notetaker-Fits-Together.svg)
 
 ## Level 1: Phone only
 

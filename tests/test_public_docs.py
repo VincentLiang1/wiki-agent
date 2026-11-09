@@ -57,6 +57,13 @@ def test_each_guide_links_to_its_other_two_languages():
             assert all(f"]({other})" in _head(name) for other in trio if other != name), name
 
 
+def test_overview_shows_the_diagram_in_its_own_language():
+    """〈會議助手全套服務架構〉的架構圖是 SVG(2026-11-09 使用者嫌 Mermaid 醜),每種語言連自己那張。"""
+    for name in OVERVIEW:
+        svg = name[:-len(".md")] + ".svg"
+        assert f"]({svg})" in (PUBLIC / name).read_text(encoding="utf-8") and (PUBLIC / svg).is_file(), name
+
+
 def test_entry_files_and_guides_have_english_names():
     """朋友雙擊、執行的入口與說明的檔名一律英文(使用者 2026-10-22:多語系版本的安裝檔是中文檔名,
     看不懂中文的朋友找不到要點哪一個;比照 meeting-scribe-native)。內容照樣三種語言。"""

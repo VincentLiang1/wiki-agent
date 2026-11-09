@@ -1,5 +1,13 @@
 [
  {
+  "source": "db12c9a",
+  "date": "2026-11-09",
+  "needs_human": false,
+  "zh-Hant": "- 〈會議助手全套服務架構〉的架構圖重畫:分層標色、深色模式也看得清楚\n- 只改說明文件,你的電腦照舊運作,不必做任何事",
+  "zh-Hans": "- 〈会议助手全套服务架构〉的架构图重画:分层标色、深色模式也看得清楚\n- 只改说明文档,你的电脑照旧运作,不必做任何事",
+  "en": "- The diagram in \"How Notetaker Fits Together\" is redrawn: each level has its own color, and it reads well in dark mode too\n- Documentation only: your computer works as before, and there is nothing to do"
+ },
+ {
   "source": "0d322fa",
   "date": "2026-11-09",
   "needs_human": false,
