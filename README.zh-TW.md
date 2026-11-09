@@ -2,11 +2,11 @@
 
 [English](README.md) | **繁體中文** | [简体中文](README.zh-CN.md)
 
-**iPhone 按下記錄,知識庫自己長出一頁。**
+**手機按下記錄,知識庫自己長出一頁。**
 
 wiki-agent 是一支在你電腦上常駐的小程式,替你照 Andrej Karpathy 的「LLM Wiki」做法維護個人知識庫(沒聽過 LLM Wiki?看〈[什麼是 LLM Wiki](What-is-LLM-Wiki.zh-TW.md)〉):
 
-1. 你在 iPhone 上把錄音、白板照片、掃描件、Office 檔丟進 iCloud 雲碟的 `_WikiBox` 資料夾
+1. 你在手機上把錄音、白板照片、掃描件、Office 檔丟進雲端硬碟的 `_WikiBox` 資料夾(iPhone 用 iCloud 雲碟、Android 用 Google 雲端硬碟)
 2. 電腦上的 wiki-agent 每分鐘看一次:把檔案收進原件資料夾 `Raw_Sources`,錄音與文件先轉成文字(用 Scribe2MD,安裝程式可以幫你下載;選裝:沒裝時文件與照片由 Claude 直接讀,錄音與影片要裝了才處理)
 3. 用你自己的 Claude Code,照你知識庫裡的 `CLAUDE.md` 規則把它編進 `WIKI/Wiki_Pages/`:新建頁面或補進既有的頁、更新目錄 `index.md`
 4. 程式檢查過才記成一個版本(git,由程式代管,你不用學)。每天寄一封摘要信告訴你處理了什麼
@@ -22,7 +22,7 @@ wiki-agent 是「會議助手」全套的第 3 層:手機上的會議助手 App 
 | | Mac | Windows |
 | --- | --- | --- |
 | 電腦 | Apple 晶片的 Mac | Windows 10／11 |
-| 手機 | iPhone(用 iCloud 雲碟傳檔) | iPhone + 電腦裝 iCloud for Windows |
+| 手機 | iPhone(用 iCloud 雲碟傳檔)或 Android(電腦裝「Google 雲端硬碟電腦版」) | iPhone(電腦裝 iCloud for Windows)或 Android(電腦裝「Google 雲端硬碟電腦版」) |
 | Claude | 自己的 Claude 訂閱(Pro 或 Max),裝好 Claude Code 並登入 | 同左 |
 | 轉寫(選裝) | Scribe2MD,約 1 GB,安裝程式會問要不要下載 | 同左 |
 | 摘要信(可不設) | Gmail + 應用程式密碼 | 同左 |

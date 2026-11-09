@@ -315,7 +315,7 @@ def unsafe_out(cfg: Config, out: Path) -> Path | None:
     """輸出資料夾在收件匣、原件樹、知識庫裡(或包著它們)就回傳撞到的那一個:對照表含真名,
     放進收件匣會被收走、攝入(scribe2md-ios 的安裝腳本原本就擋 _WikiBox)。"""
     o = out.resolve()
-    guarded = [cfg.icloud_inbox, cfg.onedrive_inbox, cfg.pending_dir, *cfg.raw_roots,
+    guarded = [cfg.icloud_inbox, cfg.onedrive_inbox, cfg.gdrive_inbox, cfg.pending_dir, *cfg.raw_roots,
                *(rc.repo_dir for rc in cfg.repos), *(rc.raw_root for rc in cfg.repos)]
     for p in (p for p in guarded if p is not None):
         r = p.resolve()

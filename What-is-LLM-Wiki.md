@@ -104,8 +104,8 @@ When the user points out a misheard name or term on a meeting page, fix the page
 
 Building an LLM Wiki yourself takes a fair amount of learning. With these two programs, you just press one button:
 
-1. Notetaker on your iPhone records the meeting, turns it into a transcript, and you tap "Send"
-2. The transcript goes to your computer through iCloud
+1. Notetaker on your phone records the meeting, turns it into a transcript, and you tap "Send"
+2. The transcript goes to your computer through a cloud drive (iPhone: iCloud Drive; Android: Google Drive)
 3. Wiki Agent on your computer picks it up and asks Claude to file it into your knowledge base the LLM Wiki way
 4. You get a daily summary email telling you what was filed
 

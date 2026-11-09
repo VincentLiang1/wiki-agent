@@ -4,10 +4,14 @@
 
 照順序做,大約 30～40 分鐘(大多是等下載)。每一步都寫了「在哪裡、按什麼、會看到什麼」;畫面跟這裡寫的不一樣,就停下來把畫面拍給幫你裝的人看。
 
-## 0. 先確認 iCloud 雲碟開著
+## 0. 先準備收件的雲端硬碟
 
-1. 左上角  → **系統設定** → 最上面點**你的名字** → **iCloud** → **iCloud 雲碟**,開關要是開的(和 iPhone 登入同一個 Apple 帳號)
-2. 打開 **Finder**,左邊欄看得到 **iCloud 雲碟** 就對了
+手機送出的檔會先到雲端硬碟裡的收件資料夾 `_WikiBox`。用哪一個看你的手機(兩種都用就兩個都做):
+
+- **iPhone → iCloud 雲碟**:左上角  → **系統設定** → 最上面點**你的名字** → **iCloud** → **iCloud 雲碟**,開關要是開的(和 iPhone 登入同一個 Apple 帳號);打開 **Finder**,左邊欄看得到 **iCloud 雲碟** 就對了
+- **Android → Google 雲端硬碟**:到 <https://www.google.com/drive/download/> 下載安裝「Google 雲端硬碟電腦版」,登入和手機同一個 Google 帳號(macOS 問要不要允許系統延伸功能時按允許);Finder 左邊欄出現 **Google Drive** 就對了。之後在 Finder 對「我的雲端硬碟」裡的 `_WikiBox` 按右鍵 → **可離線使用**(安裝程式建好資料夾之後再做)
+
+會議助手電腦版也可以把檔送進來:Mac 上首選 iCloud 雲碟,OneDrive、Google 雲端硬碟也可以。
 
 ## 1. 打開「終端機」
 
@@ -75,7 +79,7 @@
 | 【知識庫】WIKI 資料夾 | (還沒有才會問)直接 Enter,問要不要建立再 Enter。`WIKI` 是知識庫本體,放規則檔 `CLAUDE.md` 與 AI 整理好的筆記;旁邊並排的 `Raw_Sources` 放原始資料。資料夾長什麼樣子見〈[什麼是 LLM Wiki](What-is-LLM-Wiki.zh-TW.md)〉的「知識庫長什麼樣子?」 |
 | 【原件資料夾】 | (還沒有才會問)Enter(WIKI 旁邊的 `Raw_Sources`) |
 | ⚠ ……在 iCloud 雲碟(或 OneDrive、Dropbox……)裡 | 知識庫或原件資料夾放在同步資料夾裡才會出現。**不要放在 OneDrive、iCloud 雲碟、Dropbox、Google Drive 這類同步資料夾**(含被同步的「文件」「桌面」):檔案可能只留在雲端、別台裝置同時改會冒出衝突副本,知識庫的版本紀錄被同步也會壞。直接 Enter 換一個位置(建議家目錄的 `LLMWiki`);已經有的知識庫要自己搬過去再重跑安裝。堅持要放:打 `2`,看完後果打 `yes`,版本紀錄(git)改放在這台電腦的 wiki-feeder 資料夾、不放在同步資料夾——衝突副本、只在雲端的檔不會因此消失 |
-| 【收件匣】 | Enter(iCloud 雲碟裡的 `_WikiBox`);問「還沒有,要建立嗎?」再 Enter |
+| 【收件匣】會議助手送出的檔放在雲端硬碟的收件資料夾…… | 先看它印的說明。「要收 iCloud 雲碟的檔嗎?」用 iPhone 就 Enter(找得到 iCloud 雲碟時預設要收);「要收 OneDrive／Google 雲端硬碟的檔嗎?」預設不收,用 Android 的在 Google 雲端硬碟那題打 **y**。每個要收的,資料夾 Enter(各自的 `_WikiBox`)、問「還沒有,要建立嗎?」再 Enter。可以選好幾個,至少一個;沒選的不會去看 |
 | 【聲紋同步資料夾】有做安裝說明第 7 節(手機與電腦共用聲紋與名詞對照表)嗎? | 沒做第 7 節就 Enter(預設 n)。做了就 **y**,再 Enter 接受建議的 `_ScribeSync`(跟 `_WikiBox` 同一層),或貼上你建的資料夾;選到 `_WikiBox`、原件資料夾、知識庫裡面的會被擋下來重問 |
 | 要請 Claude 建好規則檔與目錄索引嗎? | (新的知識庫才會問)Enter。Claude 會花 1～3 分鐘寫好 `CLAUDE.md` 與目錄 `index.md`,用的是你的 Claude 額度 |
 | 要在 CLAUDE.md 最後補上「版本紀錄由 wiki-feeder 代管」嗎? | Enter(要)。原本的規則不會被改,只在最後加一節 |
@@ -83,22 +87,22 @@
 | 【轉寫】 | 已經有 Scribe2MD 會顯示「找到 Scribe2MD …」直接過。沒有會問「要下載安裝 Scribe2MD 嗎?」:回 **y** 下載(約 1 GB,會顯示進度);**直接 Enter(預設 n)跳過** |
 | 【摘要信】寄件的 Gmail | 預設是你 Claude 登入的 Gmail;要用別的就打上去;不寄信就輸入 `-` |
 | Gmail 的應用程式密碼 | 貼上第 4 步那 16 個字(**打字時畫面不會顯示**,貼上後直接按 Enter)。接著會寄一封測試信,手機收到就對了 |
-| 讀得到收件匣嗎 | 自動。看到 `iCloud	可讀` 就對了 |
+| 讀得到收件匣嗎 | 自動。選了的每一個都看到 `可讀`(例如 `iCloud	可讀`、`Google Drive	可讀`)就對了 |
 | 裝排程 | 自動。看到三行 `…:已裝好`(第三行是每 3 分鐘的簡易看門狗:某一輪卡住、排程沒在跑時寫進摘要信;也負責重啟卡住的 iCloud) |
 
 ### 5-3. 允許讀取(一定要做)
 
-排程在背景跑,macOS 要你允許它讀 iCloud 雲碟。終端機說「準備好了按 Enter」時按 Enter:
+排程在背景跑,macOS 要你允許它讀收件匣所在的雲端硬碟。終端機說「準備好了按 Enter」時按 Enter:
 
 1. 畫面會跳出「“wiki-agent”想要取用 iCloud 雲碟中的檔案」的視窗,按**允許**。這個允許也讓 wiki-agent 讀得到 iCloud 的同步狀態:它每 15 分鐘重啟一次這台 Mac 的 iCloud 同步程式(每次停幾秒)——Mac 的 iCloud 偶爾會卡住,手機傳上去了、這台卻一直沒下載,重啟才會好
-2. 知識庫放在「文件」或「桌面」底下的話,會再跳一次,一樣按**允許**
+2. 選了 Google 雲端硬碟或 OneDrive 的,會再跳一次「想要取用 Google Drive(或 OneDrive)中的檔案」;知識庫放在「文件」或「桌面」底下的話也會再跳一次,一樣按**允許**
 3. 看到 `✓ launchd 底下讀得到收件匣` 就完成了;說讀不到的話,照「出狀況時」的「讀不到收件匣」打開開關,再試一次
 
 最後看到 `✓ 安裝完成` 就可以關掉終端機。
 
 ## 6. 確認真的在動
 
-1. 在 iPhone 打開 **檔案** App → **iCloud 雲碟** → **_WikiBox**,隨便丟一個檔進去(例如用「語音備忘錄」分享一段錄音、或拍一張白板照存到這裡)
+1. 在 iPhone 打開 **檔案** App → **iCloud 雲碟** → **_WikiBox**,隨便丟一個檔進去(例如用「語音備忘錄」分享一段錄音、或拍一張白板照存到這裡)。用 Android 的:會議助手 App → **設定** → **送出資料夾**選 Google 雲端硬碟裡的 `_WikiBox`,再送出一場會議
 2. 等幾分鐘(錄音越長越久)。在 Mac 的 Finder 打開家目錄的 `LLMWiki/WIKI/Wiki_Pages`(或你選的知識庫),會多出一頁;原檔被歸到 `Raw_Sources` 底下的主題資料夾
 3. 有設摘要信的話,會收到一封「wiki-feeder 攝入摘要」
 
@@ -107,6 +111,8 @@
 ## 7. (選做)手機與電腦共用聲紋與名詞對照表
 
 在 iPhone App「會議助手」、Mac 的會議助手電腦版命名過的人,另一台也認得。這是這兩個 App 的功能(會議助手電腦版到 <https://github.com/VincentLiang1/notetaker-desktop/releases/latest> 下載;第 3 節的 Scribe2MD 沒有這個功能),wiki-agent 不用設定;每一台都選**同一個 iCloud 雲碟裡的資料夾**就好。
+
+用 Android 的:下面的 **iCloud 雲碟** 一律換成 **Google 雲端硬碟**(「我的雲端硬碟」最上層),手機選 Google 雲端硬碟裡的 `_ScribeSync`。
 
 1. Finder 打開 **iCloud 雲碟**,在最上層新增資料夾 `_ScribeSync`(右鍵 → **新增檔案夾**)。⚠️ **不可以放在 `_WikiBox` 裡面**(那裡的檔會被送進知識庫,聲紋與真名就跟著進去)
 2. 對 `_ScribeSync` 按右鍵 → **永遠保留在此裝置上**(沒有這一項就跳過)
@@ -154,6 +160,7 @@ Claude 會改正頁面,同時把這條記進知識庫的名詞校正表(`memory/
 
 - **信的主旨開頭是「🚨 需要處理」**:打開終端機,打 `cd ~/wiki-agent && claude`,把那封信整封貼給 Claude,請它照 wiki-agent 的規則處理
 - **「Claude Code 沒登入或登入過期」**:終端機打 `claude` 重新登入,下一輪就會自己接著做
-- **讀不到收件匣**:多半是當初按了「不允許」:左上角  → **系統設定** → **隱私權與安全性** → **檔案與檔案夾** → 找到 **wiki-agent**,把 iCloud 雲碟(與「文件」「桌面」)的開關打開,再雙擊一次 wiki-agent 重新檢查(用終端機那一行裝的,是完整磁碟取用權限沒加或被關掉)
+- **讀不到收件匣**:多半是當初按了「不允許」:左上角  → **系統設定** → **隱私權與安全性** → **檔案與檔案夾** → 找到 **wiki-agent**,把收件匣所在的雲端硬碟(iCloud 雲碟、Google Drive、OneDrive;與「文件」「桌面」)的開關打開,再雙擊一次 wiki-agent 重新檢查(用終端機那一行裝的,是完整磁碟取用權限沒加或被關掉)
+- **Android 的會議助手選不到 Google 雲端硬碟**:手機上的「Google 雲端硬碟」App 被停用時,選資料夾的畫面完全不會列出雲端硬碟。到手機的設定 → 應用程式 → 雲端硬碟 → **啟用**,再選一次
 - **不想讓 wiki-agent 重啟 iCloud 同步程式**:用「文字編輯」打開 `~/Library/Application Support/wiki-feeder/config.toml`,在 `[inbox]` 那段加一行 `icloud_restart = false`,存檔後雙擊一次 wiki-agent。紀錄在同一個資料夾的 `logs/icloud.log`
 - **不要自己在知識庫裡執行 git**(包括請 Claude 幫你 commit):程式只接受它自己驗證過的版本,多一筆就會停下來等人

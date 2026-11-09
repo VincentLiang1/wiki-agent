@@ -391,3 +391,61 @@ def test_install_bat_asks_the_same_language_question_before_anything_else():
     assert 'set "WIKI_AGENT_LANG=%WL%"' in code and m.LANG_ENV == "WIKI_AGENT_LANG"
     asked = [ln for ln in code if ln.startswith('if "%LA%"==')]
     assert asked == ['if "%LA%"=="1" set "WL=zh-Hant"', 'if "%LA%"=="2" set "WL=zh-Hans"', 'if "%LA%"=="3" set "WL=en"']
+
+
+# --- 收件匣可選 iCloud／OneDrive／Google 雲端硬碟(使用者 2026-11-09,spec §3.1) ---
+
+def test_only_chosen_inboxes_are_written_so_the_others_are_not_watched(tmp_path):
+    """沒選的雲端硬碟不寫進設定檔:程式不看它,也不會因為讀不到寄警示。"""
+    m = _mod()
+    a = {k: v for k, v in ANSWERS.items() if k != "icloud"}
+    a["gdrive"] = r"G:\我的雲端硬碟\_WikiBox"
+    text = m.render_config(a)
+    assert "gdrive = " in text and "icloud = " not in text and "onedrive = " not in text
+    cfg = m.write_config(text, tmp_path)
+    assert cfg.gdrive_inbox == Path(a["gdrive"]) and cfg.icloud_inbox is None and cfg.onedrive_inbox is None
+
+
+def test_ask_inboxes_defaults_to_the_platform_first_choice_and_can_add_more(tmp_path, monkeypatch):
+    """Mac:iCloud 雲碟找得到就預設要收(Enter),OneDrive 預設不收,Google 雲端硬碟打 y 加收;預設資料夾是各自的 _WikiBox。"""
+    m = _mod()
+    icloud, gd = tmp_path / "icloud", tmp_path / "GoogleDrive-a" / "我的雲端硬碟"
+    icloud.mkdir()
+    gd.mkdir(parents=True)
+    answers = iter(["", "", "", "", "y", "", ""])       # iCloud 要(預設)、路徑預設、建立;OneDrive 不要;Drive 要、路徑預設、建立
+    monkeypatch.setattr("builtins.input", lambda p="": next(answers))
+    got = m.ask_inboxes({"icloud": icloud, "onedrive": None, "gdrive": gd}, windows=False)
+    assert got == {"icloud": str(icloud / "_WikiBox"), "gdrive": str(gd / "_WikiBox")}
+    assert (icloud / "_WikiBox").is_dir() and (gd / "_WikiBox").is_dir()
+
+
+def test_ask_inboxes_needs_at_least_one(tmp_path, monkeypatch, capsys):
+    m = _mod()
+    od = tmp_path / "OneDrive"
+    od.mkdir()
+    answers = iter(["n", "n", "n", "", "", "", "", ""])   # 第一次三個都不要 → 再問一次:OneDrive(Windows 首選)要、另兩個不要
+    monkeypatch.setattr("builtins.input", lambda p="": next(answers))
+    monkeypatch.setattr(m.subprocess, "run", lambda *a, **k: None)   # attrib +P
+    got = m.ask_inboxes({"icloud": None, "onedrive": od, "gdrive": None}, windows=True)
+    assert got == {"onedrive": str(od / "_WikiBox")}
+    assert "至少要收一個" in capsys.readouterr().out
+
+
+def test_find_clouds_windows_reads_onedrive_env_and_old_google_drive_folder(tmp_path):
+    m = _mod()
+    (tmp_path / "OneDrive").mkdir()
+    (tmp_path / "Google Drive" / "My Drive").mkdir(parents=True)
+    got = m.find_clouds_windows(tmp_path, {"OneDrive": str(tmp_path / "OneDrive")}, {})
+    assert got["onedrive"] == tmp_path / "OneDrive" and got["gdrive"] == tmp_path / "Google Drive" / "My Drive"
+    assert got["icloud"] is None
+
+
+def test_scribe_sync_with_only_a_google_drive_inbox(tmp_path, monkeypatch):
+    """Android 的朋友沒有 iCloud:同步資料夾預設放在 Drive 的收件匣旁邊,也不可跟它重疊。"""
+    m = _mod()
+    gd = tmp_path / "My Drive"
+    (gd / "_WikiBox").mkdir(parents=True)
+    a = {"gdrive": str(gd / "_WikiBox"), "wiki": str(tmp_path / "W"), "raw": str(tmp_path / "R")}
+    answers = iter(["y", str(gd / "_WikiBox" / "s"), "", ""])
+    monkeypatch.setattr("builtins.input", lambda p="": next(answers))
+    assert m.ask_scribe_sync(a) == str(gd / m.SCRIBE_SYNC_DIR)

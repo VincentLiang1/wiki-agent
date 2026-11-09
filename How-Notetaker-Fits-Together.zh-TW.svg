@@ -44,7 +44,7 @@
 <text x="580" y="168" class="lbl" text-anchor="end">手動把 md 丟進去</text>
 <rect x="230" y="234" width="300" height="70" rx="12" class="card k3"/>
 <text x="380.0" y="264.5" class="t" text-anchor="middle">_WikiBox</text>
-<text x="380.0" y="283.5" class="s" text-anchor="middle">iCloud 雲碟的收件資料夾</text>
+<text x="380.0" y="283.5" class="s" text-anchor="middle">雲端硬碟的收件資料夾</text>
 <path d="M380.0 304 V350" class="line" marker-end="url(#a)"/>
 <text x="392.0" y="333" class="lbl" text-anchor="start">電腦每分鐘收件</text>
 <rect x="200" y="352" width="360" height="76" rx="12" class="card k3"/>

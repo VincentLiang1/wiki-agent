@@ -70,6 +70,7 @@ def _only(cfg: Config, names: set[str]) -> Config:
         cfg,
         icloud_inbox=cfg.icloud_inbox if "icloud" in names else None,
         onedrive_inbox=cfg.onedrive_inbox if "onedrive" in names else None,
+        gdrive_inbox=cfg.gdrive_inbox if "gdrive" in names else None,
         futures=cfg.futures if "futures" in names else None,
     )
 
@@ -98,7 +99,7 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     # 收件落點:使用者本人是 Raw_Sources/_待處理,朋友版是原件樹的收件區(新裝的叫 _Inbox);讀不到設定檔時寫新名
     pend = cfg.pending_dir if cfg else Path("Raw_Sources") / INTAKE
     c = sub.add_parser("collect", help=L("從三個收件匣取件到 {dir}/", dir=f"{pend.parent.name}/{pend.name}"))
-    c.add_argument("--only", help=L("只跑部分入口,逗號分隔:icloud,onedrive,futures"))
+    c.add_argument("--only", help=L("只跑部分入口,逗號分隔:icloud,onedrive,gdrive,futures"))
     c.add_argument("--list", action="store_true", help=L("只列出雲端收件匣的候選檔,不搬、不碰 FUTURES"))
     c.add_argument("--dirs", action="store_true", help=L("與 --list 一起用:每個知識庫與原件資料夾也各試讀一次"))
     sub.add_parser("convert", help=L("把 {dir}/ 裡取到的檔轉寫／OCR 成 md", dir=pend.name))

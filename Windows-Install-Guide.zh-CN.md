@@ -4,11 +4,14 @@
 
 照顺序做,大约 30～40 分钟(大多是等下载)。画面跟这里写的不一样,就停下来把画面拍给帮你装的人看。
 
-## 1. 装 iCloud for Windows
+## 1. 装收件的云端硬盘
 
-1. 开始功能表打开 **Microsoft Store**,搜索 **iCloud**,安装
-2. 打开 iCloud,登录和 iPhone 同一个 Apple 账号,勾选 **iCloud 云盘**,按**套用**
-3. 打开文件总管,左边栏看得到 **iCloud 云盘**(`C:\Users\<你的名字>\iCloudDrive`)就对了
+手机发送的文件会先到云端硬盘里的收件文件夹 `_WikiBox`。用哪一个看你的手机(两种都用就两个都装):
+
+- **iPhone → iCloud for Windows**:开始功能表打开 **Microsoft Store**,搜索 **iCloud**,安装;打开 iCloud,登录和 iPhone 同一个 Apple 账号,勾选 **iCloud 云盘**,按**套用**;文件总管左边栏看得到 **iCloud 云盘**(`C:\Users\<你的名字>\iCloudDrive`)就对了
+- **Android → Google 云端硬盘电脑版**:到 <https://www.google.com/drive/download/> 下载安装,登录和手机同一个 Google 账号;文件总管出现 **Google Drive** 磁盘(通常是 `G:`,里面有「我的云端硬盘」)就对了
+
+会议助手电脑版也可以把文件送进来:Windows 上首选 OneDrive(Windows 内置),iCloud 云盘、Google 云端硬盘也可以。
 
 ## 2. 装 Claude Code 并登录
 
@@ -64,7 +67,7 @@
 | 【知识库】WIKI 文件夹 | (还没有才会问)直接 Enter,问要不要创建再 Enter。`WIKI` 是知识库本体,放规则文件 `CLAUDE.md` 与 AI 整理好的笔记;旁边并排的 `Raw_Sources` 放原始数据。文件夹长什么样子见〈[什么是 LLM Wiki](What-is-LLM-Wiki.zh-CN.md)〉的「知识库长什么样子?」 |
 | 【原件文件夹】 | (还没有才会问)Enter(WIKI 旁边的 `Raw_Sources`);新的知识库会问「还没有,要创建吗?」再 Enter |
 | ⚠ ……在 iCloud 云盘(或 OneDrive、Dropbox……)里 | 知识库或原件文件夹放在同步文件夹里才会出现。**不要放在 OneDrive、iCloud 云盘、Dropbox、Google Drive 这类同步文件夹**(含被同步的「文档」「桌面」;开了 OneDrive 备份时它们的实际位置在 `C:\Users\<账号>\OneDrive\` 底下,跟 `C:\Users\<账号>\Documents` 是两个不同的文件夹。知识库在哪里,在知识库文件夹里点文件总管的网址列,看完整路径有没有 `OneDrive`):文件可能只留在云端、别台设备同时改会冒出冲突副本,知识库的版本记录被同步也会坏。直接 Enter 换一个位置(建议家目录的 `LLMWiki`);已经有的知识库要自己搬过去再重跑安装。坚持要放:打 `2`,看完后果打 `yes`,版本记录(git)改放在这台电脑的 wiki-feeder 文件夹、不放在同步文件夹——冲突副本、只在云端的文件不会因此消失 |
-| 【收件箱】 | Enter(iCloud 云盘里的 `_WikiBox`);问「还没有,要创建吗?」再 Enter |
+| 【收件箱】会议助手发送的文件放在云端硬盘的收件文件夹…… | 先看它印的说明。第一题「要收 OneDrive 的文件吗?」是给会议助手电脑版用的(找得到 OneDrive 时默认要收):只用手机的打 **n**。用 iPhone 的在「要收 iCloud 云盘的文件吗?」打 **y**,用 Android 的在 Google 云端硬盘那题打 **y**。每个要收的,文件夹 Enter(各自的 `_WikiBox`)、问「还没有,要创建吗?」再 Enter。可以选好几个,至少一个;没选的不会去看 |
 | 【声纹同步文件夹】有做安装说明第 7 节(手机与电脑共用声纹与名词对照表)吗? | 没做第 7 节就 Enter(默认 n)。做了就 **y**,再 Enter 接受建议的 `_ScribeSync`(跟 `_WikiBox` 同一层),或粘贴你建的文件夹;选到 `_WikiBox`、原件文件夹、知识库里面的会被挡下来重问 |
 | 要请 Claude 建好规则文件与目录索引吗? | (还没有 `CLAUDE.md` 才会问)Enter。Claude 会花 1～3 分钟写好 `CLAUDE.md` 与目录 `index.md`,好了会用两三句话说它建了什么 |
 | 要在 CLAUDE.md 最后补上「版本记录由 wiki-feeder 代管」吗? | Enter(要)。原本的规则不会被改,只在最后加一节 |
@@ -74,7 +77,7 @@
 | 收件信箱 | Enter(寄给自己) |
 | 要(重新)输入 Gmail 应用专用密码吗? | Enter |
 | Gmail 的应用专用密码 | 粘贴第 4 步那 16 个字(打字时不会显示),按 Enter。会寄一封测试信 |
-| 读得到收件箱吗 | 自动。看到 `iCloud	可读` 就对了 |
+| 读得到收件箱吗 | 自动。选了的每一个都看到 `可读`(例如 `iCloud	可读`、`Google Drive	可读`)就对了 |
 | 装定时任务 | 自动 |
 
 之后重跑 `Install.bat`(例如要补设摘要信)会先列出现在的设置、问「沿用这份(不重填)?」:要改就输入 `n`。
@@ -83,7 +86,7 @@
 
 ## 6. 确认真的在动
 
-1. 在 iPhone 打开 **文件** App → **iCloud 云盘** → **_WikiBox**,丢一个文件进去
+1. 在 iPhone 打开 **文件** App → **iCloud 云盘** → **_WikiBox**,丢一个文件进去。用 Android 的:会议助手 App → **设置** → **发送文件夹**选 Google 云端硬盘里的 `_WikiBox`,再发送一场会议
 2. 等几分钟。在文件总管上方的网址列粘贴 `%USERPROFILE%\LLMWiki\WIKI\Wiki_Pages` 按 Enter(或你选的知识库的完整路径;不要从左边栏的「文档」去找,那里可能是 OneDrive 里的另一个文件夹),会多出一页;原文件被归到 `Raw_Sources` 底下的主题文件夹
 3. 有设摘要信的话,会收到一封「wiki-feeder 摄入摘要」
 
@@ -92,6 +95,8 @@
 ## 7. (选做)手机与电脑共用声纹与名词对照表
 
 在 iPhone App「会议助手」、电脑的会议助手电脑版命名过的人,另一台也认得。这是这两个 App 的功能(会议助手电脑版到 <https://github.com/VincentLiang1/notetaker-desktop/releases/latest> 下载;第 3 节的 Scribe2MD 没有这个功能),wiki-agent 不用设置;每一台都选**同一个 iCloud 云盘里的文件夹**就好。
+
+用 Android 的:下面的 **iCloud 云盘** 一律换成 **Google 云端硬盘**(「我的云端硬盘」最上层),手机选 Google 云端硬盘里的 `_ScribeSync`。
 
 1. 文件总管打开 **iCloud 云盘**,在最上层添加文件夹 `_ScribeSync`。⚠️ **不可以放在 `_WikiBox` 里面**(那里的文件会被送进知识库,声纹与真名就跟着进去)
 2. 对 `_ScribeSync` 按右键 → **永远保留在此设备上**(没有这一项就跳过)
@@ -139,4 +144,5 @@ Claude 会改正页面,同时把这条记进知识库的名词校正表(`memory/
 
 - **信的主旨开头是「🚨 需要处理」**:打开 PowerShell,打 `cd C:\wiki-agent; claude`,把那封信整封贴给 Claude,请它照 wiki-agent 的规则处理
 - **「Claude Code 没登录或登录过期」**:PowerShell 打 `claude` 重新登录,下一轮就会自己接着做
+- **Android 的会议助手选不到 Google 云端硬盘**:手机上的「Google 云端硬盘」App 被禁用时,选文件夹的画面完全不会列出云端硬盘。到手机的设置 → 应用程序 → 云端硬盘 → **激活**,再选一次
 - **不要自己在知识库里运行 git**(包括请 Claude 帮你 commit):程序只接受它自己验证过的版本,多一笔就会停下来等人

@@ -159,3 +159,10 @@ def test_friends_config_turns_auto_update_on_by_default_on_both_platforms(tmp_pa
     assert Config.from_file(_write(tmp_path, GOOD), tmp_path / "state").auto_update is True
     off = GOOD + "\n[general]\nauto_update = false\n"
     assert Config.from_file(_write(tmp_path, off), tmp_path / "state").auto_update is False
+
+
+def test_gdrive_inbox_alone_is_enough(tmp_path):
+    """Android 的朋友只有 Google 雲端硬碟:[inbox] 只設 gdrive 也算有收件匣(§3.1)。"""
+    text = GOOD.replace("icloud = '{root}/iCloudDrive/_WikiBox'", "gdrive = '{root}/GoogleDrive/_WikiBox'")
+    c = Config.from_file(_write(tmp_path, text), tmp_path / "state")
+    assert c.gdrive_inbox == tmp_path / "GoogleDrive" / "_WikiBox" and c.icloud_inbox is None

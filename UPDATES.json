@@ -1,5 +1,13 @@
 [
  {
+  "source": "e4d968a",
+  "date": "2026-11-09",
+  "needs_human": false,
+  "zh-Hant": "- 收件匣可以用 Google 雲端硬碟了(給 Android 的會議助手用):安裝時先說明「看你用什麼送檔」——iPhone 用 iCloud 雲碟、Android 用 Google 雲端硬碟,會議助手電腦版在 Windows 首選 OneDrive、在 Mac 首選 iCloud 雲碟;iCloud 雲碟、OneDrive、Google 雲端硬碟可以選好幾個,沒選的不會去看\n- Google 雲端硬碟裡的 Google 文件、試算表、簡報捷徑檔(.gdoc、.gsheet 等)不會被收走\n- 已經裝好的不必做任何事,照舊運作;要加收 Google 雲端硬碟,先裝「Google 雲端硬碟電腦版」並登入,再照安裝說明重跑一次安裝程式,問「沿用這份(不重填)?」時回 n 重填",
+  "zh-Hans": "- 收件箱可以用 Google 云端硬盘了(给 Android 的会议助手用):安装时先说明「看你用什么送文件」——iPhone 用 iCloud 云盘、Android 用 Google 云端硬盘,会议助手电脑版在 Windows 首选 OneDrive、在 Mac 首选 iCloud 云盘;iCloud 云盘、OneDrive、Google 云端硬盘可以选好几个,没选的不会去看\n- Google 云端硬盘里的 Google 文档、表格、幻灯片的快捷方式文件(.gdoc、.gsheet 等)不会被收走\n- 已经装好的不必做任何事,照旧运作;要加收 Google 云端硬盘,先装「Google 云端硬盘电脑版」并登录,再照安装说明重跑一次安装程序,问「沿用这份(不重填)?」时回 n 重填",
+  "en": "- The inbox can now be in Google Drive (for the Notetaker app on Android): the installer first explains which one to watch depending on what sends the files — iPhone uses iCloud Drive, Android uses Google Drive, Notetaker Desktop prefers OneDrive on Windows and iCloud Drive on Mac; you can pick any of iCloud Drive, OneDrive and Google Drive, and the ones you don't pick are not watched\n- Google Docs, Sheets and Slides shortcut files in Google Drive (.gdoc, .gsheet and so on) are left alone\n- If you're already set up there is nothing to do; it keeps working as before. To add Google Drive, install \"Google Drive for desktop\" and sign in, then run the installer again as described in the install guide and answer n to \"Keep this one (don't fill it in again)?\""
+ },
+ {
   "source": "db12c9a",
   "date": "2026-11-09",
   "needs_human": false,

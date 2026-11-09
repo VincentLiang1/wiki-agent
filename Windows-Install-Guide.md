@@ -6,11 +6,14 @@ Follow the steps in order; it takes about 30–40 minutes (mostly waiting for do
 
 > **About the language**: the setup questions, the summary emails and the alerts come in English, Traditional Chinese or Simplified Chinese — the first question asks which one. The screens of `Install.bat` before that question follow your Windows display language (English unless Windows is set to Chinese). Notetaker Desktop (only used in the optional step 7) shows its own English screens, which this guide quotes; the Notetaker iPhone app's screens are quoted in Chinese with the English meaning in parentheses — if your phone already shows English, follow those English names.
 
-## 1. Install iCloud for Windows
+## 1. Install the cloud drive for the inbox
 
-1. Open **Microsoft Store** from the Start menu, search for **iCloud** and install it
-2. Open iCloud, sign in with the same Apple Account as your iPhone, check **iCloud Drive** and click **Apply**
-3. Open File Explorer: if you see **iCloud Drive** (`C:\Users\<your name>\iCloudDrive`) in the left sidebar, you're set
+Files sent from the phone first land in an inbox folder `_WikiBox` in a cloud drive. Which one depends on your phone (install both if you use both):
+
+- **iPhone → iCloud for Windows**: open **Microsoft Store** from the Start menu, search for **iCloud** and install it; open iCloud, sign in with the same Apple Account as your iPhone, check **iCloud Drive** and click **Apply**; if File Explorer shows **iCloud Drive** (`C:\Users\<your name>\iCloudDrive`) in the left sidebar, you're set
+- **Android → Google Drive for desktop**: download and install it from <https://www.google.com/drive/download/> and sign in with the same Google account as the phone; File Explorer then shows a **Google Drive** drive (usually `G:`, with "My Drive" inside)
+
+Notetaker Desktop can send files in too: on Windows OneDrive (built into Windows) is the first choice; iCloud Drive and Google Drive also work.
 
 ## 2. Install Claude Code and sign in
 
@@ -66,7 +69,7 @@ Every question ends with `(Enter = …)` showing the default, and yes/no questio
 | `[Knowledge base] The WIKI folder: the knowledge base itself (…)` | (Asked only for a new one) Just press Enter, and press Enter again when asked whether to create it. `WIKI` is the knowledge base itself: it holds the rules file `CLAUDE.md` and the notes the AI organizes; `Raw_Sources` next to it holds the originals. For what the folders look like, see "What does the knowledge base look like?" in [What is an LLM Wiki?](What-is-LLM-Wiki.md) |
 | `[Originals folder] Raw_Sources (…)` | (Asked only for a new one) Enter (`Raw_Sources`, next to WIKI); for a new knowledge base it asks whether to create it — press Enter again |
 | `⚠ … is in iCloud Drive` (or OneDrive, Dropbox …) | Only shown when the knowledge base or originals folder is inside a sync folder. **Don't put them in OneDrive, iCloud Drive, Dropbox, Google Drive or similar sync folders** (including a synced Documents / Desktop; with OneDrive backup on they actually live under `C:\Users\<name>\OneDrive\`, which is a different folder from `C:\Users\<name>\Documents` even though both are called Documents. To see where your knowledge base is, click File Explorer's address bar inside its folder and look for `OneDrive` in the full path): files may stay only in the cloud, edits from another device create conflict copies, and the knowledge base's version history breaks when it is synced. Press Enter to pick another place (`LLMWiki` in your home folder is suggested); an existing knowledge base you move yourself, then run the installer again. If you insist: type `2`, read the consequences and type `yes` — the version history (git) is then kept in this computer's wiki-feeder folder instead of the sync folder; conflict copies and cloud-only files still happen |
-| `[Inbox] The folder the iPhone drops files into (_WikiBox in iCloud Drive)` | Enter. If asked whether to create it, press Enter again |
+| `[Inbox] Files sent by Notetaker go to an inbox folder in a cloud drive…` | Read the explanation it prints. The first question `Watch OneDrive?` is for Notetaker Desktop (it defaults to yes when OneDrive is found): type **n** if you only use the phone. With an iPhone type **y** at `Watch iCloud Drive?`; with Android type **y** at `Watch Google Drive?`. For each one you watch, press Enter for the folder (its own `_WikiBox`) and Enter again if asked whether to create it. You can pick more than one, at least one; the others are not watched |
 | `[Voiceprint sync folder] Did you do step 7 of the guide (share voiceprints and the name-correction table between phone and computer)?` | Enter (**n**) unless you did step 7. If you did: **y**, then Enter to accept the suggested `_ScribeSync` next to `_WikiBox`, or paste the folder you created. A folder inside `_WikiBox`, the originals folder or the knowledge base is refused |
 | `… has no CLAUDE.md yet. Ask Claude to create the rules file and table of contents?` | (Asked only when there is no `CLAUDE.md` yet) Enter. Claude spends 1–3 minutes writing `CLAUDE.md` and the table of contents `index.md` in the language you picked, then describes in two or three sentences what it created |
 | `Add a section at the end of CLAUDE.md saying "version history is managed by wiki-feeder; don't run git yourself"?` | Enter (yes). Your existing rules are not changed; one section is added at the end |
@@ -76,7 +79,7 @@ Every question ends with `(Enter = …)` showing the default, and yes/no questio
 | `Recipient address` | Enter (send to yourself) |
 | `Enter the Gmail app password (again)?` | Enter |
 | `Gmail app password (16 characters, not shown as you type)` | Paste the 16 letters from step 4 and press Enter. A test email is sent |
-| `=== Can the inbox be read? ===` | Automatic. `iCloud	readable` means it's fine |
+| `=== Can the inbox be read? ===` | Automatic. Every inbox you picked should say `readable` (for example `iCloud	readable`, `Google Drive	readable`) |
 | `=== Installing the schedule (one round per minute) ===` | Automatic |
 
 If you run `Install.bat` again later (for example, to set up the summary email), it asks the language again, shows the current settings and asks `Keep this one (don't fill it in again)?`: type `n` if you want to change them.
@@ -85,7 +88,7 @@ When you see `✓ Installation complete.` you can close the window. From then on
 
 ## 6. Check that it really works
 
-1. On the iPhone, open the **Files** app → **iCloud Drive** → **_WikiBox** and drop a file into it
+1. On the iPhone, open the **Files** app → **iCloud Drive** → **_WikiBox** and drop a file into it. With Android: in the Notetaker app → `設定` (Settings) → `送出資料夾` (send folder), pick `_WikiBox` in Google Drive, then send a meeting
 2. Wait a few minutes. Paste `%USERPROFILE%\LLMWiki\WIKI\Wiki_Pages` (or the full path of the knowledge base you chose) into the address bar at the top of File Explorer and press Enter — don't look for it under Documents in the left pane, which may be a different folder inside OneDrive: a new page appears, and the original file is filed into a topic folder under `Raw_Sources`
 3. If you set up the summary email, you'll receive one titled `wiki-feeder ingest summary …`
 
@@ -94,6 +97,8 @@ If nothing happens, check the log: paste `%LOCALAPPDATA%\wiki-feeder\logs` into 
 ## 7. (Optional) Share voiceprints and the name-correction table between phone and computer
 
 Speakers you have named in the Notetaker iPhone app or in Notetaker Desktop on the PC are then recognized on the other device too. This is a feature of those two apps — get Notetaker Desktop (會議助手電腦版) from <https://github.com/VincentLiang1/notetaker-desktop/releases/latest>; the Scribe2MD from step 3 doesn't include it — and wiki-agent needs no setup. Just choose **the same folder in iCloud Drive** on every device.
+
+With Android: replace **iCloud Drive** below with **Google Drive** (top level of "My Drive"), and pick `_ScribeSync` in Google Drive on the phone.
 
 1. Open **iCloud Drive** in File Explorer and create a folder `_ScribeSync` (for voiceprints and, later, the name-correction table) at the top level. ⚠️ **Do not put it inside `_WikiBox`** (files there are sent into the knowledge base, and the voiceprints and real names would go with them)
 2. Right-click `_ScribeSync` → **Always keep on this device** (skip this if the option isn't there)
@@ -141,4 +146,5 @@ To update right away (or when an email asks you to): double-click **Update.bat**
 
 - **The email subject starts with `🚨 Needs attention`**: open PowerShell, type `cd C:\wiki-agent; claude`, paste the whole email into Claude and ask it to handle it according to wiki-agent's rules (you can write to Claude in English)
 - **The email says Claude Code is not signed in or the sign-in expired**: type `claude` in PowerShell and sign in again; the next round picks up where it left off
+- **The Notetaker app on Android can't pick Google Drive**: when the phone's Google Drive app is disabled, the folder picker doesn't list Google Drive at all. Go to the phone's Settings → Apps → Drive → **Enable**, then pick again
 - **Don't run git in the knowledge base yourself** (including asking Claude to commit for you): the program only accepts versions it has verified itself; one extra commit makes it stop and wait for a person

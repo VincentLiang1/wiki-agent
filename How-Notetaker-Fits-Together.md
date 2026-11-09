@@ -4,7 +4,7 @@
 
 **Start with the Notetaker app on your phone, add Notetaker Desktop, and let Wiki Agent tie them together into an automated LLM Wiki. Three levels: install only as much as you need.**
 
-![How Notetaker Fits Together: the Notetaker app and Notetaker Desktop sync voiceprints and lists; tapping Send on the phone, or dropping md files in from the desktop, puts files in the _WikiBox folder in iCloud Drive; Wiki Agent + Scribe2MD checks it every minute, transcribes, and writes linked pages into the LLM Wiki on your computer](How-Notetaker-Fits-Together.svg)
+![How Notetaker Fits Together: the Notetaker app and Notetaker Desktop sync voiceprints and lists; tapping Send on the phone, or dropping md files in from the desktop, puts files in the _WikiBox folder in a cloud drive; Wiki Agent + Scribe2MD checks it every minute, transcribes, and writes linked pages into the LLM Wiki on your computer](How-Notetaker-Fits-Together.svg)
 
 ## Level 1: Phone only
 
@@ -26,7 +26,7 @@ Free for Windows and Mac: see the [Notetaker Desktop guide](https://github.com/V
 - Audio becomes text, filed into your LLM Wiki
 - Links to what you already have, grows over time
 
-Needs an always-on computer and a paid Claude plan (Pro or higher). For now the `_WikiBox` inbox folder lives in iCloud Drive: the phone is an iPhone, and a Windows PC needs iCloud for Windows. Wiki Agent checks the inbox every minute.
+Needs an always-on computer and a paid Claude plan (Pro or higher). The `_WikiBox` inbox folder lives in a cloud drive, depending on what sends the files: iPhone uses iCloud Drive, Android uses Google Drive; Notetaker Desktop prefers OneDrive on Windows and iCloud Drive on Mac (the other two also work). The installer asks which ones to watch; the others are ignored. Wiki Agent checks the inbox every minute.
 
 - New to LLM Wiki? See [What is an LLM Wiki?](What-is-LLM-Wiki.md)
 - About Wiki Agent & setup: [README](README.md), [Mac install guide](Mac-Install-Guide.md), [Windows install guide](Windows-Install-Guide.md)

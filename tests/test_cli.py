@@ -161,3 +161,13 @@ def test_list_dirs_reads_icloud_sync_status_when_restart_is_on(cfg, capsys, monk
         assert last.startswith("iCloud 同步狀態") and want in last
     assert main(["collect", "--list", "--dirs"], cfg=cfg) == 0                 # 沒打開就不讀
     assert "iCloud 同步狀態" not in capsys.readouterr().out
+
+
+def test_only_gdrive_leaves_the_other_inboxes_alone(cfg):
+    gd = cfg.icloud_inbox.parent.parent / "gdrive" / "_WikiBox"
+    gd.mkdir(parents=True)
+    c = replace(cfg, gdrive_inbox=gd)
+    (c.icloud_inbox / "a.jpg").write_bytes(b"jpg")
+    (gd / "b.md").write_text("# b", encoding="utf-8")
+    assert main(["collect", "--only", "gdrive"], cfg=c) == 0
+    assert (c.icloud_inbox / "a.jpg").exists() and not (gd / "b.md").exists()

@@ -6,10 +6,14 @@ Follow the steps in order; it takes about 30–40 minutes (mostly waiting for do
 
 > **About the language**: the installer, the summary emails and the alerts come in English, Traditional Chinese or Simplified Chinese — the installer's first question asks which one. Notetaker Desktop (only used in the optional step 7) shows its own English screens, which this guide quotes; the Notetaker iPhone app's screens are quoted in Chinese with the English meaning in parentheses — if your phone already shows English, follow those English names.
 
-## 0. Make sure iCloud Drive is turned on
+## 0. Set up the cloud drive for the inbox
 
-1.  menu (top left) → **System Settings** → click **your name** at the top → **iCloud** → **iCloud Drive**: the switch must be on (signed in with the same Apple Account as your iPhone)
-2. Open **Finder**: if you see **iCloud Drive** in the left sidebar, you're set
+Files sent from the phone first land in an inbox folder `_WikiBox` in a cloud drive. Which one depends on your phone (do both if you use both):
+
+- **iPhone → iCloud Drive**:  menu (top left) → **System Settings** → click **your name** at the top → **iCloud** → **iCloud Drive**: the switch must be on (signed in with the same Apple Account as your iPhone); open **Finder**: if you see **iCloud Drive** in the left sidebar, you're set
+- **Android → Google Drive**: download and install "Google Drive for desktop" from <https://www.google.com/drive/download/> and sign in with the same Google account as the phone (click Allow if macOS asks about a system extension); **Google Drive** appears in Finder's sidebar. Later, in Finder, right-click `_WikiBox` under "My Drive" → **Available offline** (after the installer has created the folder)
+
+Notetaker Desktop can send files in too: on a Mac iCloud Drive is the first choice; OneDrive and Google Drive also work.
 
 ## 1. Open Terminal
 
@@ -77,7 +81,7 @@ Every question ends with `(Enter = …)` showing the default, and yes/no questio
 | `[Knowledge base] The WIKI folder: the knowledge base itself (…)` | (Asked only for a new one) Just press Enter, and press Enter again when asked whether to create it. `WIKI` is the knowledge base itself: it holds the rules file `CLAUDE.md` and the notes the AI organizes; `Raw_Sources` next to it holds the originals. For what the folders look like, see "What does the knowledge base look like?" in [What is an LLM Wiki?](What-is-LLM-Wiki.md) |
 | `[Originals folder] Raw_Sources (…)` | (Asked only for a new one) Enter (`Raw_Sources`, next to WIKI) |
 | `⚠ … is in iCloud Drive` (or OneDrive, Dropbox …) | Only shown when the knowledge base or originals folder is inside a sync folder. **Don't put them in OneDrive, iCloud Drive, Dropbox, Google Drive or similar sync folders** (including a synced Documents / Desktop): files may stay only in the cloud, edits from another device create conflict copies, and the knowledge base's version history breaks when it is synced. Press Enter to pick another place (`LLMWiki` in your home folder is suggested); an existing knowledge base you move yourself, then run the installer again. If you insist: type `2`, read the consequences and type `yes` — the version history (git) is then kept in this computer's wiki-feeder folder instead of the sync folder; conflict copies and cloud-only files still happen |
-| `[Inbox] The folder the iPhone drops files into (_WikiBox in iCloud Drive)` | Enter. If asked whether to create it, press Enter again |
+| `[Inbox] Files sent by Notetaker go to an inbox folder in a cloud drive…` | Read the explanation it prints. `Watch iCloud Drive?`: Enter if you use an iPhone (it defaults to yes when iCloud Drive is found). `Watch OneDrive?` / `Watch Google Drive?` default to no — with Android, type **y** for Google Drive. For each one you watch, press Enter for the folder (its own `_WikiBox`) and Enter again if asked whether to create it. You can pick more than one, at least one; the others are not watched |
 | `[Voiceprint sync folder] Did you do step 7 of the guide (share voiceprints and the name-correction table between phone and computer)?` | Enter (**n**) unless you did step 7. If you did: **y**, then Enter to accept the suggested `_ScribeSync` next to `_WikiBox`, or paste the folder you created. A folder inside `_WikiBox`, the originals folder or the knowledge base is refused |
 | `… has no CLAUDE.md yet. Ask Claude to create the rules file and table of contents?` | (Asked only for a new knowledge base) Enter. Claude spends 1–3 minutes writing `CLAUDE.md` and the table of contents `index.md` — in the language you picked — using your Claude quota |
 | `Add a section at the end of CLAUDE.md saying "version history is managed by wiki-feeder; don't run git yourself"?` | Enter (yes). Your existing rules are not changed; one section is added at the end |
@@ -85,12 +89,12 @@ Every question ends with `(Enter = …)` showing the default, and yes/no questio
 | `[Transcription] …` | If Scribe2MD is already there it says `Found Scribe2MD …` and moves on. Otherwise it asks `[Transcription] Download and install Scribe2MD?`: **y** downloads it (about 1 GB, progress shown); **press Enter (n) to skip** |
 | `[Summary email] …` then `Sending Gmail address` | Defaults to the Gmail you signed in to Claude with; type another address to use a different one; type `-` if you don't want emails |
 | `Gmail app password (16 characters, not shown as you type)` | Paste the 16 letters from step 4 (**nothing is shown while you type** — just paste and press Enter). A test email is sent; if it arrives on your phone, it worked |
-| `=== Can the inbox be read? (in Terminal) ===` | Automatic. `iCloud	readable` means it's fine |
+| `=== Can the inbox be read? (in Terminal) ===` | Automatic. Every inbox you picked should say `readable` (for example `iCloud	readable`, `Google Drive	readable`) |
 | `=== Installing the schedule (one round per minute) ===` | Automatic. You'll see three lines ending in `: installed` (the third is a light watchdog every 3 minutes: it puts a stuck round or a schedule that isn't running into the summary email, and restarts iCloud when it gets stuck) |
 
 ### 5-3. Allow reading (required)
 
-The schedule runs in the background, and macOS asks you to allow it to read iCloud Drive. When Terminal says to press Enter when you're ready, press Enter:
+The schedule runs in the background, and macOS asks you to allow it to read the cloud drive your inbox is in. When Terminal says to press Enter when you're ready, press Enter:
 
 1. A window `“wiki-agent” would like to access files in iCloud Drive` appears — click **Allow**. This also lets wiki-agent read iCloud's sync status: every 15 minutes it restarts this Mac's iCloud sync process (a pause of a few seconds) — iCloud on a Mac sometimes gets stuck, the phone has uploaded a file but this Mac never downloads it, and only a restart fixes that
 2. If your knowledge base is in Documents or Desktop, it asks once more — click **Allow** again
@@ -100,7 +104,7 @@ When you see `✓ Installation complete.` you can close Terminal.
 
 ## 6. Check that it really works
 
-1. On the iPhone, open the **Files** app → **iCloud Drive** → **_WikiBox** and drop any file into it (for example, share a recording from Voice Memos, or save a photo of a whiteboard here)
+1. On the iPhone, open the **Files** app → **iCloud Drive** → **_WikiBox** and drop any file into it (for example, share a recording from Voice Memos, or save a photo of a whiteboard here). With Android: in the Notetaker app → `設定` (Settings) → `送出資料夾` (send folder), pick `_WikiBox` in Google Drive, then send a meeting
 2. Wait a few minutes (longer recordings take longer). In Finder, open `LLMWiki/WIKI/Wiki_Pages` in your home folder (or the knowledge base you chose): a new page appears, and the original file is filed into a topic folder under `Raw_Sources`
 3. If you set up the summary email, you'll receive one titled `wiki-feeder ingest summary …`
 
@@ -109,6 +113,8 @@ If nothing happens, check the log: in Finder press **⌘ + Shift + G**, paste `~
 ## 7. (Optional) Share voiceprints and the name-correction table between phone and computer
 
 Speakers you have named in the Notetaker iPhone app or in Notetaker Desktop on the Mac are then recognized on the other device too. This is a feature of those two apps — get Notetaker Desktop (會議助手電腦版) from <https://github.com/VincentLiang1/notetaker-desktop/releases/latest>; the Scribe2MD from step 3 doesn't include it — and wiki-agent needs no setup. Just choose **the same folder in iCloud Drive** on every device.
+
+With Android: replace **iCloud Drive** below with **Google Drive** (top level of "My Drive"), and pick `_ScribeSync` in Google Drive on the phone.
 
 1. Open **iCloud Drive** in Finder and create a folder `_ScribeSync` (for voiceprints and, later, the name-correction table) at the top level (right-click → **New Folder**). ⚠️ **Do not put it inside `_WikiBox`** (files there are sent into the knowledge base, and the voiceprints and real names would go with them)
 2. Right-click `_ScribeSync` → **Keep Downloaded** (skip this if the option isn't there)
@@ -156,6 +162,7 @@ To update right away (or when an email asks you to): repeat steps 1–3 of step 
 
 - **The email subject starts with `🚨 Needs attention`**: open Terminal, type `cd ~/wiki-agent && claude`, paste the whole email into Claude and ask it to handle it according to wiki-agent's rules (you can write to Claude in English)
 - **The email says Claude Code is not signed in or the sign-in expired**: type `claude` in Terminal and sign in again; the next round picks up where it left off
-- **It can't read the inbox**: usually "Don't Allow" was clicked: Apple menu  → **System Settings** → **Privacy & Security** → **Files and Folders** → **wiki-agent**, turn on iCloud Drive (and Documents/Desktop), then double-click wiki-agent again to re-check (if you installed with the Terminal command, Full Disk Access is missing or switched off)
+- **It can't read the inbox**: usually "Don't Allow" was clicked: Apple menu  → **System Settings** → **Privacy & Security** → **Files and Folders** → **wiki-agent**, turn on the cloud drive your inbox is in (iCloud Drive, Google Drive, OneDrive; and Documents/Desktop), then double-click wiki-agent again to re-check (if you installed with the Terminal command, Full Disk Access is missing or switched off)
+- **The Notetaker app on Android can't pick Google Drive**: when the phone's Google Drive app is disabled, the folder picker doesn't list Google Drive at all. Go to the phone's Settings → Apps → Drive → **Enable**, then pick again
 - **You don't want wiki-agent to restart iCloud sync**: open `~/Library/Application Support/wiki-feeder/config.toml` in TextEdit, add the line `icloud_restart = false` under `[inbox]`, save, and double-click wiki-agent once. The log is `logs/icloud.log` in the same folder
 - **Don't run git in the knowledge base yourself** (including asking Claude to commit for you): the program only accepts versions it has verified itself; one extra commit makes it stop and wait for a person

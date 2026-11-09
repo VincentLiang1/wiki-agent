@@ -57,7 +57,7 @@ def render_config(a: dict) -> str:
     第一行是註解(macsetup 換成 Mac 的那一行);[general] language 放最前面,沒給就用現在的介面語言。"""
     lines = [L(HEADER), "", "[general]", f"language = {toml_text(a.get('lang') or i18n.get_lang())}", "",
              "[inbox]"]
-    for k in ("icloud", "onedrive"):
+    for k in INBOX_KINDS:
         if a.get(k):
             lines.append(f"{k} = {toml_path(a[k])}")
     if a.get("scribe_sync"):
@@ -102,6 +102,25 @@ def find_icloud(home: Path) -> Path | None:
         if d.is_dir():
             return d
     return None
+
+
+# Google 雲端硬碟桌面版的「我的雲端硬碟」照系統語言命名
+MY_DRIVE = ("My Drive", "我的雲端硬碟", "我的云端硬盘")
+
+
+def my_drive(root: Path) -> Path:
+    """Google 雲端硬碟的根(Mac 的 GoogleDrive-<帳號>、Windows 的 G:\\)底下的「我的雲端硬碟」;認不出來就給根本身。"""
+    return next((root / n for n in MY_DRIVE if (root / n).is_dir()), root)
+
+
+def find_clouds_windows(home: Path, env: dict[str, str], drive_labels: dict[str, str]) -> dict[str, Path | None]:
+    """Windows 上三種雲端硬碟的位置(找不到是 None)。Google 雲端硬碟桌面版是一個虛擬磁碟(標籤 Google Drive,預設 G:)。"""
+    onedrive = next((Path(env[k]) for k in ("OneDriveConsumer", "OneDrive") if env.get(k) and Path(env[k]).is_dir()), None)
+    gdrive = next((my_drive(Path(d + "\\")) for d, label in drive_labels.items() if label.casefold() == "google drive"),
+                  None)
+    if gdrive is None and (home / "Google Drive").is_dir():          # 舊版「備份與同步」放在家目錄
+        gdrive = my_drive(home / "Google Drive")
+    return {"icloud": find_icloud(home), "onedrive": onedrive, "gdrive": gdrive}
 
 
 def find_doc2md(roots: list[Path]) -> list[Path]:
@@ -339,21 +358,55 @@ def pick(prompt: str, folder: bool, default: str = "") -> str:
     return str(Path(v)) if v else ""
 
 
-def ask_inbox(home: Path) -> str:
-    icloud = find_icloud(home)
-    default = str(icloud / "_WikiBox") if icloud else ""
-    if not icloud:
-        say(L("⚠ 找不到 iCloud 雲碟(%USERPROFILE%\\iCloudDrive)。請先裝 iCloud for Windows、打開「iCloud 雲碟」。"))
+# 收件匣:三種雲端硬碟可以選好幾個,沒選的不寫進設定檔、程式就不看(使用者 2026-11-09,spec §3.1)
+INBOX_KINDS = ("icloud", "onedrive", "gdrive")
+INBOX_DIR = "_WikiBox"
+INBOX_NAMES = {"icloud": N_("iCloud 雲碟"), "onedrive": N_("OneDrive"), "gdrive": N_("Google 雲端硬碟")}
+INBOX_GUIDE = N_("""【收件匣】會議助手送出的檔放在雲端硬碟的收件資料夾,這台電腦每分鐘去收一次。要收哪一個,看你用什麼送檔:
+  · iPhone 會議助手 → iCloud 雲碟
+  · Android 會議助手 → Google 雲端硬碟
+  · Windows 電腦版 → OneDrive 首選,iCloud 雲碟、Google 雲端硬碟也可以
+  · Mac 電腦版 → iCloud 雲碟首選,OneDrive、Google 雲端硬碟也可以
+  可以選好幾個;沒選的不會去看。""")
+INBOX_MISSING = {
+    "icloud": (N_("  ⚠ 這台電腦找不到 iCloud 雲碟:請到「系統設定 → 你的名字 → iCloud → iCloud 雲碟」打開"),
+               N_("  ⚠ 這台電腦找不到 iCloud 雲碟(%USERPROFILE%\\iCloudDrive):請先裝 iCloud for Windows、打開「iCloud 雲碟」")),
+    "onedrive": (N_("  ⚠ 這台電腦找不到 OneDrive:請先裝 OneDrive、登入"),
+                 N_("  ⚠ 這台電腦找不到 OneDrive:請先登入 OneDrive")),
+    "gdrive": (N_("  ⚠ 這台電腦找不到 Google 雲端硬碟:請先裝「Google 雲端硬碟電腦版」、登入"),
+               N_("  ⚠ 這台電腦找不到 Google 雲端硬碟:請先裝「Google 雲端硬碟電腦版」、登入")),
+}
+
+
+def ask_inboxes(found: dict[str, Path | None], windows: bool) -> dict[str, str]:
+    """問要收哪幾個雲端硬碟、各自的收件資料夾(預設是那個雲端硬碟裡的 _WikiBox);至少要一個。
+    首選(Windows 是 OneDrive、Mac 是 iCloud 雲碟)找得到就預設要收,其他預設不收。"""
+    first = "onedrive" if windows else "icloud"
+    order = [first] + [k for k in INBOX_KINDS if k != first]
+    say(L(INBOX_GUIDE))
     while True:
-        p = Path(pick(L("【收件匣】iPhone 丟檔進來的資料夾(iCloud 雲碟裡的 _WikiBox)"), True, default))
-        if p.parent.is_dir():
-            break
-        say(L("  找不到 {path},請再確認", path=p.parent))
-    if not p.is_dir() and yes(L("  {path} 還沒有,要建立嗎?", path=p)):
-        p.mkdir()
-    # 「永遠保留在此裝置上」:收件匣裡的檔才會真的下載下來(程式碰到佔位檔也會自己要求下載,這是先做好的保險)
-    subprocess.run(["attrib", "+P", str(p)], capture_output=True)
-    return str(p)
+        chosen: dict[str, str] = {}
+        for k in order:
+            name = L(INBOX_NAMES[k])
+            if not yes(L("  要收 {name} 的檔嗎?", name=name), default=k == first and found.get(k) is not None):
+                continue
+            base = found.get(k)
+            if base is None:
+                say(L(INBOX_MISSING[k][1 if windows else 0]))
+            while True:
+                p = Path(pick(L("  {name} 裡的收件資料夾", name=name), True, str(base / INBOX_DIR) if base else ""))
+                if str(p) not in ("", ".") and p.parent.is_dir():
+                    break
+                say(L("  找不到 {path},請再確認", path=p.parent))
+            if not p.is_dir() and yes(L("  {path} 還沒有,要建立嗎?", path=p)):
+                p.mkdir()
+            if windows:
+                # 「永遠保留在此裝置上」:收件匣裡的檔才會真的下載下來(程式碰到佔位檔也會自己要求下載,這是先做好的保險)
+                subprocess.run(["attrib", "+P", str(p)], capture_output=True)
+            chosen[k] = str(p)
+        if chosen:
+            return chosen
+        say(L("  至少要收一個,請再選一次"))
 
 
 # 安裝時建議的 scribe2md 同步資料夾名(手機 App 與電腦版共用的聲紋與名詞對照表;使用者 2026-10-29:不叫「聲紋同步」,
@@ -378,11 +431,11 @@ def ask_scribe_sync(a: dict) -> str:
     對照表含真名,不可跟收件匣、原件資料夾、知識庫重疊(在裡面或包著它們),重疊就重問;還沒有就問要不要建。"""
     if not yes(L("【聲紋同步資料夾】有做安裝說明第 7 節(手機與電腦共用聲紋與名詞對照表)嗎?"), default=False):
         return ""
-    inbox = Path(a["icloud"])
-    guarded = [inbox, Path(a["wiki"]), Path(a["raw"])]
+    inboxes = [Path(a[k]) for k in INBOX_KINDS if a.get(k)]
+    guarded = [*inboxes, Path(a["wiki"]), Path(a["raw"])]
     while True:
-        p = Path(pick(L("  聲紋同步資料夾(iCloud 雲碟裡、跟 _WikiBox 同一層;不可在 _WikiBox 裡)"), True,
-                      str(inbox.parent / SCRIBE_SYNC_DIR)))
+        p = Path(pick(L("  聲紋同步資料夾(雲端硬碟裡、跟 _WikiBox 同一層;不可在 _WikiBox 裡)"), True,
+                      str(inboxes[0].parent / SCRIBE_SYNC_DIR)))
         if (hit := overlapping(p, guarded)) is not None:
             say(L("  {path} 跟 {hit} 重疊(對照表含真名,會被收件或攝入),請換一個", path=p, hit=hit))
             continue
@@ -911,7 +964,7 @@ def main(argv: list[str] | None = None) -> int:
         a = {"lang": lang}
         a["wiki"], a["raw"], a["folders"] = ask_library(str(default_wiki(home)),
                                                         find_wiki(home, (Path("C:/"), Path("D:/"))), claude, True, a)
-        a["icloud"] = ask_inbox(home)
+        a.update(ask_inboxes(find_clouds_windows(home, dict(os.environ), syncdirs.probe("win32").labels), True))
         a["scribe_sync"] = ask_scribe_sync(a)
         a["label"] = ask(L("【知識庫名稱】摘要信上顯示的名字"), L("知識庫"))
         a["doc2md"] = ask_doc2md(home)

@@ -395,3 +395,72 @@ def test_interrupted_listing_is_not_alerted_until_it_persists(cfg, monkeypatch):
     assert collect(c).alerts == []
     alerts = collect(c).alerts                            # 一直讀不到,連續第 3 輪照樣報
     assert len(alerts) == 1 and "OneDrive 收件匣暫時讀不到" in alerts[0]
+
+
+# --- Google 雲端硬碟收件匣(Android 會議助手只寫得進 Drive,使用者 2026-11-09,§3.1) ---
+
+def _with_gdrive(cfg):
+    gd = cfg.icloud_inbox.parent.parent / "gdrive" / "_WikiBox"
+    gd.mkdir(parents=True)
+    return replace(cfg, gdrive_inbox=gd)
+
+
+def test_gdrive_inbox_is_collected_and_emptied(cfg):
+    """Android App 看「送出的檔從送出資料夾消失」判斷電腦已收走:收完一定要刪掉來源。"""
+    c = _with_gdrive(cfg)
+    src = c.gdrive_inbox / "2026-11-09_1000_會議.md"
+    src.write_text("# 會議\n", encoding="utf-8")
+
+    r = collect(c)
+
+    assert r.ok and not src.exists()
+    side = json.loads((c.pending_dir / (src.name + ".feeder.json")).read_text(encoding="utf-8"))
+    assert side["來源"] == "Google Drive"
+
+
+def test_gdrive_temp_file_being_renamed_is_not_taken(cfg):
+    """Android 先寫 `.<正式檔名>` 再改名:點開頭的暫存檔不可收(收到的是寫到一半的)。"""
+    c = _with_gdrive(cfg)
+    tmp = c.gdrive_inbox / ".2026-11-09_1000_會議.md"
+    tmp.write_text("# 寫到一半", encoding="utf-8")
+
+    r = collect(c)
+
+    assert tmp.exists() and r.moved == []
+
+
+def test_gdrive_placeholder_is_read_to_download(cfg, monkeypatch):
+    """Drive 沒有 brctl:佔位檔這輪不取,讀一個位元組讓它下載;不可對 Drive 的檔跑 brctl(那是 iCloud 的)。"""
+    c = _with_gdrive(cfg)
+    src = c.gdrive_inbox / "只有佔位.md"
+    src.write_text("", encoding="utf-8")
+    monkeypatch.setattr(inboxes, "is_dataless", lambda p: p == src)
+    monkeypatch.setattr(inboxes, "read_to_download_cmd", lambda p: ["read", p])
+    ran = []
+    monkeypatch.setattr(inboxes.subprocess, "run", lambda cmd, **kw: ran.append(cmd))
+
+    r = collect(c)
+
+    assert src.exists() and r.moved == []
+    assert ran == [["read", str(src)]]
+
+
+def test_missing_gdrive_inbox_alerts(cfg):
+    """Drive 桌面版沒登入、被登出時資料夾會消失:要大聲失敗,不可安靜跳過(§3.4)。"""
+    c = replace(cfg, gdrive_inbox=cfg.icloud_inbox.parent / "沒有這個")
+
+    r = collect(c)
+
+    assert any("Google Drive 收件匣不存在" in a for a in r.alerts)
+
+
+def test_google_doc_shortcuts_are_left_alone(cfg):
+    """Drive 桌面版的 .gdoc／.gsheet 只是指向網頁的捷徑:不收、不提醒(使用者 2026-11-09)。"""
+    c = _with_gdrive(cfg)
+    for n in ("會議.gdoc", "預算.GSHEET", "簡報.gslides"):
+        (c.gdrive_inbox / n).write_text('{"url": "https://docs.google.com/x"}', encoding="utf-8")
+
+    r = collect(c)
+
+    assert r.ok and r.moved == [] and not r.alerts
+    assert len(list(c.gdrive_inbox.iterdir())) == 3

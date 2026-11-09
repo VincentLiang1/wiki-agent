@@ -205,6 +205,14 @@ def download_cmd(path: str, windows: bool = WINDOWS) -> list[str]:
     return ["brctl", "download", path]
 
 
+def read_to_download_cmd(path: str, windows: bool = WINDOWS) -> list[str] | None:
+    """Google 雲端硬碟這類沒有「要求下載」指令的:讀第一個位元組,檔案提供者就會把整個檔抓下來。
+    Windows 的 Drive 是虛擬磁碟、沒有佔位檔屬性,用不到(回 None)。"""
+    if windows:
+        return None
+    return ["head", "-c", "1", path]
+
+
 # -- 寄信密碼 ----------------------------------------------------------------------
 
 def secret(service: str, account: str, windows: bool = WINDOWS) -> str | None:

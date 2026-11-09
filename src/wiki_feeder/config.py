@@ -132,6 +132,8 @@ class Config:
     icloud_inbox: Path | None
     onedrive_inbox: Path | None
     futures: FuturesConfig | None
+    # Google 雲端硬碟桌面版同步下來的收件匣(Android 會議助手只寫得進 Drive,使用者 2026-11-09,§3.1)
+    gdrive_inbox: Path | None = None
     stable_wait: float = 5.0            # 檔案大小連續兩次不變的間隔秒數
     unavailable_alert_after: int = 3    # 收件匣連續幾輪讀不到才發警示(偶發一次多半是雲端同步中,不是權限壞了)
     trigger_icloud_download: bool = True
@@ -442,7 +444,7 @@ class Config:
             data = tomllib.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
             raise ConfigError(L("設定檔 {path} 讀不了:{e}", path=path, e=e)) from e
-        known = {"inbox": {"icloud", "onedrive", "icloud_restart"},
+        known = {"inbox": {"icloud", "onedrive", "gdrive", "icloud_restart"},
                  "wiki": {"dir", "raw", "label", "github", "branch", "pending", "discard", "intake",
                           "git_outside", "git_outside_reason"},
                  "mail": {"from", "to"}, "tools": {"doc2md", "claude", "ffmpeg"}, "general": {"language", "auto_update"},
@@ -463,8 +465,8 @@ class Config:
         # PDF 與圖片攝入時直接讀原件、其餘留在待處理提醒(§4.8);使用者本人的設定永遠有
         if "doc2md" in tools and not isinstance(tools["doc2md"], str):
             raise ConfigError(L("設定檔 {path} 的 [tools] doc2md 要是路徑字串", path=path))
-        if not inbox.get("icloud") and not inbox.get("onedrive"):
-            raise ConfigError(L("設定檔 {path} 沒有任何收件匣([inbox] icloud 或 onedrive)", path=path))
+        if not any(inbox.get(k) for k in ("icloud", "onedrive", "gdrive")):
+            raise ConfigError(L("設定檔 {path} 沒有任何收件匣([inbox] icloud、onedrive 或 gdrive)", path=path))
         if not isinstance(inbox.get("icloud_restart", True), bool):
             raise ConfigError(L("設定檔 {path} 的 [inbox] icloud_restart 只能是 true 或 false", path=path))
         # scribe2md 同步資料夾(手機 App 與電腦版共用的聲紋與名詞對照表)由朋友安裝時自己選、寫進設定檔
@@ -503,6 +505,7 @@ class Config:
             state_dir=state,
             icloud_inbox=opt(inbox.get("icloud")),
             onedrive_inbox=opt(inbox.get("onedrive")),
+            gdrive_inbox=opt(inbox.get("gdrive")),
             # 只有 Mac 的 iCloud 有 bird 要顧;Windows 的 iCloud 是另一套程式,不動
             icloud_restart=bool(inbox.get("icloud")) and PLATFORM == "darwin" and inbox.get("icloud_restart", True),
             auto_update=data.get("general", {}).get("auto_update", True),   # 朋友版兩個平台都預設打開(§7.9)

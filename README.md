@@ -4,11 +4,11 @@
 
 
 
-**Record on your iPhone — a new page appears in your knowledge base.**
+**Record on your phone — a new page appears in your knowledge base.**
 
 wiki-agent is a small background program on your computer that maintains a personal knowledge base for you, following Andrej Karpathy's "LLM Wiki" pattern (new to LLM Wiki? See [What is an LLM Wiki?](What-is-LLM-Wiki.md)):
 
-1. On your iPhone, drop a voice memo, whiteboard photo, scanned document or Office file into the `_WikiBox` folder on iCloud Drive
+1. On your phone, drop a voice memo, whiteboard photo, scanned document or Office file into the `_WikiBox` folder in a cloud drive (iPhone: iCloud Drive; Android: Google Drive)
 2. Every minute, wiki-agent on your computer checks that folder: it moves the file into your originals folder `Raw_Sources`, and turns recordings and documents into text first (using Scribe2MD, which the installer can download for you; optional: without it Claude reads documents and photos directly, and recordings and video wait until it is installed)
 3. It asks *your own* Claude Code to compile the material into `WIKI/Wiki_Pages/` according to the rules in your wiki's `CLAUDE.md`: creating a new page or adding to an existing one, and updating the table of contents `index.md`
 4. Only after the program has checked the result is it recorded as a version (git, managed by the program — you don't need to learn it). A daily summary email tells you what was processed
@@ -24,7 +24,7 @@ wiki-agent is level 3 of the Notetaker family: the Notetaker app on your phone r
 | | Mac | Windows |
 | --- | --- | --- |
 | Computer | Apple-silicon Mac | Windows 10/11 |
-| Phone | iPhone (files travel through iCloud Drive) | iPhone + iCloud for Windows on the PC |
+| Phone | iPhone (files travel through iCloud Drive) or Android (Google Drive for desktop on the Mac) | iPhone (iCloud for Windows on the PC) or Android (Google Drive for desktop on the PC) |
 | Claude | Your own Claude subscription (Pro or Max), with Claude Code installed and signed in | Same |
 | Transcription (optional) | Scribe2MD, about 1 GB — the installer offers to download it | Same |
 | Summary email (optional) | Gmail + an app password | Same |
@@ -37,12 +37,12 @@ Full step-by-step guides: **[Mac-Install-Guide.md](Mac-Install-Guide.md)** and *
 
 **Mac** (about 30–40 minutes, mostly downloads)
 
-1. Make sure iCloud Drive is turned on (System Settings → your name → iCloud → iCloud Drive)
+1. Set up the cloud drive the phone sends to: iPhone → make sure iCloud Drive is turned on (System Settings → your name → iCloud → iCloud Drive); Android → install Google Drive for desktop and sign in
 2. Install Claude Code and sign in with your Claude account: in Terminal run `curl -fsSL https://claude.ai/install.sh | bash`, then `claude`
 3. (Optional) Nothing to install in advance for recordings: the installer in step 5 offers to download Scribe2MD (about 1 GB)
 4. (Optional) Create a Gmail app password at <https://myaccount.google.com/apppasswords> for the summary email
 5. Download [wiki-agent-mac.zip](https://github.com/VincentLiang1/wiki-agent/releases/latest/download/wiki-agent-mac.zip) (signed and notarized), unzip it, drag wiki-agent into Applications and double-click it there. A Terminal window opens: if macOS offers to install the command line developer tools, click **Install** (not "Get Xcode"). The installer then sets up uv, puts the program in `~/wiki-agent` and asks a series of questions — each has a default, so you can mostly just press Enter
-6. **Allow reading (required)**: at the end it test-reads in the background and macOS asks whether “wiki-agent” may access files in iCloud Drive (and in Documents/Desktop if your knowledge base is there) — click **Allow**
+6. **Allow reading (required)**: at the end it test-reads in the background and macOS asks whether “wiki-agent” may access files in the cloud drive your inbox is in (and in Documents/Desktop if your knowledge base is there) — click **Allow**
 
 Alternative to steps 5–6: paste this line into Terminal (then you add an executable to Full Disk Access instead; Terminal shows you how):
    ```bash
@@ -51,11 +51,11 @@ Alternative to steps 5–6: paste this line into Terminal (then you add an execu
 
 **Windows**
 
-1. Install iCloud for Windows and Claude Code (signed in). Scribe2MD for recordings is optional and offered by the installer
+1. Install the cloud drive the phone sends to (iPhone: iCloud for Windows; Android: Google Drive for desktop) and Claude Code (signed in). Scribe2MD for recordings is optional and offered by the installer
 2. (Optional) Create a Gmail app password for the summary email
 3. Download `Install.bat` from this repository and double-click it. If Windows SmartScreen warns you, choose **More info → Run anyway**. It installs Git and uv if needed, puts the program in `C:\wiki-feeder` (no GitHub account needed) and asks the same questions (the screens before the questions follow your Windows display language)
 
-Both installers finish by setting up a schedule that runs every minute. To check that it works, drop any file into `_WikiBox` from the iPhone's Files app; after a few minutes a new page appears under `WIKI/Wiki_Pages`, the original is filed into a topic folder under `Raw_Sources`, and (if configured) you receive a "wiki-feeder ingest summary" email.
+Both installers finish by setting up a schedule that runs every minute. To check that it works, drop any file into `_WikiBox` (iPhone: from the Files app; Android: tap Send in the Notetaker app); after a few minutes a new page appears under `WIKI/Wiki_Pages`, the original is filed into a topic folder under `Raw_Sources`, and (if configured) you receive a "wiki-feeder ingest summary" email.
 
 - **Update**: double-click `Update.command` (Mac, in `~/wiki-agent`) or `Update.bat` (Windows, in `C:\wiki-feeder`). If a round is in progress, it waits for it to finish
 - **Uninstall**: `Remove-Schedule.command` / `Remove-Schedule.bat` removes only the schedule; settings, logs and your knowledge base stay. To remove everything, also delete the program folder and the settings folder listed below — your `WIKI` and `Raw_Sources` are not in either and are never deleted

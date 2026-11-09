@@ -48,7 +48,7 @@ def test_install_writes_three_agents_into_the_given_home(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(ms, "_launchctl", lambda *a: calls.append(a) or subprocess.CompletedProcess(a, 0, "", ""))
     monkeypatch.setattr(ms.Config, "default", classmethod(lambda cls: type("C", (), {
-        "icloud_inbox": tmp_path / "in", "onedrive_inbox": None})()))
+        "icloud_inbox": tmp_path / "in", "onedrive_inbox": None, "gdrive_inbox": None})()))
     assert ms.install(tmp_path, "test.wa")
     agents = tmp_path / "Library" / "LaunchAgents"
     assert sorted(p.name for p in agents.iterdir()) == ["test.wa.collect.plist", "test.wa.process.plist",
@@ -63,7 +63,7 @@ def test_watch_runs_every_three_minutes_and_checks_its_own_labels(tmp_path, monk
     import plistlib
     monkeypatch.setattr(ms, "_launchctl", lambda *a: subprocess.CompletedProcess(a, 0, "", ""))
     monkeypatch.setattr(ms.Config, "default", classmethod(lambda cls: type("C", (), {
-        "icloud_inbox": None, "onedrive_inbox": tmp_path / "od"})()))
+        "icloud_inbox": None, "onedrive_inbox": tmp_path / "od", "gdrive_inbox": None})()))
     app = tmp_path / "Applications" / "wiki-agent.app"
     assert ms.install(tmp_path, "test.wa", app=app)
     agents = tmp_path / "Library" / "LaunchAgents"
@@ -261,7 +261,7 @@ def test_app_check_failure_points_at_files_and_folders_not_full_disk_access(tmp_
 
 
 def test_expected_readable_counts_every_inbox_and_both_folders_of_each_knowledge_base(monkeypatch, tmp_path):
-    cfg = type("C", (), {"icloud_inbox": tmp_path, "onedrive_inbox": None, "repos": (object(),),
+    cfg = type("C", (), {"icloud_inbox": tmp_path, "onedrive_inbox": None, "gdrive_inbox": None, "repos": (object(),),
                          "icloud_restart": False})()
     monkeypatch.setattr(ms.Config, "default", classmethod(lambda cls: cfg))
     assert ms._expected_inboxes() == 3
@@ -307,3 +307,13 @@ def test_install_sh_defaults_to_the_language_in_the_config_and_hands_the_choice_
     first_msg = body.index("    msg ")
     assert body.index('WA_LANG=$(ask_lang "$WA_LANG")') < first_msg
     assert body.index('export WIKI_AGENT_LANG="$WA_LANG"') < first_msg
+
+
+def test_mac_setup_finds_onedrive_and_google_drive_under_cloudstorage(tmp_path):
+    mset = _mod("macsetup")
+    store = tmp_path / "Library" / "CloudStorage"
+    (store / "OneDrive-個人").mkdir(parents=True)
+    (store / "GoogleDrive-amy" / "My Drive").mkdir(parents=True)
+    got = mset.find_clouds(tmp_path)
+    assert got == {"icloud": None, "onedrive": store / "OneDrive-個人",
+                   "gdrive": store / "GoogleDrive-amy" / "My Drive"}

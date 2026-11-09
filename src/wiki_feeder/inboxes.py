@@ -24,7 +24,7 @@ from . import gitsync
 from .config import FuturesConfig
 from .i18n import L, N_
 from .mover import is_dataless
-from .osplat import download_cmd
+from .osplat import download_cmd, read_to_download_cmd
 from .proc import run_net
 
 log = logging.getLogger(__name__)
@@ -52,10 +52,16 @@ class Candidate:
     rel: str     # 相對收件匣根目錄的路徑(寫進 sidecar 的「原路徑」)
 
 
+# Google 雲端硬碟的原生文件在桌面版只是一個指向網頁的捷徑檔(約 200 bytes、沒有內容):不收、不提醒(使用者 2026-11-09)
+GOOGLE_SHORTCUTS = (".gdoc", ".gsheet", ".gslides", ".gdraw", ".gform", ".gmap", ".gsite", ".gjam",
+                    ".gscript", ".gtable")
+
+
 def _ignored(name: str) -> bool:
     # 點開頭:.DS_Store、OneDrive 的 .849C… 標記檔、iCloud 的 .x.icloud 佔位檔、我們自己的 .partial
     # Icon\r:Finder 自訂圖示;~$*、*.tmp:Office 暫存檔
-    return name.startswith(".") or name == "Icon\r" or name.startswith("~$") or name.endswith(".tmp")
+    return (name.startswith(".") or name == "Icon\r" or name.startswith("~$") or name.endswith(".tmp")
+            or name.lower().endswith(GOOGLE_SHORTCUTS))
 
 
 def _group(cands: list[Candidate]) -> list[list[Candidate]]:
@@ -66,14 +72,16 @@ def _group(cands: list[Candidate]) -> list[list[Candidate]]:
 
 
 class FolderInbox:
-    """iCloud 與 OneDrive:一般資料夾,取到就刪。"""
+    """iCloud、OneDrive、Google 雲端硬碟:一般資料夾,取到就刪。
+    Google 雲端硬碟沒有 brctl 那種「要求下載」的指令,佔位檔改用讀一個位元組觸發下載(read_download)。"""
 
     needs_stability = True
 
-    def __init__(self, name: str, root: Path, trigger_download: bool = False):
+    def __init__(self, name: str, root: Path, trigger_download: bool = False, read_download: bool = False):
         self.name = name
         self.root = root
-        self.trigger_download = trigger_download
+        self.trigger_download = trigger_download or read_download
+        self.read_download = read_download
 
     def meta(self) -> dict:
         return {}
@@ -123,8 +131,11 @@ class FolderInbox:
     def _request_download(self, path: Path) -> None:
         if not self.trigger_download:
             return
+        cmd = read_to_download_cmd(str(path)) if self.read_download else download_cmd(str(path))
+        if cmd is None:
+            return
         try:
-            subprocess.run(download_cmd(str(path)), capture_output=True, timeout=30)
+            subprocess.run(cmd, capture_output=True, timeout=30)
         except (OSError, subprocess.SubprocessError) as e:
             log.warning(L("%s:要求下載 %s 失敗:%s"), self.name, path, e)
 

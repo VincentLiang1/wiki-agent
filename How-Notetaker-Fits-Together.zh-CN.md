@@ -4,7 +4,7 @@
 
 **从手机上的会议助手 App 开始,加上会议助手电脑版,再由 Wiki Agent 串起来,最后做到 LLM Wiki 自动化。分三层,要多少装多少。**
 
-![会议助手全套服务架构:会议助手 App 与电脑版同步声纹、名单;手机按「发送」或电脑版手动丢 md 到 iCloud 云盘的 _WikiBox,Wiki Agent + Scribe2MD 每分钟收件、转文字,写进你电脑上的 LLM Wiki](How-Notetaker-Fits-Together.zh-CN.svg)
+![会议助手全套服务架构:会议助手 App 与电脑版同步声纹、名单;手机按「发送」或电脑版手动丢 md 到云端硬盘的 _WikiBox,Wiki Agent + Scribe2MD 每分钟收件、转文字,写进你电脑上的 LLM Wiki](How-Notetaker-Fits-Together.zh-CN.svg)
 
 ## 第 1 层:只要手机
 
@@ -26,7 +26,7 @@
 - 录音转文字,整理进你的 LLM Wiki
 - 跟旧数据连起来,越用越完整
 
-要一台常开的电脑与 Claude 付费账号(Pro 以上)。目前收件文件夹 `_WikiBox` 在 iCloud 云盘里:手机是 iPhone;电脑是 Windows 的话要装 iCloud for Windows。Wiki Agent 每分钟看一次收件文件夹。
+要一台常开的电脑与 Claude 付费账号(Pro 以上)。收件文件夹 `_WikiBox` 放在云端硬盘里,看你用什么送文件:iPhone 用 iCloud 云盘、Android 用 Google 云端硬盘;电脑版在 Windows 首选 OneDrive、在 Mac 首选 iCloud 云盘(另两个也可以)。安装时选要收哪几个,没选的不看。Wiki Agent 每分钟看一次收件文件夹。
 
 - 没听过 LLM Wiki?看〈[什么是 LLM Wiki](What-is-LLM-Wiki.zh-CN.md)〉
 - Wiki Agent 介绍与安装:[README](README.zh-CN.md)、[Mac 安装说明](Mac-Install-Guide.zh-CN.md)、[Windows 安装说明](Windows-Install-Guide.zh-CN.md)

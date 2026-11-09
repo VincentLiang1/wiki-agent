@@ -54,6 +54,8 @@ def build_inboxes(cfg: Config) -> list:
         inboxes.append(FolderInbox("iCloud", cfg.icloud_inbox, trigger_download=cfg.trigger_icloud_download))
     if cfg.onedrive_inbox is not None:
         inboxes.append(FolderInbox("OneDrive", cfg.onedrive_inbox))
+    if cfg.gdrive_inbox is not None:
+        inboxes.append(FolderInbox("Google Drive", cfg.gdrive_inbox, read_download=True))
     if cfg.futures is not None:
         inboxes.append(FuturesInbox(cfg.futures, cfg.state_dir / "futures_last_check"))
     return inboxes

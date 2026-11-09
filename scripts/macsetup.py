@@ -87,19 +87,22 @@ def pick(prompt: str, folder: bool, default: str = "") -> str:
     return str(Path(v).expanduser()) if v else ""
 
 
-def ask_inbox(home: Path) -> str:
-    drive = icloud_drive(home)
-    if not drive.is_dir():
-        say(L("⚠ 找不到 iCloud 雲碟。請到「系統設定 → 你的名字 → iCloud → iCloud 雲碟」打開,再重跑安裝。"))
-    default = str(drive / "_WikiBox")
-    while True:
-        p = Path(pick(L("【收件匣】iPhone 丟檔進來的資料夾(iCloud 雲碟裡的 _WikiBox)"), True, default))
-        if p.parent.is_dir():
-            break
-        say(L("  找不到 {path},請再確認", path=p.parent))
-    if not p.is_dir() and yes(L("  {path} 還沒有,要建立嗎?", path=p)):
-        p.mkdir()
-    return str(p)
+def find_clouds(home: Path) -> dict[str, Path | None]:
+    """Mac 上三種雲端硬碟的位置(找不到是 None):OneDrive、Google 雲端硬碟在 ~/Library/CloudStorage/ 底下(各一個帳號就用第一個)。"""
+    store = home / "Library" / "CloudStorage"
+    try:
+        dirs = sorted(d for d in store.iterdir() if d.is_dir())
+    except OSError:
+        dirs = []
+    icloud = icloud_drive(home)
+    return {"icloud": icloud if icloud.is_dir() else None,
+            "onedrive": next((d for d in dirs if d.name.startswith("OneDrive")), None),
+            "gdrive": next((ws.my_drive(d) for d in dirs if d.name.startswith("GoogleDrive")), None)}
+
+
+def ask_inboxes(home: Path) -> dict[str, str]:
+    ws.pick = pick
+    return ws.ask_inboxes(find_clouds(home), windows=False)
 
 
 def ask_doc2md(home: Path) -> str:
@@ -157,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         say(L("\n=== 設定(每一題都可以貼上路徑;有預設值時直接按 Enter) ==="))
         a = {"lang": lang}
         a["wiki"], a["raw"], a["folders"] = ask_library(home, claude, a)
-        a["icloud"] = ask_inbox(home)
+        a.update(ask_inboxes(home))
         a["scribe_sync"] = ws.ask_scribe_sync(a)
         a["label"] = ask(L("【知識庫名稱】摘要信上顯示的名字"), L("知識庫"))
         a["doc2md"] = ask_doc2md(home)
@@ -200,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
     if app:
         return _app_permission(home, prefix, app, state)
     say(L("\n=== 完整磁碟取用權限 ==="))
-    say(L("排程在背景跑,要另外允許它讀 iCloud 雲碟。請照安裝說明第 5 步:"))
+    say(L("排程在背景跑,要另外允許它讀雲端硬碟裡的收件匣。請照安裝說明第 5 步:"))
     say(L("  系統設定 → 隱私權與安全性 → 完整磁碟取用權限 → 左下角「+」→ 按 ⌘⇧G、貼上下面這一行 → 打開 → 確認開關是開的"))
     say(f"  {ms.fda_path()}")
     subprocess.run(["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"],
@@ -218,10 +221,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _app_permission(home: Path, prefix: str, app: Path, state: Path) -> int:
-    """App 版:在背景試讀一次,讓系統趁現在跳視窗問權限(收件匣在 iCloud 雲碟,知識庫可能在「文件」「桌面」)。"""
+    """App 版:在背景試讀一次,讓系統趁現在跳視窗問權限(收件匣在雲端硬碟,知識庫可能在「文件」「桌面」)。"""
     ms = _script("macsched")
     say(L("\n=== 讀取權限 ==="))
-    say(L("等一下系統會跳出「“wiki-agent”想要取用……的檔案」的視窗(iCloud 雲碟;知識庫放在「文件」「桌面」的話,"
+    say(L("等一下系統會跳出「“wiki-agent”想要取用……的檔案」的視窗(收件匣所在的雲端硬碟;知識庫放在「文件」「桌面」的話,"
           "那邊也會再問一次),每一個都按「允許」。"))
     while True:
         input(L("  準備好了按 Enter,我在背景試讀一次(最多等 5 分鐘)…"))

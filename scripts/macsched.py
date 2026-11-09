@@ -110,7 +110,7 @@ def _load(label: str, d: dict, agents: Path) -> bool:
 
 
 def _inboxes(cfg: Config) -> list[Path]:
-    return [p for p in (cfg.icloud_inbox, cfg.onedrive_inbox) if p]
+    return [p for p in (cfg.icloud_inbox, cfg.onedrive_inbox, cfg.gdrive_inbox) if p]
 
 
 def install(home: Path, prefix: str = PREFIX, app: Path | None = None) -> bool:
