@@ -440,6 +440,14 @@ def test_find_clouds_windows_reads_onedrive_env_and_old_google_drive_folder(tmp_
     assert got["icloud"] is None
 
 
+def test_find_clouds_windows_reads_uppercase_env_keys_like_real_os_environ(tmp_path):
+    """Windows 上 dict(os.environ) 的鍵是全大寫(ONEDRIVE):照原樣比對就永遠找不到 OneDrive(2026-11-09 實機踩到)。"""
+    m = _mod()
+    (tmp_path / "OneDrive").mkdir()
+    got = m.find_clouds_windows(tmp_path, {"ONEDRIVE": str(tmp_path / "OneDrive")}, {})
+    assert got["onedrive"] == tmp_path / "OneDrive"
+
+
 def test_scribe_sync_with_only_a_google_drive_inbox(tmp_path, monkeypatch):
     """Android 的朋友沒有 iCloud:同步資料夾預設放在 Drive 的收件匣旁邊,也不可跟它重疊。"""
     m = _mod()

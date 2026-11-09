@@ -115,7 +115,9 @@ def my_drive(root: Path) -> Path:
 
 def find_clouds_windows(home: Path, env: dict[str, str], drive_labels: dict[str, str]) -> dict[str, Path | None]:
     """Windows 上三種雲端硬碟的位置(找不到是 None)。Google 雲端硬碟桌面版是一個虛擬磁碟(標籤 Google Drive,預設 G:)。"""
-    onedrive = next((Path(env[k]) for k in ("OneDriveConsumer", "OneDrive") if env.get(k) and Path(env[k]).is_dir()), None)
+    # Windows 的環境變數不分大小寫,dict(os.environ) 的鍵卻是全大寫(ONEDRIVE):一律用 casefold 比(2026-11-09 實機)
+    env = {k.casefold(): v for k, v in env.items()}
+    onedrive = next((Path(env[k]) for k in ("onedriveconsumer", "onedrive") if env.get(k) and Path(env[k]).is_dir()), None)
     gdrive = next((my_drive(Path(d + "\\")) for d, label in drive_labels.items() if label.casefold() == "google drive"),
                   None)
     if gdrive is None and (home / "Google Drive").is_dir():          # 舊版「備份與同步」放在家目錄

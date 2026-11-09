@@ -1,5 +1,13 @@
 [
  {
+  "source": "4a4d2d3",
+  "date": "2026-11-09",
+  "needs_human": false,
+  "zh-Hant": "- Windows 安裝時,收件匣那題現在找得到這台電腦的 OneDrive,預設的收件資料夾直接帶出來(上一版找不到、要自己貼路徑)\n- 已經裝好的不必做任何事,照舊運作",
+  "zh-Hans": "- Windows 安装时,收件箱那题现在找得到这台电脑的 OneDrive,默认的收件文件夹直接带出来(上一版找不到、要自己贴路径)\n- 已经装好的不必做任何事,照旧运作",
+  "en": "- On Windows, the inbox question in the installer now finds this PC's OneDrive and suggests the inbox folder (the previous version couldn't find it, so you had to paste the path)\n- If you're already set up there is nothing to do; it keeps working as before"
+ },
+ {
   "source": "e4d968a",
   "date": "2026-11-09",
   "needs_human": false,
