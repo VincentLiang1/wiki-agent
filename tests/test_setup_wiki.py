@@ -158,6 +158,23 @@ def test_english_git_section_uses_the_english_commit_format(tmp_path):
     text = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
     assert "Ingest: <original file name> — one-line summary" in text and ws.L(ws.GIT_HEADING) in text
     assert not any("一" <= ch <= "鿿" for ch in text) and "`_Pending`" in text
+    assert "(pending)" not in text                                           # 2026-11-10 實跑看到資料夾名後面多一個直譯
+
+
+def test_glossary_section_reads_right_in_english_and_simplified_chinese(tmp_path):
+    """2026-11-10 用英文實跑建庫看到的:「兩個字的中文詞」那條是中文專用的,英文版不寫;
+    簡中的表格「一列」在大陸是直的一欄,寫「一行」。"""
+    from wiki_feeder import glossary, i18n
+    for lang in ("en", "zh-Hans"):
+        i18n.set_lang(lang)
+        (tmp_path / "CLAUDE.md").write_text("# Rules\n", encoding="utf-8")
+        assert ws.add_glossary_section(tmp_path)
+        text = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+        assert glossary.TABLE_FILE in text
+        if lang == "en":
+            assert "Chinese" not in text and not any("一" <= ch <= "鿿" for ch in text)
+        else:
+            assert "两个字的中文词" in text and "一列" not in text and "那一行" in text and "辨识" not in text
 
 
 def test_git_section_heading_in_any_language_counts_as_present(tmp_path, monkeypatch):

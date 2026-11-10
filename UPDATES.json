@@ -1,5 +1,13 @@
 [
  {
+  "source": "84f6820",
+  "date": "2026-11-10",
+  "needs_human": false,
+  "zh-Hant": "- 安裝時新建的知識庫,CLAUDE.md 最後由程式補上的兩節(版本紀錄、名詞校正表)英文與簡中的譯文修正:英文拿掉只適用中文的一句與多出的字,簡中表格的「列」改成「行」\n- 只影響之後新建的知識庫;已經裝好的不會改,也不必做任何事",
+  "zh-Hans": "- 安装时新建的知识库,CLAUDE.md 最后由程序补上的两节(版本记录、名词校正表)英文与简体中文的译文修正:英文去掉只适用中文的一句与多出的字,简体中文表格的「列」改成「行」\n- 只影响之后新建的知识库;已经装好的不会改,也不必做任何事",
+  "en": "- Fixed the English and Simplified Chinese wording of the two sections the installer appends to a new knowledge base's CLAUDE.md (version history, name-correction table): the English drops a Chinese-only rule and a stray word\n- Only affects knowledge bases created from now on; existing installs are unchanged and need nothing"
+ },
+ {
   "source": "114fcb2",
   "date": "2026-11-10",
   "needs_human": false,
