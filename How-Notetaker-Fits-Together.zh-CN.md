@@ -4,7 +4,7 @@
 
 **从手机上的会议助手 App 开始,加上会议助手电脑版,再由 Wiki Agent 串起来,最后做到 LLM Wiki 自动化。分三层,要多少装多少。**
 
-![会议助手全套服务架构:会议助手 App 与电脑版同步声纹、名单;手机按「发送」或电脑版手动丢 md 到云端硬盘的 _WikiBox,Wiki Agent + Scribe2MD 每分钟收件、转文字,写进你电脑上的 LLM Wiki](How-Notetaker-Fits-Together.zh-CN.svg)
+![会议助手全套服务架构:会议助手 App 与电脑版同步声纹、名单;手机按「发送」或电脑版按「送至 LLM Wiki」,文件进云端硬盘的 _WikiBox,Wiki Agent + Scribe2MD 每分钟收件、转文字,写进你电脑上的 LLM Wiki](How-Notetaker-Fits-Together.zh-CN.svg)
 
 ## 第 1 层:只要手机
 

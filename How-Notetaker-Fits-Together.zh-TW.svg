@@ -23,37 +23,66 @@
 .k3{stroke:#3fb950}.f3{fill:#3fb950}
 .group{fill:#3fb950;fill-opacity:.07;stroke:#3fb950;stroke-opacity:.5}
 }
+
+.c1{color:#0969da}.c2{color:#8250df}.c3{color:#1a7f37}.cg{color:#59636e}
+.eye{fill:#ffffff}
+@media (prefers-color-scheme: dark){
+.c1{color:#4493f8}.c2{color:#ab7df8}.c3{color:#3fb950}.cg{color:#9198a1}
+.eye{fill:#151b23}
+}
 </style>
-<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head"/></marker></defs>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head"/></marker>
+<symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></g></symbol><symbol id="i-laptop" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19.5h20"/></g></symbol><symbol id="i-folder" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol><symbol id="i-cloud" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M7 19h10.5a4.5 4.5 0 0 0 .6-8.96A6.5 6.5 0 0 0 5.6 10.6 4.3 4.3 0 0 0 7 19z"/></symbol><symbol id="i-bot" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4.5"/><circle cx="12" cy="3.5" r="1"/><path d="M9 13.5v1M15 13.5v1"/></g></symbol><symbol id="i-book" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></g></symbol><symbol id="i-sync" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 9h15l-3.5-3.5M20 15H5l3.5 3.5"/></symbol><symbol id="i-send" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21.5 2.5 10.5 13.5M21.5 2.5l-7 19-4-8-8-4z"/></symbol><symbol id="i-file" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/></g></symbol><symbol id="i-chip" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx=".5"/><path d="M9.5 2.5V6M14.5 2.5V6M9.5 18v3.5M14.5 18v3.5M2.5 9.5H6M2.5 14.5H6M18 9.5h3.5M18 14.5h3.5"/></g></symbol><symbol id="i-clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></g></symbol><symbol id="i-link" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></symbol><symbol id="i-apple" viewBox="0 0 24 24"><path fill="currentColor" d="M16.4 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.8-3-.8-1.6 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.3 0 2.1-1.1 2.8-2.3.9-1.3 1.3-2.6 1.3-2.6s-2.5-1-2.5-3.8zM14.1 5.9c.6-.8 1.1-1.8 1-2.9-.9 0-2.1.6-2.7 1.4-.6.7-1.1 1.8-1 2.8 1 .1 2.1-.5 2.7-1.3z"/></symbol><symbol id="i-android" viewBox="0 0 24 24"><g fill="currentColor"><path d="M1.5 19.5a10.5 10.5 0 0 1 21 0z"/><path d="M6.3 11.2 3.8 6.8M17.7 11.2l2.5-4.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="7.8" cy="15.3" r="1.5" class="eye"/><circle cx="16.2" cy="15.3" r="1.5" class="eye"/></g></symbol><symbol id="i-windows" viewBox="0 0 24 24"><path fill="currentColor" d="M3 3h8.5v8.5H3zM12.5 3H21v8.5h-8.5zM3 12.5h8.5V21H3zM12.5 12.5H21V21h-8.5z"/></symbol></defs>
 <rect x="20" y="190" width="720" height="380" rx="16" class="group"/>
 <text x="170.0" y="28" class="cap f1" text-anchor="middle">第 1 層：只要手機</text>
 <text x="590.0" y="28" class="cap f2" text-anchor="middle">第 2 層：加上電腦版</text>
 <text x="380.0" y="210" class="cap f3" text-anchor="middle">第 3 層：自動進知識庫</text>
 <text x="380.0" y="226" class="lbl" text-anchor="middle">可跟電腦版同一台，或另一台常開的電腦</text>
 <rect x="30" y="40" width="280" height="100" rx="12" class="card k1"/>
-<text x="170.0" y="85.5" class="t" text-anchor="middle">會議助手 App</text>
-<text x="170.0" y="104.5" class="s" text-anchor="middle">iPhone · Android</text>
+<use href="#i-phone" x="107.516" y="69.74" width="20" height="20" class="c1"/>
+<text x="131.5" y="85.5" class="t" text-anchor="start">會議助手 App</text>
+<use href="#i-apple" x="104.75" y="93" width="14" height="14" class="cg"/>
+<text x="122.8" y="104.5" class="s" text-anchor="start">iPhone</text>
+<use href="#i-android" x="175.125" y="93" width="14" height="14" class="cg"/>
+<text x="193.1" y="104.5" class="s" text-anchor="start">Android</text>
 <rect x="450" y="40" width="280" height="100" rx="12" class="card k2"/>
-<text x="590.0" y="76.0" class="t" text-anchor="middle">會議助手電腦版</text>
-<text x="590.0" y="95.0" class="s" text-anchor="middle">Windows · Mac</text>
-<text x="590.0" y="114.0" class="s" text-anchor="middle">內含同一顆 Scribe2MD 核心</text>
+<use href="#i-laptop" x="519.2" y="60.24" width="20" height="20" class="c2"/>
+<text x="543.2" y="76.0" class="t" text-anchor="start">會議助手電腦版</text>
+<use href="#i-windows" x="527.312" y="83.5" width="14" height="14" class="cg"/>
+<text x="545.3" y="95.0" class="s" text-anchor="start">Windows</text>
+<use href="#i-apple" x="610.812" y="83.5" width="14" height="14" class="cg"/>
+<text x="628.8" y="95.0" class="s" text-anchor="start">Mac</text>
+<text x="502.4" y="114.0" class="s" text-anchor="start">內含同一顆</text>
+<use href="#i-chip" x="569.938" y="102.5" width="14" height="14" class="cg"/>
+<text x="587.9" y="114.0" class="s" text-anchor="start">Scribe2MD 核心</text>
 <path d="M314 90.0 H446" class="line" marker-start="url(#a)" marker-end="url(#a)"/>
-<text x="380.0" y="80.0" class="lbl" text-anchor="middle">聲紋、名單同步</text>
+<use href="#i-sync" x="329" y="68.68" width="14" height="14" class="cg"/>
+<text x="347.0" y="80.0" class="lbl" text-anchor="start">聲紋、名單同步</text>
 <path d="M170 140 V269.0 H228" class="line" marker-end="url(#a)"/>
-<text x="180" y="168" class="lbl" text-anchor="start">按「送出」</text>
-<path d="M590 140 V269.0 H532" class="line dash" marker-end="url(#a)"/>
-<text x="580" y="168" class="lbl" text-anchor="end">手動把 md 丟進去</text>
+<use href="#i-send" x="180" y="156.68" width="14" height="14" class="cg"/>
+<text x="198" y="168" class="lbl" text-anchor="start">按「送出」</text>
+<path d="M590 140 V269.0 H532" class="line" marker-end="url(#a)"/>
+<use href="#i-send" x="445.24" y="156.68" width="14" height="14" class="cg"/>
+<text x="463.2" y="168" class="lbl" text-anchor="start">按「送至 LLM Wiki」</text>
 <rect x="230" y="234" width="300" height="70" rx="12" class="card k3"/>
-<text x="380.0" y="264.5" class="t" text-anchor="middle">_WikiBox</text>
-<text x="380.0" y="283.5" class="s" text-anchor="middle">雲端硬碟的收件資料夾</text>
+<use href="#i-folder" x="332.552" y="248.74" width="20" height="20" class="c3"/>
+<text x="356.6" y="264.5" class="t" text-anchor="start">_WikiBox</text>
+<use href="#i-cloud" x="308.5" y="272" width="14" height="14" class="cg"/>
+<text x="326.5" y="283.5" class="s" text-anchor="start">雲端硬碟的收件資料夾</text>
 <path d="M380.0 304 V350" class="line" marker-end="url(#a)"/>
-<text x="392.0" y="333" class="lbl" text-anchor="start">電腦每分鐘收件</text>
+<use href="#i-clock" x="392" y="321.68" width="14" height="14" class="cg"/>
+<text x="410.0" y="333" class="lbl" text-anchor="start">電腦每分鐘收件</text>
 <rect x="200" y="352" width="360" height="76" rx="12" class="card k3"/>
-<text x="380.0" y="385.5" class="t" text-anchor="middle">Wiki Agent + Scribe2MD</text>
+<use href="#i-bot" x="262.632" y="369.74" width="20" height="20" class="c3"/>
+<text x="286.6" y="385.5" class="t" text-anchor="start">Wiki Agent +</text>
+<use href="#i-chip" x="391.552" y="369.74" width="20" height="20" class="c3"/>
+<text x="415.6" y="385.5" class="t" text-anchor="start">Scribe2MD</text>
 <text x="380.0" y="404.5" class="s" text-anchor="middle">轉文字、整理成筆記</text>
 <path d="M380.0 428 V476" class="line" marker-end="url(#a)"/>
-<text x="392.0" y="457" class="lbl" text-anchor="start">寫頁、互相連結</text>
+<use href="#i-link" x="392" y="445.68" width="14" height="14" class="cg"/>
+<text x="410.0" y="457" class="lbl" text-anchor="start">寫頁、互相連結</text>
 <rect x="230" y="478" width="300" height="70" rx="12" class="card k3"/>
-<text x="380.0" y="508.5" class="t" text-anchor="middle">LLM Wiki</text>
+<use href="#i-book" x="330.788" y="492.74" width="20" height="20" class="c3"/>
+<text x="354.8" y="508.5" class="t" text-anchor="start">LLM Wiki</text>
 <text x="380.0" y="527.5" class="s" text-anchor="middle">你電腦上的知識庫</text>
 </svg>

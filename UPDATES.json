@@ -1,5 +1,13 @@
 [
  {
+  "source": "8f15b2b",
+  "date": "2026-11-10",
+  "needs_human": false,
+  "zh-Hant": "- 架構圖〈會議助手全套服務架構〉的字前面加了圖示;電腦版那條改成實線「按「送至 LLM Wiki」」:會議助手電腦版可以直接按鈕把筆記送進收件資料夾,不必手動把 md 丟進去\n- 只改說明文件,程式沒有變,不必做任何事",
+  "zh-Hans": "- 架构图〈会议助手全套服务架构〉的字前面加了图标;电脑版那条改成实线「按「送至 LLM Wiki」」:会议助手电脑版可以直接按按钮把笔记送进收件文件夹,不必手动把 md 丢进去\n- 只改说明文档,程序没有变,不必做任何事",
+  "en": "- The How Notetaker Fits Together diagram now has icons, and the Notetaker Desktop arrow is a solid \"Click Send to LLM Wiki\": Desktop can send notes to the inbox folder with a button instead of dropping md files in by hand\n- Docs only, no code changes; nothing to do"
+ },
+ {
   "source": "84f6820",
   "date": "2026-11-10",
   "needs_human": false,
