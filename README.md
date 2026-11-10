@@ -26,7 +26,7 @@ wiki-agent is level 3 of the Notetaker family: the Notetaker app on your phone r
 | Computer | Apple-silicon Mac | Windows 10/11 |
 | Phone | iPhone (files travel through iCloud Drive) or Android (Google Drive for desktop on the Mac) | iPhone (iCloud for Windows on the PC) or Android (Google Drive for desktop on the PC) |
 | Claude | Your own Claude subscription (Pro or Max), with Claude Code installed and signed in | Same |
-| Transcription (optional) | Scribe2MD, about 1 GB — the installer offers to download it | Same |
+| Transcription (optional) | Scribe2MD, about 1 GB — the installer offers to download it (what it is: [Scribe2MD](Scribe2MD.md)) | Same |
 | Summary email (optional) | Gmail + an app password | Same |
 
 The knowledge base layout: one folder containing `WIKI/` (the knowledge base itself, with the rules file `CLAUDE.md` and the notes) and `Raw_Sources/` (the originals) side by side; see "What does the knowledge base look like?" in [What is an LLM Wiki?](What-is-LLM-Wiki.md) for a diagram. **Don't have one yet? No problem**: just press Enter during setup and the installer creates the folders and asks Claude to write a `CLAUDE.md`. An existing knowledge base is used as-is and never overwritten.

@@ -34,7 +34,9 @@ Needs an always-on computer and a paid Claude plan (Pro or higher). The `_WikiBo
 ## What is Scribe2MD
 
 - The transcription engine inside Notetaker Desktop
-- Install it alone to just convert files, or for the doc2md skill in Claude Code
-- Already included in Notetaker Desktop
+- Built into Notetaker Desktop: install that to convert files, or for the doc2md skill in Claude Code
+- Wiki Agent installs and updates it for you; no separate install
 
 The Wiki Agent installer offers to download Scribe2MD (about 1 GB, optional). Without it Claude reads documents and photos directly, and recordings and video wait until it is installed.
+
+- What it converts and how to get it: see [Scribe2MD](Scribe2MD.md)

@@ -34,7 +34,9 @@
 ## Scribe2MD 是什么
 
 - 电脑版里负责转文字的核心
-- 只要转文件、或在 Claude Code 用 doc2md 技能,可以单独装
-- 装了电脑版就不用另装
+- 电脑版已经包含，要转文件、或在 Claude Code 用 doc2md 技能就装电脑版
+- Wiki Agent 自动安装、自动更新，不用自己装
 
 Wiki Agent 的安装程序会问要不要下载 Scribe2MD(约 1 GB,选装)。没装时文档与照片由 Claude 直接读,录音与视频要装了才处理。
+
+- 能转哪些格式、怎么取得:看〈[Scribe2MD](Scribe2MD.zh-CN.md)〉

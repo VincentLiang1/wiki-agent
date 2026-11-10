@@ -19,6 +19,8 @@ GUIDES = {"mac": ("Mac-Install-Guide.zh-TW.md", "Mac-Install-Guide.zh-CN.md", "M
 WHAT_IS = ("What-is-LLM-Wiki.zh-TW.md", "What-is-LLM-Wiki.zh-CN.md", "What-is-LLM-Wiki.md")
 # 〈會議助手全套服務架構〉:內容對齊 iOS 設定 › 關於(使用者 2026-11-09),README 開頭連過去
 OVERVIEW = ("How-Notetaker-Fits-Together.zh-TW.md", "How-Notetaker-Fits-Together.zh-CN.md", "How-Notetaker-Fits-Together.md")
+# 〈Scribe2MD〉:是什麼、怎麼取得(使用者 2026-11-10 定案:核心不給人單獨裝,要用就裝電腦版)
+SCRIBE2MD = ("Scribe2MD.zh-TW.md", "Scribe2MD.zh-CN.md", "Scribe2MD.md")
 
 
 def _head(name: str) -> str:
@@ -52,7 +54,7 @@ def test_every_public_md_links_resolve():
 
 
 def test_each_guide_links_to_its_other_two_languages():
-    for trio in (*GUIDES.values(), WHAT_IS, OVERVIEW):
+    for trio in (*GUIDES.values(), WHAT_IS, OVERVIEW, SCRIBE2MD):
         for name in trio:
             assert all(f"]({other})" in _head(name) for other in trio if other != name), name
 
@@ -75,7 +77,7 @@ def test_entry_files_and_guides_have_english_names():
 
 def test_simplified_docs_link_to_simplified_guides():
     """簡中 README 與說明的內文只連到簡中那份說明(頁首的語言切換列除外)。"""
-    for name in ("README.zh-CN.md", GUIDES["mac"][1], GUIDES["win"][1], WHAT_IS[1], OVERVIEW[1]):
+    for name in ("README.zh-CN.md", GUIDES["mac"][1], GUIDES["win"][1], WHAT_IS[1], OVERVIEW[1], SCRIBE2MD[1]):
         body = (PUBLIC / name).read_text(encoding="utf-8").split("\n", 3)[3]
         assert ".zh-TW.md" not in body, name
 
@@ -108,3 +110,15 @@ def test_guides_name_the_files_that_really_exist():
         for name in ("Install.bat", "Update.bat", "Remove-Schedule.bat"):
             assert name in win and (ROOT / name).is_file()
         assert "Scribe2MD" in win and "notetaker-desktop/releases" in win
+
+
+def test_scribe2md_page_sends_people_to_notetaker_desktop_not_the_core_zip():
+    """核心是 wiki-agent 的元件、不給人單獨裝(使用者 2026-11-10 定案,電腦版 docs/dev/publish.md §4.7):〈Scribe2MD〉
+    叫人裝會議助手電腦版,不可再教人下載 scribe2md-core 的 zip、自己跑安裝程式;〈會議助手全套服務架構〉與 README 連到這一頁。"""
+    for i, name in enumerate(SCRIBE2MD):
+        text = (PUBLIC / name).read_text(encoding="utf-8")
+        assert "notetaker-desktop/releases/latest" in text, name
+        for bad in ("releases/download/scribe2md-core", "install.command", "install.ps1"):
+            assert bad not in text, (name, bad)
+        assert f"]({name})" in (PUBLIC / OVERVIEW[i]).read_text(encoding="utf-8"), OVERVIEW[i]
+        assert f"]({name})" in (PUBLIC / READMES[i]).read_text(encoding="utf-8"), READMES[i]

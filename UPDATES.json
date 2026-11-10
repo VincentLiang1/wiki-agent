@@ -1,5 +1,13 @@
 [
  {
+  "source": "a1d404d",
+  "date": "2026-11-10",
+  "needs_human": false,
+  "zh-Hant": "- 說明文件新增〈Scribe2MD〉頁:能轉哪些格式、怎麼取得(要自己轉檔或用 doc2md 技能就裝會議助手電腦版,用 Wiki Agent 的由它安裝、自動更新)\n- 只改說明文件,程式沒有變,不必做任何事",
+  "zh-Hans": "- 说明文档新增〈Scribe2MD〉页:能转哪些格式、怎么取得(要自己转文件或用 doc2md 技能就装会议助手电脑版,用 Wiki Agent 的由它安装、自动更新)\n- 只改说明文档,程序没有变,不必做任何事",
+  "en": "- New Scribe2MD page in the docs: what it converts and how to get it (install Notetaker Desktop to convert files yourself or for the doc2md skill; with Wiki Agent it is installed and updated for you)\n- Docs only, no code changes; nothing to do"
+ },
+ {
   "source": "4a4d2d3",
   "date": "2026-11-09",
   "needs_human": false,

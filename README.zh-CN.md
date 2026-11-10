@@ -24,7 +24,7 @@ wiki-agent 是「会议助手」全套的第 3 层:手机上的会议助手 App 
 | 电脑 | Apple 芯片的 Mac | Windows 10／11 |
 | 手机 | iPhone(用 iCloud 云盘传文件)或 Android(电脑装「Google 云端硬盘电脑版」) | iPhone(电脑装 iCloud for Windows)或 Android(电脑装「Google 云端硬盘电脑版」) |
 | Claude | 自己的 Claude 订阅(Pro 或 Max),装好 Claude Code 并登录 | 同左 |
-| 转写(选装) | Scribe2MD,约 1 GB,安装程序会问要不要下载 | 同左 |
+| 转写(选装) | Scribe2MD,约 1 GB,安装程序会问要不要下载(是什么:〈[Scribe2MD](Scribe2MD.zh-CN.md)〉) | 同左 |
 | 摘要信(可不设) | Gmail + 应用专用密码 | 同左 |
 
 知识库的摆法:一个文件夹底下并排 `WIKI/`(知识库本体,里面有规则文件 `CLAUDE.md` 与笔记)与 `Raw_Sources/`(原始数据),图解见〈[什么是 LLM Wiki](What-is-LLM-Wiki.zh-CN.md)〉的「知识库长什么样子?」。**还没有也没关系**:安装时直接按 Enter,程序会帮你建好文件夹,并请 Claude 写好 `CLAUDE.md`;已经有的知识库照原本的用,不会覆盖。

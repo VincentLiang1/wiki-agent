@@ -83,7 +83,8 @@ PUBLIC = REPO / "public"
 # 檔名與頁首比照 scribe2md(使用者 2026-10-23):X.md 英文、X.zh-TW.md 繁中、X.zh-CN.md 簡中;頁首 English | 繁體中文 | 简体中文
 DOCS = {"README.zh-TW.md": "README.zh-CN.md", "Mac-Install-Guide.zh-TW.md": "Mac-Install-Guide.zh-CN.md", "Windows-Install-Guide.zh-TW.md": "Windows-Install-Guide.zh-CN.md",
         "What-is-LLM-Wiki.zh-TW.md": "What-is-LLM-Wiki.zh-CN.md",   # 〈什麼是 LLM Wiki〉:會議助手 App 連過來(使用者 2026-10-24);簡中手修過「资料／数据」,重轉後看 diff
-        "How-Notetaker-Fits-Together.zh-TW.md": "How-Notetaker-Fits-Together.zh-CN.md"}   # 〈會議助手全套服務架構〉:內容對齊 iOS 設定 › 關於(使用者 2026-11-09)
+        "How-Notetaker-Fits-Together.zh-TW.md": "How-Notetaker-Fits-Together.zh-CN.md",   # 〈會議助手全套服務架構〉:內容對齊 iOS 設定 › 關於(使用者 2026-11-09)
+        "Scribe2MD.zh-TW.md": "Scribe2MD.zh-CN.md"}   # 〈Scribe2MD〉:是什麼、怎麼取得(使用者 2026-11-10)
 
 
 # 說明文件專用的用詞修正(自動轉完才套,左邊寫自動轉出來的簡體):使用者只寫繁中,簡中那份一律由 --docs 整份重轉,
@@ -115,6 +116,10 @@ DOC_FIX = {
     },
     "How-Notetaker-Fits-Together.zh-CN.md": {
         "Together.zh-TW.svg": "Together.zh-CN.svg",      # 架構圖(scripts/overview_svg.py 產生)換成簡中那張
+    },
+    "Scribe2MD.zh-CN.md": {
+        "的转文件内核": "的转换核心",   # 「核心」是產品裡的名稱,不是 kernel
+        "文字辨识": "文字识别", "分讲者的逐字稿": "分说话人的逐字稿",
     },
 }
 
