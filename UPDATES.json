@@ -1,5 +1,13 @@
 [
  {
+  "source": "114fcb2",
+  "date": "2026-11-10",
+  "needs_human": false,
+  "zh-Hant": "- 說明文件講清楚:Wiki Agent 可以跟會議助手電腦版裝在同一台電腦,也可以另用一台常開的電腦;只用手機、沒裝電腦版也可以(架構圖、〈會議助手全套服務架構〉、README)\n- 只改說明文件,程式沒有變,不必做任何事",
+  "zh-Hans": "- 说明文档讲清楚:Wiki Agent 可以跟会议助手电脑版装在同一台电脑,也可以另用一台常开的电脑;只用手机、没装电脑版也可以(架构图、〈会议助手全套服务架构〉、README)\n- 只改说明文档,程序没有变,不必做任何事",
+  "en": "- The docs now make clear that Wiki Agent can run on the same computer as Notetaker Desktop or on a separate always-on one, and works with just a phone too (diagram, How Notetaker Fits Together, README)\n- Docs only, no code changes; nothing to do"
+ },
+ {
   "source": "a1d404d",
   "date": "2026-11-10",
   "needs_human": false,

@@ -28,7 +28,8 @@
 <rect x="20" y="190" width="720" height="380" rx="16" class="group"/>
 <text x="170.0" y="28" class="cap f1" text-anchor="middle">第 1 层：只要手机</text>
 <text x="590.0" y="28" class="cap f2" text-anchor="middle">第 2 层：加上电脑版</text>
-<text x="380.0" y="216" class="cap f3" text-anchor="middle">第 3 层：自动进知识库</text>
+<text x="380.0" y="210" class="cap f3" text-anchor="middle">第 3 层：自动进知识库</text>
+<text x="380.0" y="226" class="lbl" text-anchor="middle">可跟电脑版同一台，或另一台常开的电脑</text>
 <rect x="30" y="40" width="280" height="100" rx="12" class="card k1"/>
 <text x="170.0" y="85.5" class="t" text-anchor="middle">会议助手 App</text>
 <text x="170.0" y="104.5" class="s" text-anchor="middle">iPhone · Android</text>

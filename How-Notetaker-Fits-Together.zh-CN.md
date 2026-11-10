@@ -25,8 +25,9 @@
 - 手机按「发送」,电脑上的 Wiki Agent 收件
 - 录音转文字,整理进你的 LLM Wiki
 - 跟旧数据连起来,越用越完整
+- 跟第 2 层可以是同一台电脑,也可以另用一台常开的电脑
 
-要一台常开的电脑与 Claude 付费账号(Pro 以上)。收件文件夹 `_WikiBox` 放在云端硬盘里,看你用什么送文件:iPhone 用 iCloud 云盘、Android 用 Google 云端硬盘;电脑版在 Windows 首选 OneDrive、在 Mac 首选 iCloud 云盘(另两个也可以)。安装时选要收哪几个,没选的不看。Wiki Agent 每分钟看一次收件文件夹。
+要一台常开的电脑(可以就是装电脑版那台;没装电脑版、只用手机也可以)与 Claude 付费账号(Pro 以上)。收件文件夹 `_WikiBox` 放在云端硬盘里,看你用什么送文件:iPhone 用 iCloud 云盘、Android 用 Google 云端硬盘;电脑版在 Windows 首选 OneDrive、在 Mac 首选 iCloud 云盘(另两个也可以)。安装时选要收哪几个,没选的不看。Wiki Agent 每分钟看一次收件文件夹。
 
 - 没听过 LLM Wiki?看〈[什么是 LLM Wiki](What-is-LLM-Wiki.zh-CN.md)〉
 - Wiki Agent 介绍与安装:[README](README.zh-CN.md)、[Mac 安装说明](Mac-Install-Guide.zh-CN.md)、[Windows 安装说明](Windows-Install-Guide.zh-CN.md)

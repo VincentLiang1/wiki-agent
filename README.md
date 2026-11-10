@@ -23,7 +23,7 @@ wiki-agent is level 3 of the Notetaker family: the Notetaker app on your phone r
 
 | | Mac | Windows |
 | --- | --- | --- |
-| Computer | Apple-silicon Mac | Windows 10/11 |
+| Computer | Apple-silicon Mac, kept on (it can be the one running Notetaker Desktop; a phone alone without Notetaker Desktop also works) | Windows 10/11, otherwise the same |
 | Phone | iPhone (files travel through iCloud Drive) or Android (Google Drive for desktop on the Mac) | iPhone (iCloud for Windows on the PC) or Android (Google Drive for desktop on the PC) |
 | Claude | Your own Claude subscription (Pro or Max), with Claude Code installed and signed in | Same |
 | Transcription (optional) | Scribe2MD, about 1 GB — the installer offers to download it (what it is: [Scribe2MD](Scribe2MD.md)) | Same |

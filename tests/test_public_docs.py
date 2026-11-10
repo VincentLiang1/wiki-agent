@@ -19,7 +19,7 @@ GUIDES = {"mac": ("Mac-Install-Guide.zh-TW.md", "Mac-Install-Guide.zh-CN.md", "M
 WHAT_IS = ("What-is-LLM-Wiki.zh-TW.md", "What-is-LLM-Wiki.zh-CN.md", "What-is-LLM-Wiki.md")
 # 〈會議助手全套服務架構〉:內容對齊 iOS 設定 › 關於(使用者 2026-11-09),README 開頭連過去
 OVERVIEW = ("How-Notetaker-Fits-Together.zh-TW.md", "How-Notetaker-Fits-Together.zh-CN.md", "How-Notetaker-Fits-Together.md")
-# 〈Scribe2MD〉:是什麼、怎麼取得(使用者 2026-11-10 定案:核心不給人單獨裝,要用就裝電腦版)
+# 〈Scribe2MD〉:是什麼、怎麼取得(使用者 2026-11-10 定案:核心不給人單獨裝,要用就裝電腦版);iOS「關於」頁照介面語言連這三個檔名(iOS 491b198、Android a19fd05),改名要一起改兩支 App
 SCRIBE2MD = ("Scribe2MD.zh-TW.md", "Scribe2MD.zh-CN.md", "Scribe2MD.md")
 
 

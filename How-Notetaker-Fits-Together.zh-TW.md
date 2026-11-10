@@ -25,8 +25,9 @@
 - 手機按「送出」,電腦上的 Wiki Agent 收件
 - 錄音轉文字,整理進你的 LLM Wiki
 - 跟舊資料連起來,越用越完整
+- 跟第 2 層可以是同一台電腦,也可以另用一台常開的電腦
 
-要一台常開的電腦與 Claude 付費帳號(Pro 以上)。收件資料夾 `_WikiBox` 放在雲端硬碟裡,看你用什麼送檔:iPhone 用 iCloud 雲碟、Android 用 Google 雲端硬碟;電腦版在 Windows 首選 OneDrive、在 Mac 首選 iCloud 雲碟(另兩個也可以)。安裝時選要收哪幾個,沒選的不看。Wiki Agent 每分鐘看一次收件資料夾。
+要一台常開的電腦(可以就是裝電腦版那台;沒裝電腦版、只用手機也可以)與 Claude 付費帳號(Pro 以上)。收件資料夾 `_WikiBox` 放在雲端硬碟裡,看你用什麼送檔:iPhone 用 iCloud 雲碟、Android 用 Google 雲端硬碟;電腦版在 Windows 首選 OneDrive、在 Mac 首選 iCloud 雲碟(另兩個也可以)。安裝時選要收哪幾個,沒選的不看。Wiki Agent 每分鐘看一次收件資料夾。
 
 - 沒聽過 LLM Wiki?看〈[什麼是 LLM Wiki](What-is-LLM-Wiki.zh-TW.md)〉
 - Wiki Agent 介紹與安裝:[README](README.zh-TW.md)、[Mac 安裝說明](Mac-Install-Guide.zh-TW.md)、[Windows 安裝說明](Windows-Install-Guide.zh-TW.md)
