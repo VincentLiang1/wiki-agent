@@ -260,6 +260,43 @@ def move_first(p: Path) -> None:
     raise SystemExit(1)
 
 
+# -- 程式資料夾的權限(2026-11-11 資安稽核第 (13) 條) ------------------------------------
+# 預設的 C:\wiki-feeder 在 C:\ 底下:C:\ 根目錄的預設權限讓 Authenticated Users 對新建的子資料夾有「修改」,
+# 同一台電腦的其他帳號改得到程式(排程以本人身分跑它)。不在使用者資料夾底下就收緊成只有本人、SYSTEM、
+# Administrators;群組名會翻譯(「系統管理員」),一律用 SID。拿掉繼承與授權放在同一次 icacls:
+# 分兩次的話,第一次成功、第二次失敗,連本人都改不動
+SYSTEM_SID, ADMINS_SID = "S-1-5-18", "S-1-5-32-544"
+
+
+def my_sid(run=subprocess.run) -> str | None:
+    try:
+        r = run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    m = re.search(r'"(S-1-[0-9-]+)"', (r.stdout or b"").decode("utf-8", "replace"))
+    return m[1] if r.returncode == 0 and m else None
+
+
+def lock_down(repo: Path, home: Path, run=subprocess.run) -> str | None:
+    """收緊程式資料夾的權限;回傳要印的一行。在使用者資料夾底下(本來就只有本人改得動)回 None、什麼都不做。
+    失敗只提醒、不擋安裝。"""
+    if repo.resolve().is_relative_to(home.resolve()):
+        return None
+    sid = my_sid(run)
+    fail = L("⚠ 沒能收緊程式資料夾的權限({path}):同一台電腦的其他帳號可能改得到程式。"
+             "介意的話把程式放到你的使用者資料夾底下,再跑一次 Install.bat", path=repo)
+    if not sid:
+        return fail
+    try:
+        r = run(["icacls", str(repo), "/inheritance:r", "/grant:r", f"*{sid}:(OI)(CI)F",
+                 f"*{SYSTEM_SID}:(OI)(CI)F", f"*{ADMINS_SID}:(OI)(CI)F", "/Q"], capture_output=True, timeout=600)
+    except (OSError, subprocess.TimeoutExpired):
+        return fail
+    if r.returncode != 0:
+        return fail
+    return L("✓ 程式資料夾只有你(與 SYSTEM、系統管理員)改得動:{path}", path=repo)
+
+
 # -- 問答 ------------------------------------------------------------------------------
 
 def say(msg: str = "") -> None:
@@ -949,6 +986,10 @@ def main(argv: list[str] | None = None) -> int:
     path = state / CONFIG_FILE
 
     lang = entry_lang() or ask_lang(config_lang(path) or i18n.detect())
+    if os.name == "nt":
+        locked = lock_down(REPO, home)
+        if locked:
+            say(locked)
     say(L("=== 檢查 Claude Code ==="))
     claude = find_claude(home)
     if not claude:

@@ -25,6 +25,9 @@ import sys
 import time
 from pathlib import Path
 
+# --frozen:只照 uv.lock 裝、不重新解析也不改 lock(pyproject 改了 lock 沒跟上,也照 lock 裝測過的版本;
+# 2026-11-11 資安稽核第 (12) 條,Mac 的 macautoupdate、install.sh 早就是 --frozen)
+UV_SYNC = ("sync", "--frozen")
 NO_WINDOW = 0x08000000   # 這支是 pythonw:子行程(git、uv、python)不加這個會每個都閃一個主控台視窗
 
 
@@ -109,11 +112,11 @@ class Updater:
     def sync(self, step: str) -> None:
         self.wait_watch()
         try:
-            self.run(step, [self.uv, "sync"], timeout=1800)
+            self.run(step, [self.uv, *UV_SYNC], timeout=1800)
         except StepError:
             self.sleep(10)
             self.wait_watch()       # watch 剛好在跑、鎖住了 numpy:等它結束再試一次
-            self.run(step, [self.uv, "sync"], timeout=1800)
+            self.run(step, [self.uv, *UV_SYNC], timeout=1800)
 
     # -- 換版與退回 --
     def head(self) -> str:

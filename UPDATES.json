@@ -1,5 +1,13 @@
 [
  {
+  "source": "c6d7aff",
+  "date": "2026-11-11",
+  "needs_human": false,
+  "zh-Hant": "- Windows:攝入時 Claude 也只能讀知識庫、原件資料夾與轉寫快取,讀不到電腦上其他檔(Mac 上一版已經這樣)。原件放在網路磁碟(\\\\NAS\\…)的照舊不限定\n- Windows:自動更新多檢查安裝包裡的路徑,不會寫到程式資料夾以外;安裝、更新都照鎖定的套件版本裝\n- Windows:新安裝時,程式資料夾(預設 C:\\wiki-feeder)只有你自己、系統與系統管理員改得動。**同一台電腦有別人的帳號的話**,已經裝好的請重跑一次 Install.bat(選沿用設定)套用;只有你一個人用的電腦不必\n- Mac 不必做任何事",
+  "zh-Hans": "- Windows:摄入时 Claude 也只能读知识库、原件文件夹与转写缓存,读不到电脑上其他文件(Mac 上一版已经这样)。原件放在网络驱动器(\\\\NAS\\…)的照旧不限定\n- Windows:自动更新多检查安装包里的路径,不会写到程序文件夹以外;安装、更新都按锁定的依赖版本安装\n- Windows:新安装时,程序文件夹(默认 C:\\wiki-feeder)只有你自己、系统与管理员能修改。**同一台电脑上有别人的账户的话**,已经装好的请重新运行一次 Install.bat(选沿用设置)应用;只有你一个人用的电脑不必\n- Mac 不必做任何事",
+  "en": "- Windows: during ingest, Claude can now only read the knowledge base, the originals folder and the transcript cache, not other files on the computer (Mac already did this in the previous release). Originals on a network share (\\\\NAS\\…) stay unrestricted\n- Windows: auto-update now checks every path in the package so nothing is written outside the program folder; install and update use the locked dependency versions\n- Windows: new installs make the program folder (C:\\wiki-feeder by default) writable only by you, SYSTEM and Administrators. **If other people have accounts on the same computer**, run Install.bat once more (keep your settings) to apply this to an existing install; not needed on a computer only you use\n- Mac: nothing to do"
+ },
+ {
   "source": "dac2fb9",
   "date": "2026-11-11",
   "needs_human": false,

@@ -37,7 +37,7 @@ TOP = "wiki-agent"
 API = f"https://api.github.com/repos/{PUBLIC_REPO}/releases/latest"
 REQUIRED = ("pyproject.toml", "VERSION", "MANIFEST", "Update.bat", "scripts/winupdate.py", "scripts/winsched.py",
             "src/wiki_feeder/cli.py")
-NEVER = (".venv", ".git")             # zip 裡不可以有、也絕不刪的
+NEVER = (".venv", ".git")             # zip 裡不可以有、也絕不刪的;比對一律 casefold(Windows 不分大小寫,.Venv 就是 .venv)
 
 
 class UpdateError(Exception):
@@ -81,10 +81,12 @@ def _rel(name: str) -> str | None:
     p = PurePosixPath(name)
     if p.parts[:1] != (TOP,) or "\\" in name or ".." in p.parts or p.is_absolute():
         raise UpdateError(L("zip 裡有不該有的路徑:{name}", name=name))
+    if any(":" in part for part in p.parts):    # wiki-agent/C:/x 在 Windows 解成 C:\x;x:y 是 NTFS 的替代資料流
+        raise UpdateError(L("zip 裡有不該有的路徑:{name}", name=name))
     if name.endswith("/"):
         return None
     rel = PurePosixPath(*p.parts[1:])
-    if not rel.parts or rel.parts[0] in NEVER:
+    if not rel.parts or rel.parts[0].casefold() in NEVER:
         raise UpdateError(L("zip 裡有不該有的路徑:{name}", name=name))
     return str(rel)
 
@@ -122,6 +124,10 @@ def _write(path: Path, data: bytes) -> bool:
 
 def apply(root: Path, files: dict[str, bytes]) -> tuple[list[str], list[str]]:
     """把新版寫進程式資料夾;回傳 (內容變了的檔, 刪掉的舊檔)。"""
+    base = root.resolve()
+    for rel in files:    # 先全部檢查過才寫第一個檔:寫到一半才擋下,程式就換了一半
+        if not (root / rel).resolve().is_relative_to(base):
+            raise UpdateError(L("zip 裡有不該有的路徑:{name}", name=rel))
     try:
         old = set((root / "MANIFEST").read_text(encoding="utf-8").split())
     except OSError:
@@ -131,7 +137,7 @@ def apply(root: Path, files: dict[str, bytes]) -> tuple[list[str], list[str]]:
     for rel in sorted(old - set(files)):
         parts = PurePosixPath(rel).parts
         p = (root / rel).resolve()
-        if not parts or parts[0] in NEVER or ".." in parts or not p.is_relative_to(root.resolve()):
+        if not parts or parts[0].casefold() in NEVER or ".." in parts or not p.is_relative_to(root.resolve()):
             continue
         if p.is_file():
             p.unlink()
@@ -174,7 +180,7 @@ def restore(root: Path, src: Path) -> tuple[int, int]:
     for rel in _manifest(root):
         parts = PurePosixPath(rel).parts
         p = (root / rel).resolve()
-        if rel not in keep and parts and parts[0] not in NEVER and p.is_relative_to(root.resolve()) and p.is_file():
+        if rel not in keep and parts and parts[0].casefold() not in NEVER and p.is_relative_to(root.resolve()) and p.is_file():
             p.unlink()
             removed += 1
     written = sum(_write(root / rel, (src / rel).read_bytes()) for rel in [*old, "MANIFEST"] if (src / rel).is_file())

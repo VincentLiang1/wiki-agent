@@ -470,14 +470,29 @@ def test_claude_reads_only_the_folders_ingest_needs(env):
     ingest(env["cfg"])
     (args,) = _calls(env, "claude.jsonl")
     allowed = args[args.index("--allowedTools") + 1:args.index("--disallowedTools")]
-    if WINDOWS:  # 規則路徑寫法(//c/…)還沒在 Windows 實測,照舊不限定(ingest._read_allow)
-        assert {"Read", "Glob", "Grep"} <= set(allowed)
-        return
     assert not {"Read", "Glob", "Grep"} & set(allowed)
     for t in ("Read", "Glob", "Grep"):
         assert t in args[args.index("--tools") + 1].split(",")
         for d in (env["cfg"].repo("company").repo_dir, env["fraw"], env["cfg"].md_cache):
-            assert f"{t}(/{d}/**)" in allowed, (t, d)
+            # Windows 寫成 POSIX 形式 //c/Users/…(2026-11-11 Windows 實測;反斜線、C: 照原樣的規則比對不上)
+            s = str(d) if not WINDOWS else "/" + str(d)[0].lower() + str(d)[2:].replace("\\", "/")
+            assert f"{t}(/{s}/**)" in allowed, (t, d)
+
+
+def test_windows_read_rules_use_posix_drive_form_and_fall_back_on_network_paths(env, monkeypatch, caplog):
+    """Windows 的讀檔規則:`D:\\Raw Sources\\原件` 寫成 `//d/Raw Sources/原件`(含空格、中文;實測過);
+    網路路徑(沒有磁碟代號)的寫法沒驗過,寫錯會讓攝入每筆都讀不到原件 → 那台照舊不限定、log 留一筆。"""
+    from pathlib import PureWindowsPath
+
+    import wiki_feeder.ingest as ing
+    monkeypatch.setattr(ing, "WINDOWS", True)
+    assert ing._rule_dir(PureWindowsPath(r"D:\Raw Sources\原件")) == "/d/Raw Sources/原件"
+    assert ing._rule_dir(PureWindowsPath(r"C:\Users\a")) == "/c/Users/a"
+    assert ing._rule_dir(PureWindowsPath(r"\\nas\share\FRaw")) is None
+    cfg = replace(env["cfg"], raw_roots=(*env["cfg"].raw_roots, PureWindowsPath(r"\\nas\share\FRaw")))
+    with caplog.at_level(logging.WARNING):
+        assert ing._read_allow(cfg, None) == ["Read", "Glob", "Grep"]
+    assert "網路路徑" in caplog.text
 
 
 def _plain_repo(tmp_path: Path) -> tuple[Path, RepoConfig]:

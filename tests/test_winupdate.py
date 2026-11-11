@@ -68,7 +68,7 @@ def test_update_replaces_changed_files_removes_dropped_ones_and_keeps_the_rest(t
     assert not list(root.rglob("*.wf-new"))
 
 
-@pytest.mark.parametrize("bad", ["missing", "manifest", "escape", "venv"])
+@pytest.mark.parametrize("bad", ["missing", "manifest", "escape", "venv", "drive", "stream", "venv_case", "git_case"])
 def test_a_bad_zip_changes_nothing(tmp_path, bad):
     """換到一半的程式可能根本跑不起來:整包驗過才動檔,有一點不對就一個檔都不換。"""
     m = _mod()
@@ -78,9 +78,17 @@ def test_a_bad_zip_changes_nothing(tmp_path, bad):
     data = {"missing": lambda: _zip({k: v for k, v in new.items() if k != "scripts/winsched.py"}),
             "manifest": lambda: _zip(new, manifest=["pyproject.toml"]),
             "escape": lambda: _zip(new, extra=[("wiki-agent/../evil.txt", b"x")]),
-            "venv": lambda: _zip(new, extra=[("wiki-agent/.venv/pyvenv.cfg", b"x")])}[bad]()
+            "venv": lambda: _zip(new, extra=[("wiki-agent/.venv/pyvenv.cfg", b"x")]),
+            # Windows 把 root / "C:/evil.txt" 解成 C:\evil.txt(2026-11-11 資安稽核第 (11) 條)
+            "drive": lambda: _zip(new, extra=[("wiki-agent/C:/evil.txt", b"x")]),
+            "stream": lambda: _zip(new, extra=[("wiki-agent/pyproject.toml:evil", b"x")]),
+            # Windows 不分大小寫:.Venv 就是朋友裝好的 .venv
+            "venv_case": lambda: _zip(new, extra=[("wiki-agent/.Venv/pyvenv.cfg", b"x")]),
+            "git_case": lambda: _zip(new, extra=[("wiki-agent/.GIT/config", b"x")])}[bad]()
     z = tmp_path / "bad.zip"
     z.write_bytes(data)
+    with pytest.raises(m.UpdateError):
+        m.read_zip(data)    # 第一道(整包驗)自己就要擋下;apply 寫檔前的第二道不算數
     with pytest.raises(m.UpdateError):
         m.update(root, z)
     assert {p: p.read_bytes() for p in root.rglob("*") if p.is_file()} == before
@@ -146,3 +154,27 @@ def test_backup_and_restore_bring_the_old_version_back(tmp_path):
     assert (root / "src/wiki_feeder/cli.py").read_bytes() == b"# cli\n"
     assert (root / "src/wiki_feeder/old.py").exists() and not (root / "src/wiki_feeder/new.py").exists()
     assert m.local_version(root)["tag"] == "20261022-old0000" and (root / "my-notes.txt").exists()
+
+
+def test_apply_checks_every_target_before_writing_any(tmp_path):
+    """apply 寫檔前先全部檢查:有一個檔會落在程式資料夾外面,就一個檔都不寫(寫到一半才擋,程式換了一半)。
+    read_zip 已經擋過;這是第二道,防哪天換了 zip 以外的來源、或檢查漏了一種寫法(2026-11-11 資安稽核第 (11) 條)。"""
+    m = _mod()
+    root = _installed(tmp_path, BASE)
+    before = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+    files = {**BASE, "src/wiki_feeder/cli.py": b"# v2\n", "../outside.txt": b"x",
+             "VERSION": b"tag=x\n", "MANIFEST": b""}
+    with pytest.raises(m.UpdateError):
+        m.apply(root, files)
+    assert {p: p.read_bytes() for p in root.rglob("*") if p.is_file()} == before
+    assert not (tmp_path / "outside.txt").exists()
+
+
+def test_update_never_deletes_venv_or_git_whatever_the_case(tmp_path):
+    """舊版 MANIFEST 列了 .Venv/…(大小寫不同):Windows 上就是朋友的 .venv,換版時也不可以刪。"""
+    m = _mod()
+    root = _installed(tmp_path, {**BASE, ".Venv/pyvenv.cfg": b"home = x\n"})
+    z = tmp_path / "new.zip"
+    z.write_bytes(_zip(BASE))
+    m.update(root, z)
+    assert (root / ".Venv/pyvenv.cfg").read_bytes() == b"home = x\n"

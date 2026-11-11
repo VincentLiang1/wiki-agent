@@ -45,7 +45,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from . import gitsync, glossary, toolgaps
 from .collect import _alert, _forget_alerts, heartbeat, run_lock
@@ -1249,15 +1249,30 @@ def _wiki_deny(cfg: Config) -> list[str]:
     return [f"{t}(/{wiki}/**)" for t in EDIT_TOOLS]
 
 
+def _rule_dir(d: Path | PureWindowsPath) -> str | None:
+    """資料夾在權限規則裡的寫法(前面再加一個 `/` 就是 Claude Code 的絕對路徑 `//…`)。
+    Windows 換成 POSIX 形式:`C:/x/y` → `/c/x/y`(2026-11-11 Windows 實測:含空格、中文都對,磁碟代號與資料夾
+    大小寫不同也照樣比對得上,所以照設定檔的寫法、不 resolve);沒有磁碟代號的(網路路徑 `//server/share`)沒實測過,回 None。"""
+    if not WINDOWS:
+        return str(d)
+    w = PureWindowsPath(d)
+    if len(w.drive) != 2 or w.drive[1] != ":":
+        return None
+    return f"/{w.drive[0].lower()}{w.as_posix()[2:]}"
+
+
 def _read_allow(cfg: Config, stage: Path | None) -> list[str]:
     """讀檔、找檔、搜尋只放行:兩個庫(個人庫只讀,寫入另有 _wiki_deny)、原件樹、轉寫快取、個人庫副本。
-    `//` 開頭是 Claude Code 的絕對路徑寫法。Windows 的規則路徑寫法(`//c/…`)還沒在 Windows 實測,先照舊不限定。"""
-    if WINDOWS:
-        return list(READ_TOOLS)
+    `//` 開頭是 Claude Code 的絕對路徑寫法。"""
     dirs = {p for rc in cfg.repos for p in (rc.repo_dir, rc.raw_root)} | set(cfg.raw_roots) | {cfg.md_cache}
     if stage is not None:
         dirs.add(stage)
-    return [f"{t}(/{d}/**)" for d in sorted(dirs, key=str) for t in READ_TOOLS]
+    rule = {d: _rule_dir(d) for d in dirs}
+    if None in rule.values():
+        # 網路路徑的規則寫法沒實測過:寫錯的話攝入什麼都讀不到、每筆失敗,寧可照舊不限定(§6.2)
+        log.warning(L("攝入的讀檔沒有限定資料夾:有資料夾不在磁碟代號底下(網路路徑),規則寫法沒驗過"))
+        return list(READ_TOOLS)
+    return [f"{t}(/{rule[d]}/**)" for d in sorted(dirs, key=str) for t in READ_TOOLS]
 
 
 def _tools_allow(cfg: Config) -> list[str]:

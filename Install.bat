@@ -57,7 +57,7 @@ if errorlevel 1 goto noclone
 cd /d "%REPO%"
 echo.
 call :msg "安裝程式需要的套件..." "安装程序需要的套件..." "Installing the packages the program needs..."
-uv sync
+uv sync --frozen
 if errorlevel 1 goto nosync
 
 rem ---- UTF-8 mode: the program refuses to run without it ----

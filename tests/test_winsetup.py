@@ -143,6 +143,81 @@ def _bat(name: str) -> str:
     return (ROOT / name).read_bytes().decode("utf-8")
 
 
+class _FakeRun:
+    """whoami／icacls 的假替身:記下每個指令,icacls 回 icacls_rc。"""
+    SID = "S-1-5-21-111-222-333-1001"
+
+    def __init__(self, icacls_rc=0, whoami_out=None):
+        self.calls, self.icacls_rc = [], icacls_rc
+        self.whoami_out = f'"PC\\阿明","{self.SID}"\r\n'.encode("cp950") if whoami_out is None else whoami_out
+
+    def __call__(self, cmd, **kw):
+        import subprocess
+        self.calls.append(cmd)
+        if cmd[0] == "whoami":
+            return subprocess.CompletedProcess(cmd, 0, self.whoami_out, b"")
+        return subprocess.CompletedProcess(cmd, self.icacls_rc, b"", b"")
+
+
+def test_program_folder_outside_the_profile_is_locked_to_me_system_and_admins(tmp_path):
+    """預設的 C:\\wiki-feeder:C:\\ 的預設權限讓其他帳號改得到程式 → 一次 icacls 拿掉繼承、只留本人、SYSTEM、
+    Administrators(SID,群組名會翻譯);分兩次的話中間失敗連本人都改不動(2026-11-11 資安稽核第 (13) 條)。"""
+    m = _mod()
+    home, repo = tmp_path / "Users" / "amy", tmp_path / "wiki-feeder"
+    home.mkdir(parents=True)
+    repo.mkdir()
+    run = _FakeRun()
+    assert m.lock_down(repo, home, run).startswith("✓")
+    (icacls,) = [c for c in run.calls if c[0] == "icacls"]
+    assert icacls[1] == str(repo) and "/inheritance:r" in icacls and "/grant:r" in icacls
+    assert {a for a in icacls if a.startswith("*")} == {f"*{_FakeRun.SID}:(OI)(CI)F", "*S-1-5-18:(OI)(CI)F",
+                                                        "*S-1-5-32-544:(OI)(CI)F"}
+
+
+def test_program_folder_inside_the_profile_is_left_alone(tmp_path):
+    """放在使用者資料夾底下本來就只有本人改得動:不跑 icacls、不印東西。"""
+    m = _mod()
+    home = tmp_path / "Users" / "amy"
+    (home / "wiki-feeder").mkdir(parents=True)
+    run = _FakeRun()
+    assert m.lock_down(home / "wiki-feeder", home, run) is None and run.calls == []
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="main() 只在 Windows 收緊權限")
+def test_setup_locks_down_the_program_folder_first(monkeypatch):
+    """問答一開頭就收緊(在任何會 return 的檢查之前):重跑 Install.bat 沿用設定的朋友也補得上。"""
+    m = _mod()
+    seen = []
+    monkeypatch.setattr(m, "entry_lang", lambda *a, **k: "zh-Hant")
+    monkeypatch.setattr(m, "lock_down", lambda repo, home, *a, **k: seen.append((repo, home)) or None)
+    monkeypatch.setattr(m, "find_claude", lambda home: None)
+    assert m.main([]) == 1
+    assert seen == [(m.REPO, Path.home())]
+
+
+@pytest.mark.parametrize("how", ["icacls", "whoami"])
+def test_lock_down_failure_only_warns(tmp_path, how):
+    """收緊失敗(icacls 回非零、查不到自己的 SID)只提醒、不擋安裝;查不到 SID 就不跑 icacls(不然只剩 SYSTEM 與管理員)。"""
+    m = _mod()
+    home, repo = tmp_path / "home", tmp_path / "wf"
+    home.mkdir()
+    repo.mkdir()
+    run = _FakeRun(icacls_rc=5) if how == "icacls" else _FakeRun(whoami_out=b"")
+    msg = m.lock_down(repo, home, run)
+    assert msg.startswith("⚠") and "Install.bat" in msg
+    if how == "whoami":
+        assert not any(c[0] == "icacls" for c in run.calls)
+
+
+def test_bats_install_exactly_the_locked_versions():
+    """uv sync 一律 --frozen:只照 uv.lock 裝、不重新解析(pyproject 改了 lock 沒跟上,也照 lock 裝測過的版本;
+    2026-11-11 資安稽核第 (12) 條)。Install.bat、Update.bat 各一行,rem 不算。"""
+    for name in ("Install.bat", "Update.bat"):
+        syncs = [ln.strip() for ln in _bat(name).splitlines()
+                 if "uv sync" in ln and not ln.lower().startswith("rem ") and "FAIL=uv sync" not in ln]
+        assert syncs and all(ln.endswith("uv sync --frozen") for ln in syncs), (name, syncs)
+
+
 def _l10n():
     spec = importlib.util.spec_from_file_location("l10n_sync_bat", ROOT / "scripts" / "l10n_sync.py")
     m = importlib.util.module_from_spec(spec)

@@ -347,8 +347,8 @@ def test_updater_happy_path_keeps_watch_and_checks_reading(tmp_path):
     res, cmds = _run_updater(tmp_path)
     assert res["result"] == "ok" and res["old"] == "oldhead"
     i = {k: next(n for n, c in enumerate(cmds) if k in c) for k in
-         ("disable --keep-watch", "merge --ff-only", " sync", "winsched.py enable", "collect --list --dirs")}
-    assert i["disable --keep-watch"] < i["merge --ff-only"] < i[" sync"] < i["winsched.py enable"] \
+         ("disable --keep-watch", "merge --ff-only", " sync --frozen", "winsched.py enable", "collect --list --dirs")}
+    assert i["disable --keep-watch"] < i["merge --ff-only"] < i[" sync --frozen"] < i["winsched.py enable"] \
         < i["collect --list --dirs"]
 
 
@@ -360,7 +360,7 @@ def test_updater_rolls_back_when_the_trial_read_fails(tmp_path):
     after = cmds[i_check:]
     assert any("reset --hard -q oldhead123" in c for c in after)
     i_reset = next(n for n, c in enumerate(after) if "reset --hard" in c)
-    assert any(c.endswith(" sync") for c in after[i_reset:]) and "winsched.py enable" in after[-1]
+    assert any(c.endswith(" sync --frozen") for c in after[i_reset:]) and "winsched.py enable" in after[-1]
 
 
 def test_updater_reenables_even_when_disable_fails(tmp_path):

@@ -36,7 +36,7 @@ goto synced
 ".venv\Scripts\python.exe" -X utf8 scripts\winupdate.py
 if errorlevel 1 set "FAIL=winupdate"
 :synced
-if not defined FAIL uv sync
+if not defined FAIL uv sync --frozen
 if not defined FAIL if errorlevel 1 set "FAIL=uv sync"
 echo.
 call :msg "重新啟用排程..." "重新激活定时任务..." "Turning the schedule back on..."
