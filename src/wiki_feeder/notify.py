@@ -8,6 +8,7 @@ account = mail_from),不進 repo、不進設定檔;用 /usr/bin/security 讀—�
 from __future__ import annotations
 
 import smtplib
+import ssl
 import subprocess
 from email.message import EmailMessage
 
@@ -39,8 +40,11 @@ def send(cfg: Config, subject: str, body: str) -> None:
     msg.set_content(body)
     # 先取密碼再連線:沒密碼就不必連 Gmail(測試也因此不碰網路;2026-10-14 斷網時這裡先報 No route to host)
     password = smtp_password(cfg)
+    # context 一定要給:不給的話 SMTP_SSL 用 ssl._create_stdlib_context(),**不驗憑證也不比對主機名**——
+    # 同一個 Wi-Fi 上攔截得到的人在 login 那一步就拿到應用程式密碼(2026-11-11 資安稽核,Python 3.12 實測)
     try:
-        with smtplib.SMTP_SSL(cfg.smtp_host, cfg.smtp_port, timeout=60) as s:
+        with smtplib.SMTP_SSL(cfg.smtp_host, cfg.smtp_port, timeout=60,
+                              context=ssl.create_default_context()) as s:
             s.login(cfg.mail_from, password)
             s.send_message(msg)
     except (OSError, smtplib.SMTPException) as e:

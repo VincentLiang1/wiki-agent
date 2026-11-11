@@ -442,18 +442,38 @@ def test_mass_deletion_reason_says_how_many_files(env, monkeypatch):
     assert f"{STOP_SHRANK} 7 個檔" in reason and "只列前 5 個" in reason and "頁5.md" not in reason
 
 
-@pytest.mark.parametrize("what", ["tools", "claude", "dirty"])
+_GUARDED_PATH = {"tools": "tools/make_handout.py", "dirty": "tools/make_handout.py", "claude": ".claude/settings.local.json",
+                 "claudemd": "CLAUDE.md", "subclaudemd": "Wiki_Pages/會議與月報/claude.md", "mcp": ".mcp.json"}
+
+
+@pytest.mark.parametrize("what", sorted(_GUARDED_PATH))
 def test_ingest_that_touches_scripts_or_settings_stops_before_push(env, monkeypatch, what):
     """tools/ 是 make-handout 跑的腳本(跑 origin 那一版)、.claude/ 是攝入的 claude 讀的設定:攝入改了它們又推上去,
-    之後每一次攝入都照它執行、照它放寬權限。推上去之前停住等人看,種類不是自動修理能補完的那一種。"""
+    之後每一次攝入都照它執行、照它放寬權限。推上去之前停住等人看,種類不是自動修理能補完的那一種。
+    CLAUDE.md(任何深度、不分大小寫)就是攝入照著做的規則、.mcp.json 載入 MCP 伺服器:一次注入就變成之後每一次的規則
+    (2026-11-11 資安稽核)。"""
     monkeypatch.setenv("FAKE_CLAUDE_GUARDED", what)
     _feed(env, "腳本.txt", b"script")
     r = ingest(env["cfg"])
     info = json.loads(env["cfg"].ingest_stop_path.read_text(encoding="utf-8"))
     assert info["種類"] == STOP_GUARDED, r.alerts
     assert STOP_GUARDED not in FINISHABLE
-    assert ("tools/make_handout.py" if what != "claude" else ".claude/settings.local.json") in info["原因"]
+    assert _GUARDED_PATH[what] in info["原因"]
     assert _remote_log(env["f_remote"]) == ["init"]
+
+
+def test_claude_reads_only_the_folders_ingest_needs(env):
+    """讀檔、找檔、搜尋只放行庫、原件樹、轉寫快取:沒加限定的 Read 讀得到 ~/.ssh 的金鑰、gh 的權杖,
+    再用 WebFetch 送出去(2026-11-11 資安稽核實測讀得到)。"""
+    _feed(env, "讀.txt", b"read")
+    ingest(env["cfg"])
+    (args,) = _calls(env, "claude.jsonl")
+    allowed = args[args.index("--allowedTools") + 1:args.index("--disallowedTools")]
+    assert not {"Read", "Glob", "Grep"} & set(allowed)
+    for t in ("Read", "Glob", "Grep"):
+        assert t in args[args.index("--tools") + 1].split(",")
+        for d in (env["cfg"].repo("company").repo_dir, env["fraw"], env["cfg"].md_cache):
+            assert f"{t}(/{d}/**)" in allowed, (t, d)
 
 
 def _plain_repo(tmp_path: Path) -> tuple[Path, RepoConfig]:
@@ -1118,9 +1138,11 @@ def test_prompt_forbids_helper_scripts_in_repo(env, monkeypatch):
 
 class _FakeSMTP:
     sent: list = []
+    contexts: list = []
 
-    def __init__(self, host, port, timeout=None):
+    def __init__(self, host, port, timeout=None, context=None):
         self.host = host
+        _FakeSMTP.contexts.append(context)
 
     def __enter__(self):
         return self
@@ -1152,6 +1174,24 @@ def test_summary_is_also_emailed(env, monkeypatch):
     body = msg.get_content()
     assert "週會.txt" in body and "https://github.com/me/FWIKI/commit/" in body
 
+
+
+def test_mail_verifies_the_server_certificate(env, monkeypatch):
+    """寄信要驗 Gmail 的憑證與主機名:SMTP_SSL 不給 context 時不驗,同一個 Wi-Fi 上攔截得到的人
+    在 login 那一步就拿到應用程式密碼(2026-11-11 資安稽核)。"""
+    import ssl
+
+    from wiki_feeder import notify
+
+    _FakeSMTP.sent, _FakeSMTP.contexts = [], []
+    monkeypatch.setattr(notify.smtplib, "SMTP_SSL", _FakeSMTP)
+    monkeypatch.setattr(notify, "smtp_password", lambda cfg: "app-password")
+    c = replace(env["cfg"], mail_from="me@example.com", mail_to="me@example.com")
+
+    notify.send(c, "主旨", "內容")
+
+    (ctx,) = _FakeSMTP.contexts
+    assert ctx is not None and ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname
 
 
 def test_alert_mail_subject_says_it_needs_attention(env, monkeypatch):

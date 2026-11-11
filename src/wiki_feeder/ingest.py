@@ -55,6 +55,7 @@ from .i18n import SOURCE, L, N_
 from .ledger import Ledger
 from .mover import pick_names, suffixed
 from .office import DUMPERS, LEGACY
+from .osplat import WINDOWS
 from .proc import NET_TIMEOUT, run_net
 
 log = logging.getLogger(__name__)
@@ -64,8 +65,12 @@ log = logging.getLogger(__name__)
 # 不列的話靠 acceptEdits:只自動接受工作目錄(公事庫)與 --add-dir(個人庫副本)裡的編輯,其他地方要人核准,
 # -p 模式等於被擋
 EDIT_TOOLS = ["Write", "Edit"]
+# 讀檔、找檔、搜尋也不給沒加限定的規則:沒加限定讀得到這台電腦上任何檔(~/.ssh 的金鑰、gh 的權杖、鑰匙圈密碼檔),
+# 加上不限網域的 WebFetch,夾帶指示的原件就能把它們送出去(2026-11-11 資安稽核,Claude Code 2.1.311 實測)。
+# 只放行攝入要讀的幾個資料夾(_read_allow);沒列的地方要人核准,-p 模式等於被擋(同一天實測)
+READ_TOOLS = ["Read", "Glob", "Grep"]
 ALLOWED_TOOLS = [
-    "Read", "Glob", "Grep", "WebSearch", "WebFetch", "Agent",
+    "WebSearch", "WebFetch", "Agent",
     "Bash(git add:*)", "Bash(git commit:*)", "Bash(git status:*)",
 ]
 DISALLOWED_TOOLS = ["Bash(git push:*)", "Bash(git -C:*)", "Bash(rm:*)", "Bash(mv:*)", "Bash(cp:*)",
@@ -205,7 +210,11 @@ SHRINK_MIN_RATIO = 0.3     # 而且佔原檔這個比例以上,才算「大量�
 # 攝入動到公事庫的 tools/(make-handout 跑的就是 origin 上的那一版)或 .claude/(claude -p 在公事庫裡執行,
 # 會讀它的設定與 skill):推上去之後,之後每一次攝入都照它執行、照它放寬權限。要人看,自動修理不補完
 STOP_GUARDED = N_("動到腳本或權限設定")
-GUARDED_DIRS = ("tools/", ".claude/")
+GUARDED_DIRS = ("tools/", ".claude/", ".githooks/")
+# 任何深度的這幾個檔名也一樣(2026-11-11 資安稽核):CLAUDE.md 就是攝入照著做的規則(子資料夾的讀到那裡時載入),
+# .mcp.json 讓 Claude Code 載入 MCP 伺服器,.gitmodules 改 git 從哪裡取子模組——攝入改了推上去,一次注入就變成
+# 之後每一次攝入的規則。比對不分大小寫:APFS 不分,claude.md 照樣被當成 CLAUDE.md 讀
+GUARDED_NAMES = ("claude.md", "claude.local.md", ".mcp.json", ".gitmodules")
 # finish-stopped 收的種類。照 ingest.stop 的「種類」欄判斷、不在「原因」裡找字:原因含 claude 取的檔名,
 # 檔名裡夾一句「留有沒 commit 的修改」就能把別種 STOP 冒充成可以補完、自動解除的
 FINISHABLE = (STOP_LEFTOVER, STOP_SHRANK)
@@ -731,12 +740,13 @@ def diff_lines(rc: RepoConfig, before: str) -> tuple[int, int, list[str]]:
 
 
 def guarded_paths(rc: RepoConfig, before: str) -> list[str]:
-    """攝入前 HEAD 到現在(含沒 commit 的)動到 GUARDED_DIRS 底下的路徑。改名的新舊路徑都算。"""
+    """攝入前 HEAD 到現在(含沒 commit 的)動到 GUARDED_DIRS 底下、或檔名是 GUARDED_NAMES 的路徑。改名的新舊路徑都算。"""
     paths = git(rc.repo_dir, "diff", "-z", "--no-renames", "--name-only", before, "HEAD").split("\0")
     for tok in git(rc.repo_dir, "status", "-z", "--porcelain", "--untracked-files=all").split("\0"):
         # 「XY 路徑」;改名那一筆之後另有一段只有舊路徑
         paths.append(tok[3:] if len(tok) > 3 and tok[2] == " " else tok)
-    return sorted({p for p in paths if p.startswith(GUARDED_DIRS)})
+    return sorted({p for p in paths if p and (p.casefold().startswith(GUARDED_DIRS)
+                                               or p.rsplit("/", 1)[-1].casefold() in GUARDED_NAMES)})
 
 
 def _blob_lines(rc: RepoConfig, spec: str) -> int:
@@ -1239,6 +1249,17 @@ def _wiki_deny(cfg: Config) -> list[str]:
     return [f"{t}(/{wiki}/**)" for t in EDIT_TOOLS]
 
 
+def _read_allow(cfg: Config, stage: Path | None) -> list[str]:
+    """讀檔、找檔、搜尋只放行:兩個庫(個人庫只讀,寫入另有 _wiki_deny)、原件樹、轉寫快取、個人庫副本。
+    `//` 開頭是 Claude Code 的絕對路徑寫法。Windows 的規則路徑寫法(`//c/…`)還沒在 Windows 實測,先照舊不限定。"""
+    if WINDOWS:
+        return list(READ_TOOLS)
+    dirs = {p for rc in cfg.repos for p in (rc.repo_dir, rc.raw_root)} | set(cfg.raw_roots) | {cfg.md_cache}
+    if stage is not None:
+        dirs.add(stage)
+    return [f"{t}(/{d}/**)" for d in sorted(dirs, key=str) for t in READ_TOOLS]
+
+
 def _tools_allow(cfg: Config) -> list[str]:
     """只放行這幾個只讀子命令、一個一條(不開放任意 python:那等於能執行任何程式,包括 push 與刪檔)。"""
     return [f"Bash({shlex.join((*cfg.ingest_tools_cmd, t))}:*)" for t in INGEST_TOOLS] if cfg.ingest_tools_cmd else []
@@ -1367,9 +1388,9 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
     allowed = [t for t in ALLOWED_TOOLS if not (target.managed and t in MANAGED_DENY)]
     args = [*cfg.claude_cmd, "-p", "--output-format", "json", "--no-session-persistence",
             "--max-budget-usd", str(cfg.ingest_budget_usd), "--permission-mode", "acceptEdits",
-            "--tools", ",".join(sorted({t.split("(")[0] for t in allowed} | set(EDIT_TOOLS))),
+            "--tools", ",".join(sorted({t.split("(")[0] for t in allowed} | set(EDIT_TOOLS) | set(READ_TOOLS))),
             *(["--add-dir", str(stage)] if stage is not None else []),
-            "--allowedTools", *allowed, *_tools_allow(cfg),
+            "--allowedTools", *allowed, *_read_allow(cfg, stage), *_tools_allow(cfg),
             "--disallowedTools", *DISALLOWED_TOOLS, *(MANAGED_DENY if target.managed else []), *_wiki_deny(cfg),
             "--json-schema", json.dumps(schema, ensure_ascii=False)]
     prev = ledger.ingest_row(sha)

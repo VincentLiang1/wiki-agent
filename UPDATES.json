@@ -1,5 +1,13 @@
 [
  {
+  "source": "ddb7aed",
+  "date": "2026-11-11",
+  "needs_human": false,
+  "zh-Hant": "- 資安修正:寄每日摘要信時改成驗證郵件伺服器的憑證。之前沒驗,在公共 Wi-Fi 上可能被攔截、拿到寄信用的應用程式密碼\n- Mac:攝入時 Claude 只能讀知識庫、原件資料夾與轉寫快取,讀不到電腦上其他檔(例如金鑰、登入權杖)。Windows 下一版再改\n- 攝入如果改了知識庫的 CLAUDE.md(或 .mcp.json 這類設定),會停下來等你看過,不會自動推上去\n- 不必做任何事",
+  "zh-Hans": "- 安全修正:寄每日摘要邮件时改成验证邮件服务器的证书。之前没验,在公共 Wi-Fi 上可能被拦截、拿到寄信用的应用专用密码\n- Mac:摄入时 Claude 只能读知识库、原件文件夹与转写缓存,读不到电脑上其他文件(例如密钥、登录令牌)。Windows 下一版再改\n- 摄入如果改了知识库的 CLAUDE.md(或 .mcp.json 这类设置),会停下来等你看过,不会自动推上去\n- 不必做任何事",
+  "en": "- Security fix: the daily summary email now verifies the mail server's certificate. Before, on public Wi-Fi someone could intercept it and get the app password used to send mail\n- Mac: during ingest, Claude can only read the knowledge base, the originals folder and the transcript cache, not other files on the computer (such as keys or login tokens). Windows will follow in a later release\n- If an ingest changes the knowledge base's CLAUDE.md (or settings such as .mcp.json), it stops and waits for you to review instead of pushing automatically\n- Nothing to do"
+ },
+ {
   "source": "8f15b2b",
   "date": "2026-11-10",
   "needs_human": false,
