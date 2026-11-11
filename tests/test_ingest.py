@@ -20,6 +20,7 @@ from wiki_feeder.convert import convert
 from wiki_feeder.ingest import (FINISHABLE, STOP_GUARDED, STOP_SHRANK, IngestReport, diff_lines, ingest,
                                 render_summary)
 from wiki_feeder.ledger import Ledger
+from wiki_feeder.osplat import WINDOWS
 from wiki_feeder.proc import run_net
 
 HERE = Path(__file__).parent
@@ -469,6 +470,9 @@ def test_claude_reads_only_the_folders_ingest_needs(env):
     ingest(env["cfg"])
     (args,) = _calls(env, "claude.jsonl")
     allowed = args[args.index("--allowedTools") + 1:args.index("--disallowedTools")]
+    if WINDOWS:  # 規則路徑寫法(//c/…)還沒在 Windows 實測,照舊不限定(ingest._read_allow)
+        assert {"Read", "Glob", "Grep"} <= set(allowed)
+        return
     assert not {"Read", "Glob", "Grep"} & set(allowed)
     for t in ("Read", "Glob", "Grep"):
         assert t in args[args.index("--tools") + 1].split(",")
