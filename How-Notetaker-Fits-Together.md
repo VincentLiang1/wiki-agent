@@ -27,7 +27,7 @@ Free for Windows and Mac: see the [Notetaker Desktop guide](https://github.com/V
 - Links to what you already have, grows over time
 - Can run on the Level 2 computer, or on a separate always-on one
 
-Needs an always-on computer (it can be the one running Notetaker Desktop; with just a phone and no Notetaker Desktop it works too) and a paid Claude plan (Pro or higher). The `_WikiBox` inbox folder lives in a cloud drive, depending on what sends the files: iPhone uses iCloud Drive, Android uses Google Drive; Notetaker Desktop prefers OneDrive on Windows and iCloud Drive on Mac (the other two also work). The installer asks which ones to watch; the others are ignored. Wiki Agent checks the inbox every minute.
+Needs an always-on computer (it can be the one running Notetaker Desktop) and a paid Claude plan (Pro or higher). The `_WikiBox` inbox folder lives in a cloud drive, depending on what sends the files: iPhone uses iCloud Drive, Android uses Google Drive; Notetaker Desktop prefers OneDrive on Windows and iCloud Drive on Mac (the other two also work). The installer asks which ones to watch; the others are ignored. Wiki Agent checks the inbox every minute.
 
 - New to LLM Wiki? See [What is an LLM Wiki?](What-is-LLM-Wiki.md)
 - About Wiki Agent & setup: [README](README.md), [Mac install guide](Mac-Install-Guide.md), [Windows install guide](Windows-Install-Guide.md)

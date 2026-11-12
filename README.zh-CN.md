@@ -21,7 +21,7 @@ wiki-agent 是「会议助手」全套的第 3 层:手机上的会议助手 App 
 
 | | Mac | Windows |
 | --- | --- | --- |
-| 电脑 | Apple 芯片的 Mac,要常开着(可以就是装会议助手电脑版那台;只用手机、没装电脑版也可以) | Windows 10／11,其他同左 |
+| 电脑 | Apple 芯片的 Mac,要常开着(可以就是装会议助手电脑版那台) | Windows 10／11,其他同左 |
 | 手机 | iPhone(用 iCloud 云盘传文件)或 Android(电脑装「Google 云端硬盘电脑版」) | iPhone(电脑装 iCloud for Windows)或 Android(电脑装「Google 云端硬盘电脑版」) |
 | Claude | 自己的 Claude 订阅(Pro 或 Max),装好 Claude Code 并登录 | 同左 |
 | 转写(选装) | Scribe2MD,约 1 GB,安装程序会问要不要下载(是什么:〈[Scribe2MD](Scribe2MD.zh-CN.md)〉) | 同左 |
