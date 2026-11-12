@@ -2,6 +2,7 @@
 <title id="title">会议助手全套服务架构</title>
 <style>
 .card{fill:#ffffff;stroke-width:1.5}
+.folder{fill:none;stroke-width:1.5}
 .t{fill:#1f2328;font-weight:600;font-size:16px}
 .s{fill:#59636e;font-size:12.5px}
 .lbl{fill:#59636e;font-size:12px}
@@ -58,17 +59,17 @@
 <path d="M314 90.0 H446" class="line" marker-start="url(#a)" marker-end="url(#a)"/>
 <use href="#i-sync" x="329" y="68.68" width="14" height="14" class="cg"/>
 <text x="347.0" y="80.0" class="lbl" text-anchor="start">声纹、名单同步</text>
-<path d="M170 140 V269.0 H228" class="line" marker-end="url(#a)"/>
+<path d="M170 140 V274.0 H208" class="line" marker-end="url(#a)"/>
 <use href="#i-send" x="180" y="156.68" width="14" height="14" class="cg"/>
 <text x="198" y="168" class="lbl" text-anchor="start">按「发送」</text>
-<path d="M590 140 V269.0 H532" class="line" marker-end="url(#a)"/>
+<path d="M590 140 V274.0 H552" class="line" marker-end="url(#a)"/>
 <use href="#i-send" x="445.24" y="156.68" width="14" height="14" class="cg"/>
 <text x="463.2" y="168" class="lbl" text-anchor="start">按「送至 LLM Wiki」</text>
-<rect x="230" y="234" width="300" height="70" rx="12" class="card k3"/>
-<use href="#i-folder" x="332.552" y="248.74" width="20" height="20" class="c3"/>
-<text x="356.6" y="264.5" class="t" text-anchor="start">_WikiBox</text>
-<use href="#i-cloud" x="308.5" y="272" width="14" height="14" class="cg"/>
-<text x="326.5" y="283.5" class="s" text-anchor="start">云端硬盘的收件文件夹</text>
+<path d="M210 242 Q210 234 218 234 H320 L330 244 H542 Q550 244 550 252 V296 Q550 304 542 304 H218 Q210 304 210 296 Z" class="folder dash k3"/>
+<use href="#i-folder" x="304.832" y="253.74" width="20" height="20" class="c3"/>
+<text x="328.8" y="269.5" class="t" text-anchor="start">_WikiBox 文件夹</text>
+<use href="#i-cloud" x="255.188" y="277" width="14" height="14" class="cg"/>
+<text x="273.2" y="288.5" class="s" text-anchor="start">放在 iCloud／OneDrive／Google 云端硬盘</text>
 <path d="M380.0 304 V350" class="line" marker-end="url(#a)"/>
 <use href="#i-clock" x="392" y="321.68" width="14" height="14" class="cg"/>
 <text x="410.0" y="333" class="lbl" text-anchor="start">电脑每分钟收件</text>

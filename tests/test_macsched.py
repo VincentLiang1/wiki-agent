@@ -123,12 +123,68 @@ def test_mac_setup_writes_a_readable_config_and_stores_the_password_in_the_keych
     assert text.startswith(mset.HEADER) and "記事本" not in text
     cfg = mset.ws.write_config(text, tmp_path / "state")
     assert cfg.doc2md_cmd[0].endswith("/meeting-scribe/app/.venv/bin/doc2md") and cfg.claude_cmd == ("/x/claude",)
-    seen = []
-    assert mset.save_password("amy@gmail.com", "abcd", run=lambda cmd, **k: seen.append(cmd) or
-                              subprocess.CompletedProcess(cmd, 0))
-    assert seen[0][:3] == ["/usr/bin/security", "add-generic-password", "-U"]
-    assert seen[0][seen[0].index("-s") + 1] == "wiki-feeder-smtp"           # 與 osplat.secret 讀的同一個
+    keychain, seen = {}, []
+    assert mset.save_password("amy@gmail.com", "abcd", run=_fake_security(keychain, seen))
+    assert keychain == {("wiki-feeder-smtp", "amy@gmail.com"): "abcd"}     # 與 osplat.secret 讀的同一個
 
+
+def _fake_security(keychain: dict, seen: list, stores: bool = True):
+    """假的 /usr/bin/security:-i 照它的拆字讀標準輸入那一行(shlex 與它對 \\、" 的處理相同);find 照 -w 印密碼。"""
+    import shlex
+
+    def run(cmd, **k):
+        seen.append((cmd, k.get("input")))
+        if cmd[1:] == ["-i"]:
+            a = shlex.split(k["input"])
+            if stores and a[:2] == ["add-generic-password", "-U"]:
+                keychain[(a[a.index("-s") + 1], a[a.index("-a") + 1])] = a[a.index("-w") + 1]
+            return subprocess.CompletedProcess(cmd, 0, "", "")             # security -i 指令失敗也回 0
+        assert cmd[1] == "find-generic-password", cmd
+        key = (cmd[cmd.index("-s") + 1], cmd[cmd.index("-a") + 1])
+        if key not in keychain:
+            return subprocess.CompletedProcess(cmd, 44, "", "not found")
+        return subprocess.CompletedProcess(cmd, 0, keychain[key] + "\n", "")
+    return run
+
+
+def test_mac_setup_keeps_the_mail_password_off_the_command_line():
+    """稽核 (14):密碼放 security 的參數,執行瞬間 ps 看得到;要從 -i 的標準輸入送,含引號、反斜線也要存得對。"""
+    mset = _mod("macsetup")
+    for pw in ("abcdefghijklmnop", 'a"b\\c d'):
+        keychain, seen = {}, []
+        assert mset.save_password("amy@gmail.com", pw, run=_fake_security(keychain, seen))
+        assert keychain[("wiki-feeder-smtp", "amy@gmail.com")] == pw
+        assert all(pw not in a for cmd, _ in seen for a in cmd)
+        assert seen[0][0] == ["/usr/bin/security", "-i"]
+
+
+def test_mac_setup_reports_a_password_that_did_not_reach_the_keychain():
+    """security -i 存失敗也回 0:不讀回來比對,問答會說存好了,寄信卻一直失敗。"""
+    mset = _mod("macsetup")
+    assert not mset.save_password("amy@gmail.com", "abcd", run=_fake_security({}, [], stores=False))
+    old = {("wiki-feeder-smtp", "amy@gmail.com"): "old-password"}           # 已有舊的、更新沒成功
+    assert not mset.save_password("amy@gmail.com", "abcd", run=_fake_security(old, [], stores=False))
+    assert not mset.save_password("amy@gmail.com", "ab\ncd", run=_fake_security({}, []))
+
+
+
+def uv_pin(name: str, text: str) -> tuple[str, str]:
+    """稽核 (12):沒鎖版本的 `curl … astral.sh/uv/install.sh | sh` 跑的是當下網站上的任何東西;
+    要裝固定版本、安裝程式比對過 SHA-256 才執行。回傳 (版本, 雜湊);App 的 setup.zsh 在 test_make_mac_app 比對。"""
+    import re
+    assert "astral.sh/uv/install.sh" not in text, name
+    ver = re.search(r"^UV_VERSION=(\d+\.\d+\.\d+)$", text, re.M)
+    sha = re.search(r"^UV_INSTALLER_SHA256=([0-9a-f]{64})$", text, re.M)
+    assert ver and sha, name
+    check = '&& echo "$UV_INSTALLER_SHA256  $uv_sh" | shasum -a 256 -c -s - && sh "$uv_sh"'
+    assert 'curl -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" -o "$uv_sh"' in text and check in text, name
+    assert not re.search(r"\|\s*sh\b", text), name                           # 不准再接 `| sh` 直接跑
+    return ver[1], sha[1]
+
+
+def test_install_sh_installs_a_pinned_uv_after_checking_its_hash():
+    """App 的 setup.zsh 不在這裡比:make_mac_app.py 不發佈,公開複本跑這個檔會找不到(發佈時炸過,2026-11-12)。"""
+    uv_pin("install.sh", (ROOT / "install.sh").read_text(encoding="utf-8"))
 
 def test_install_sh_runs_only_when_fully_downloaded_and_reads_the_keyboard():
     """curl … | bash:下載到一半斷線不可只跑了前半段;標準輸入是腳本本身,問答要從 /dev/tty 讀。"""

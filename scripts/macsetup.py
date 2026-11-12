@@ -61,12 +61,22 @@ def find_claude(home: Path) -> Path | None:
     return None
 
 
+def _sec_quote(s: str) -> str:
+    """`security -i` 自己拆字:雙引號包起來,裡面的 \\ 與 " 前面加 \\(2026-11-12 用暫時鑰匙圈實測 a"b\\c d 存得回來)。"""
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 def save_password(account: str, password: str, run=subprocess.run) -> bool:
     """存進登入鑰匙圈(service 與程式讀的同一個;-U 已有就更新)。用 /usr/bin/security 建的項目,
-    launchd 底下讀不會跳授權視窗。"""
-    r = run(["/usr/bin/security", "add-generic-password", "-U", "-s", ws.SMTP_SERVICE, "-a", account, "-w", password],
-            capture_output=True)
-    return r.returncode == 0
+    launchd 底下讀不會跳授權視窗。密碼從 `security -i` 的標準輸入送,不放參數(放參數 ps 看得到,稽核 (14));
+    `security -i` 指令失敗也回 0,所以存完讀回來比對才算數。"""
+    if any(c in password for c in "\r\n\0"):
+        return False
+    line = f"add-generic-password -U -s {_sec_quote(ws.SMTP_SERVICE)} -a {_sec_quote(account)} -w {_sec_quote(password)}\n"
+    run(["/usr/bin/security", "-i"], input=line, text=True, capture_output=True)
+    r = run(["/usr/bin/security", "find-generic-password", "-s", ws.SMTP_SERVICE, "-a", account, "-w"],
+            capture_output=True, text=True)
+    return r.returncode == 0 and r.stdout.rstrip("\n") == password
 
 
 def pick(prompt: str, folder: bool, default: str = "") -> str:

@@ -1,5 +1,13 @@
 [
  {
+  "source": "b6868ea",
+  "date": "2026-11-12",
+  "needs_human": false,
+  "zh-Hant": "- 架構圖〈會議助手全套服務架構〉的 _WikiBox 改畫成資料夾:它只是雲端硬碟裡的一個資料夾,不是另一個程式;並寫明可以放在 iCloud、OneDrive 或 Google 雲端硬碟\n- 只改說明文件,程式沒有變,不必做任何事",
+  "zh-Hans": "- 架构图〈会议助手全套服务架构〉的 _WikiBox 改画成文件夹:它只是云端硬盘里的一个文件夹,不是另一个程序;并写明可以放在 iCloud、OneDrive 或 Google 云端硬盘\n- 只改说明文档,程序没有变,不必做任何事",
+  "en": "- The How Notetaker Fits Together diagram now draws _WikiBox as a folder: it is just a folder in your cloud drive, not another program; it also says it can live in iCloud, OneDrive or Google Drive\n- Docs only, no code changes; nothing to do"
+ },
+ {
   "source": "c6d7aff",
   "date": "2026-11-11",
   "needs_human": false,

@@ -44,6 +44,11 @@ ask_lang() {
 }
 
 # msg 繁中 簡中 英文:照 WA_LANG 印其中一個
+# 鎖定 uv 的版本與安裝程式的 SHA-256(稽核 (12)):版本固定的安裝程式裡寫死了各平台壓縮檔的 sha256,
+# 所以這裡比對安裝程式就等於鎖住 uv 本體。升版本要兩個一起換(install.sh、make_mac_app.py 兩處,測試對照)
+UV_VERSION=0.12.18
+UV_INSTALLER_SHA256=e62a5ea089de9c6a9b1f767166c9f33194e18d350e9f375c6355fac3ba0fb42b
+
 msg() {
     case "${WA_LANG:-en}" in
         zh-Hant) printf '%s\n' "$1" ;;
@@ -82,10 +87,15 @@ main() {
     msg "=== 2/4 uv(Python 環境管理工具) ===" "=== 2/4 uv(Python 环境管理工具) ===" "=== 2/4 uv (Python environment manager) ==="
     export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
     if ! command -v uv >/dev/null 2>&1; then
-        curl -LsSf https://astral.sh/uv/install.sh | sh || {
-            msg "✗ uv 裝不起來:請檢查網路" "✗ uv 装不起来:请检查网络" "✗ Could not install uv: please check your network"
+        uv_sh=$(mktemp) || return 1
+        if curl -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" -o "$uv_sh" \
+                && echo "$UV_INSTALLER_SHA256  $uv_sh" | shasum -a 256 -c -s - && sh "$uv_sh"; then
+            rm -f "$uv_sh"
+        else
+            rm -f "$uv_sh"
+            msg "✗ uv 裝不起來:請檢查網路(下載的安裝程式跟預期的不一樣也會這樣)" "✗ uv 装不起来:请检查网络(下载的安装程序跟预期的不一样也会这样)" "✗ Could not install uv: please check your network (this also happens if the downloaded installer is not the expected one)"
             return 1
-        }
+        fi
         export PATH="$HOME/.local/bin:$PATH"
     fi
     echo "✓ $(uv --version)"
