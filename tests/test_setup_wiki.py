@@ -59,6 +59,7 @@ def test_new_wiki_is_built_from_the_handout_prompt_with_file_tools_only(tmp_path
     assert (raw / "_Pending").is_dir() and not (raw / "_待處理").exists()   # 新安裝一律英文(使用者 2026-10-24)
     ((args, prompt),) = seen
     assert "Bash" not in " ".join(args) and "--dangerously-skip-permissions" not in args
+    assert args[args.index("--setting-sources") + 1] == "user,project"   # 不讀朋友庫裡的 settings.local.json(§6.2)
     assert "../Raw_Sources/" in prompt and "\\" not in prompt              # Mac 的路徑寫法
     assert "_Pending/" in prompt and "_待處理" not in prompt                # 講義寫實際建的資料夾
     assert "[[名稱]]" in prompt and "不要停下來問" in prompt and "不要執行 git" in prompt
@@ -327,6 +328,7 @@ def test_claude_reads_claude_md_only_when_the_program_cannot(tmp_path, monkeypat
     assert ws.claude_find_raw(Path("/x/claude"), w, run=fake) == r.resolve()
     (args,) = seen
     assert args[args.index("--tools") + 1] == "Read,Glob,Grep" and "--permission-mode" not in args
+    assert args[args.index("--setting-sources") + 1] == "user,project"
     gone = lambda *a, **k: subprocess.CompletedProcess(a, 0, json.dumps({"result": '{"raw": "../Nope"}'}), "")
     assert ws.claude_find_raw(Path("/x/claude"), w, run=gone) is None         # 不存在的不收
     junk = lambda *a, **k: subprocess.CompletedProcess(a, 1, "壞掉", "")

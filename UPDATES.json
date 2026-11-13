@@ -1,5 +1,13 @@
 [
  {
+  "source": "a1cce83",
+  "date": "2026-11-13",
+  "needs_human": false,
+  "zh-Hant": "- 資安修正:攝入時 Claude 不再讀知識庫裡的 .claude/settings.local.json。那個檔如果放行了「任何指令」(例如 Bash(*)),之前會跟攝入的權限合併,夾帶指示的文件就能讓攝入執行任意指令、讀走電腦上的金鑰或登入權杖;上一版「攝入只能讀知識庫與原件」也要有這一項才真的生效。知識庫的 CLAUDE.md 照常讀\n- 攝入也改不了知識庫 .claude/ 底下的設定,不能替下一次攝入放寬權限\n- 安裝時用來建知識庫、找原件資料夾的 Claude 同樣不讀那個檔\n- 不必做任何事",
+  "zh-Hans": "- 安全修正:摄入时 Claude 不再读知识库里的 .claude/settings.local.json。那个文件如果放行了「任何命令」(例如 Bash(*)),之前会跟摄入的权限合并,夹带指示的文档就能让摄入执行任意命令、读走电脑上的密钥或登录令牌;上一版「摄入只能读知识库与原件」也要有这一项才真正生效。知识库的 CLAUDE.md 照常读取\n- 摄入也改不了知识库 .claude/ 下的设置,不能替下一次摄入放宽权限\n- 安装时用来建知识库、找原件文件夹的 Claude 同样不读那个文件\n- 不必做任何事",
+  "en": "- Security fix: during ingest, Claude no longer reads the knowledge base's .claude/settings.local.json. If that file allowed \"any command\" (such as Bash(*)), it used to be merged with the ingest permissions, so a document carrying hidden instructions could make ingest run any command and read keys or login tokens on the computer; the previous release's \"ingest can only read the knowledge base and originals\" only fully takes effect with this. The knowledge base's CLAUDE.md is still read\n- Ingest also can no longer change settings under the knowledge base's .claude/, so it cannot loosen the permissions of the next ingest\n- The Claude used during setup to build the knowledge base and find the originals folder skips that file too\n- Nothing to do"
+ },
+ {
   "source": "dbdd434",
   "date": "2026-11-12",
   "needs_human": false,

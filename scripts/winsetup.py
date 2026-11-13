@@ -601,7 +601,9 @@ def scaffold_wiki(claude: Path, wiki: Path, raw: Path, windows: bool, run=subpro
     wiki.mkdir(parents=True, exist_ok=True)
     (raw / folder_names(raw)[PENDING]).mkdir(parents=True, exist_ok=True)
     before = _existing(wiki)
-    args = [str(claude), "-p", "--output-format", "json", "--no-session-persistence", "--max-budget-usd", "3",
+    # --setting-sources:不讀朋友知識庫裡的 .claude/settings.local.json(裡面可能放行 Bash(*) 之類,§6.2)
+    args = [str(claude), "-p", "--setting-sources", "user,project", "--output-format", "json", "--no-session-persistence",
+            "--max-budget-usd", "3",
             "--permission-mode", "acceptEdits", "--tools", "Read,Write,Edit,Glob,Grep",
             "--allowedTools", "Read", "Glob", "Grep"]
     try:
@@ -773,7 +775,8 @@ RAW_PROMPT = N_("""讀這個資料夾裡的 CLAUDE.md,找出它規定的原始�
 
 
 def claude_find_raw(claude: Path, wiki: Path, run=subprocess.run) -> Path | None:
-    args = [str(claude), "-p", "--output-format", "json", "--no-session-persistence", "--max-budget-usd", "1",
+    args = [str(claude), "-p", "--setting-sources", "user,project", "--output-format", "json", "--no-session-persistence",
+            "--max-budget-usd", "1",
             "--tools", "Read,Glob,Grep", "--allowedTools", "Read", "Glob", "Grep"]
     try:
         r = run(args, cwd=wiki, input=L(RAW_PROMPT), capture_output=True, text=True, encoding="utf-8",

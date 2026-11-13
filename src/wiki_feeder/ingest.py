@@ -69,12 +69,20 @@ EDIT_TOOLS = ["Write", "Edit"]
 # 加上不限網域的 WebFetch,夾帶指示的原件就能把它們送出去(2026-11-11 資安稽核,Claude Code 2.1.311 實測)。
 # 只放行攝入要讀的幾個資料夾(_read_allow);沒列的地方要人核准,-p 模式等於被擋(同一天實測)
 READ_TOOLS = ["Read", "Glob", "Grep"]
+# 上面兩段「-p 模式等於被擋」要先有這個旗標才成立:-p 預設也讀工作目錄(庫)的 .claude/settings.local.json,
+# 使用者兩個庫的那份放行 `Bash(*)`、沒加限定的 Read／WebFetch,會跟 --allowedTools 合併——攝入不經核准就能執行任意指令
+# (2026-11-13 資安稽核,Claude Code 2.1.311 實測:工作目錄外 touch、讀 /etc/hosts 都成功)。只讀 user、project 兩層:
+# 庫的 CLAUDE.md 照常載入,上面兩件都被擋;只讀 user 的話 CLAUDE.md 也不載入,攝入會壞(§6.2)
+SETTING_SOURCES = ["--setting-sources", "user,project"]
 ALLOWED_TOOLS = [
     "WebSearch", "WebFetch", "Agent",
     "Bash(git add:*)", "Bash(git commit:*)", "Bash(git status:*)",
 ]
 DISALLOWED_TOOLS = ["Bash(git push:*)", "Bash(git -C:*)", "Bash(rm:*)", "Bash(mv:*)", "Bash(cp:*)",
                     "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)"]
+# 攝入改不了自己下一輪的權限(庫的 .claude/;相對路徑對工作目錄,2026-11-13 實測擋得下)。改了也會 STOP(GUARDED_DIRS),
+# 這裡是讓它根本寫不進去
+SETTINGS_DENY = ["Write(.claude/**)", "Edit(.claude/**)"]
 
 RESULT_SCHEMA = {
     "type": "object",
@@ -1401,12 +1409,13 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
     forced = personal is not None and _forced_personal(side)
     schema = _schema(groups, backfill=stage is not None, managed=target.managed, personal_groups=p_groups)
     allowed = [t for t in ALLOWED_TOOLS if not (target.managed and t in MANAGED_DENY)]
-    args = [*cfg.claude_cmd, "-p", "--output-format", "json", "--no-session-persistence",
+    args = [*cfg.claude_cmd, "-p", *SETTING_SOURCES, "--output-format", "json", "--no-session-persistence",
             "--max-budget-usd", str(cfg.ingest_budget_usd), "--permission-mode", "acceptEdits",
             "--tools", ",".join(sorted({t.split("(")[0] for t in allowed} | set(EDIT_TOOLS) | set(READ_TOOLS))),
             *(["--add-dir", str(stage)] if stage is not None else []),
             "--allowedTools", *allowed, *_read_allow(cfg, stage), *_tools_allow(cfg),
-            "--disallowedTools", *DISALLOWED_TOOLS, *(MANAGED_DENY if target.managed else []), *_wiki_deny(cfg),
+            "--disallowedTools", *DISALLOWED_TOOLS, *SETTINGS_DENY, *(MANAGED_DENY if target.managed else []),
+            *_wiki_deny(cfg),
             "--json-schema", json.dumps(schema, ensure_ascii=False)]
     prev = ledger.ingest_row(sha)
     # 先記「攝入中」才叫 claude:這之後當掉,下一輪開頭看得到它而 STOP,不會補推沒驗證的 commit、再攝入一次。

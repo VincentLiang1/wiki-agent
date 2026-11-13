@@ -144,6 +144,19 @@ def test_claude_gets_no_git_command_that_can_write_files(env):
         assert f"Bash(git {sub}:*)" in denied, sub
 
 
+def test_claude_ignores_the_repos_local_settings_and_cannot_edit_them(env):
+    """2026-11-13 資安稽核:-p 預設也讀庫的 .claude/settings.local.json(使用者兩個庫的放行 Bash(*)、沒加限定的 Read),
+    跟允許清單合併——夾帶指示的原件就能不經核准執行任意指令。只讀 user、project(庫的 CLAUDE.md 照常載入);
+    .claude/ 寫不進去,攝入放寬不了下一輪的權限。"""
+    _feed(env, "s.txt", b"sss")
+    ingest(env["cfg"])
+    (args,) = _calls(env, "claude.jsonl")
+    i = args.index("--setting-sources")
+    assert args[i + 1] == "user,project"
+    denied = args[args.index("--disallowedTools"):]
+    assert "Write(.claude/**)" in denied and "Edit(.claude/**)" in denied
+
+
 def test_office_original_can_be_read_with_only_the_dump_command(env, monkeypatch):
     """Office 原件:提示裡給 office-dump 指令、白名單一個子命令一條(不開放任意 python)。"""
     c = replace(env["cfg"], ingest_tools_cmd=("/x/uv", "run", "--directory", "/x/wf", "wiki-feeder"))

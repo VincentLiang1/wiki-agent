@@ -32,7 +32,7 @@ from typing import Callable
 
 from .collect import last_net_down, mark_net_down, run_lock
 from .config import Config
-from .ingest import _API_DOWN, STOP_LEFTOVER, IngestError, unverified_commits
+from .ingest import _API_DOWN, SETTING_SOURCES, SETTINGS_DENY, STOP_LEFTOVER, IngestError, unverified_commits
 from .ingest import git as repo_git
 from .i18n import L
 from .inboxes import DENIED_ALL, checked_sentence
@@ -705,11 +705,12 @@ def _problems_text(problems: list[Problem]) -> str:
 # -- 修理 ---------------------------------------------------------------------------
 
 def run_agent(cfg: Config, problems: list[Problem]) -> dict:
-    args = [*cfg.claude_cmd, "-p", "--output-format", "json",
+    # 不讀 clone 裡的 .claude/settings.local.json、也改不了它(同攝入,§6.2;clone 目前沒有,多一層保險)
+    args = [*cfg.claude_cmd, "-p", *SETTING_SOURCES, "--output-format", "json",
             "--max-budget-usd", str(cfg.repair_budget_usd), "--permission-mode", "acceptEdits",
             "--tools", ",".join(sorted({t.split("(")[0] for t in ALLOWED})),
             "--allowedTools", *ALLOWED, *helper_rules(), f"Read(/{cfg.state_dir}/**)",
-            "--disallowedTools", *DISALLOWED,
+            "--disallowedTools", *DISALLOWED, *SETTINGS_DENY,
             "--json-schema", json.dumps(SCHEMA, ensure_ascii=False)]
     prompt = PROMPT.format(problems=_problems_text(problems), facts=facts(cfg, problems),
                            feeder=shlex.join(feeder_cmd()), checked=checked_sentence(L(DENIED_ALL, n="N")))
