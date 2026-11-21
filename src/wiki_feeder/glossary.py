@@ -26,6 +26,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from .config import Config
 from .i18n import N_, L, variants
@@ -144,7 +145,10 @@ def parse_page_section(text: str, skipped: list[str]) -> Table:
         if line.startswith("|"):
             cells = [c.strip() for c in line.strip("|").split("|")]
             if len(cells) >= 2 and "**" in cells[1] and not set(cells[0]) <= set("-: "):
-                right = re.search(r"\*\*([^*]+)\*\*", cells[1]).group(1)
+                m = re.search(r"\*\*([^*]+)\*\*", cells[1])
+                if m is None:   # 只有「****」之類、沒有內容的粗體:不是對照列
+                    continue
+                right = m.group(1)
                 if UNSURE.search(cells[1].replace(f"**{right}**", "")) and "判讀" in cells[1]:
                     skipped.append(f"{cells[0]} → {cells[1]}(未確定)")
                     continue
@@ -257,7 +261,7 @@ def build(repo: Path, fwiki: bool, rules: Path | None = None,
     unruled: list[str] = []
     if fwiki and rules is not None and rules.exists():
         groups, unruled = apply_rules(json.loads(rules.read_text(encoding="utf-8")), common, groups, skipped)
-    doc = {"common": to_entries(common), "groups": {k: to_entries(v) for k, v in sorted(groups.items()) if v}}
+    doc: dict[str, Any] = {"common": to_entries(common), "groups": {k: to_entries(v) for k, v in sorted(groups.items()) if v}}
     n = sum(len(e["wrong"]) for es in (doc["common"], *doc["groups"].values()) for e in es)
     if n > MAX_WRONGS:
         raise GlossaryError(L("名詞對照表有 {n} 個誤譯,超過上限 {max},不寫", n=n, max=MAX_WRONGS))

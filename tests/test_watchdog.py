@@ -403,6 +403,21 @@ def test_inbox_streak_from_offline_waits_for_another_collect_round(env, dev, mon
 
 
 
+def test_offline_mark_alone_keeps_a_high_streak_from_being_repaired(cfg):
+    """收件那邊斷網的一輪會把次數歸零(2026-11-05),所以看門狗這道「最近一次是斷網就不算」平常輪不到它擋——
+    下面那條測試走的是前一道。這條只留這一道:先記下斷網、還沒歸零就當掉(或舊版留下的次數),
+    次數已過門檻、標記是斷網,照樣不叫修理、不寄信(2026-11-16 全跑突變時 M302 逃掉)。"""
+    c = replace(cfg, unavailable_alert_after=3)
+    names = sorted(i.name for i in build_inboxes(c))
+    c.state_dir.mkdir(parents=True, exist_ok=True)
+    (c.state_dir / "inbox_streak.json").write_text(json.dumps({n: 9 for n in names}), encoding="utf-8")
+    (c.state_dir / "inbox_offline.json").write_text(json.dumps(names[:1]), encoding="utf-8")
+
+    found = {p.key for p in _detect(c) if p.kind == "inbox"}
+
+    assert found == {f"inbox:{n}" for n in names[1:]}   # 沒標斷網的照常算,標了的不算
+
+
 def test_inbox_unreadable_because_offline_is_never_repaired(cfg, monkeypatch):
     """2026-10-20 帶筆電到公司:FUTURES 走 ssh 連不上 GitHub,網路閃一下通的那一刻看門狗寄了 🛑「FUTURES 連續 5 輪讀不到」。
     最近一次是連不上網路的就不算收件匣壞了(只寫 log);換成別的錯(金鑰、權限、資料夾不見)連續 3 輪照常交給修理

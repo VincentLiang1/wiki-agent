@@ -25,6 +25,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from .collect import build_inboxes, last_net_down, run_file, uptime
 from .config import Config
@@ -84,7 +85,7 @@ def _nobody_holds(lock: Path, run: Path) -> bool:
         return False   # 鎖檔不存在:不知道是誰寫的 .run,不動,照舊看 pid
     try:
         try:
-            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)  # type: ignore[attr-defined]   # 另一個平台才有
         except BlockingIOError:
             return False
         run.unlink(missing_ok=True)
@@ -130,15 +131,15 @@ def deploying(cfg: Config) -> bool:
         return False
     with open(p) as f:
         try:
-            fcntl.flock(f, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            fcntl.flock(f, fcntl.LOCK_SH | fcntl.LOCK_NB)  # type: ignore[attr-defined]   # 另一個平台才有
         except BlockingIOError:
             return True
-        fcntl.flock(f, fcntl.LOCK_UN)
+        fcntl.flock(f, fcntl.LOCK_UN)  # type: ignore[attr-defined]   # 另一個平台才有
     return False
 
 
 def agents_not_loaded(labels: tuple[str, ...] = AGENT_LABELS) -> list[str]:
-    dom = f"gui/{os.getuid()}"
+    dom = f"gui/{os.getuid()}"  # type: ignore[attr-defined]   # 另一個平台才有
     return [lb for lb in labels
             if subprocess.run(["launchctl", "print", f"{dom}/{lb}"], capture_output=True).returncode != 0]
 
@@ -308,7 +309,7 @@ def _exempt(cfg: Config, procs: list[dict], now: float) -> set[int]:
 
 
 def resources(cfg: Config, procs: list[dict], free_pct: float | None, total: int,
-              exclude: set[int] = frozenset()) -> list[Problem]:
+              exclude: set[int] | frozenset[int] = frozenset()) -> list[Problem]:
     """連續幾次檢查都超標才算(一次高峰不算);計數記在 resource_watch.json,換了 pid 重新算(bird 除外:照執行檔算)。"""
     try:
         state = json.loads(cfg.resource_state_path.read_text(encoding="utf-8"))
@@ -362,6 +363,7 @@ function run(argv) {
 
 
 def probe_path(cfg: Config) -> Path:
+    assert cfg.icloud_probe_dir is not None   # 只在有 iCloud 收件匣的設定下呼叫
     return cfg.icloud_probe_dir / PROBE_NAME
 
 
@@ -400,7 +402,7 @@ def icloud_synced(path: Path, since: float) -> tuple[bool | None, str]:
 def write_probe(cfg: Config, now: float) -> None:
     """覆寫探針檔、記下寫入時間。資料夾只建一層:iCloud 雲碟整個不見(登出)要寫失敗,不可替它建出來。
     上一次確認傳上去的時間(confirmed)留著:修理看它分辨「修過還卡著」與「好過之後又卡住」。"""
-    cfg.icloud_probe_dir.mkdir(exist_ok=True)
+    probe_path(cfg).parent.mkdir(exist_ok=True)
     probe_path(cfg).write_text(f"wiki-feeder 看門狗的 iCloud 同步探針,可以不理它。{datetime.fromtimestamp(now)}\n",
                                encoding="utf-8")
     cfg.icloud_probe_state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -607,7 +609,7 @@ def icloud_kick(cfg: Config, now: float, status: str | None, pending: list[str] 
     if pending is None:
         parts.append(L("收件匣讀不到"))
     else:
-        old = st.get("placeholders") if isinstance(st.get("placeholders"), dict) else {}
+        old: Any = st.get("placeholders") if isinstance(st.get("placeholders"), dict) else {}
         seen = {n: old.get(n, now) for n in pending}
         if seen != old:
             st["placeholders"] = seen
@@ -718,7 +720,7 @@ def unstick(cfg: Config, now: float | None = None, procs: list[dict] | None = No
         for pid in targets:
             if _alive(pid):
                 try:
-                    os.kill(pid, signal.SIGKILL)
+                    os.kill(pid, signal.SIGKILL)  # type: ignore[attr-defined]   # 另一個平台才有
                 except OSError:
                     pass
         msgs.append(f"{r['stage']}(pid {r['pid']})卡住 {idle / 60:.0f} 分鐘,已結束:"

@@ -43,7 +43,8 @@ def _segments(cmd: str) -> list[list[str]]:
     try:
         lx = shlex.shlex(cmd, posix=True, punctuation_chars=True)
         lx.whitespace_split = True
-        segs, cur = [], []
+        segs: list[list[str]] = []
+        cur: list[str] = []
         for tok in lx:
             if tok.startswith("<<"):
                 break

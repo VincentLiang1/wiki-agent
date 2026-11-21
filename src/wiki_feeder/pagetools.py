@@ -295,7 +295,7 @@ def _percent_checks(header: list[str], data: list[list[str]], totals: list[list[
         n = sum(1 for v in col if v)
         if n < 2 or not all(v[1] for v in col if v):
             continue
-        exp = min(v[0].as_tuple().exponent for v in col if v)
+        exp = min(int(v[0].as_tuple().exponent) for v in col if v)   # 有限數的指數一定是整數
         unit = Decimal(1).scaleb(exp)   # 一個末位
         bases = []
         for b, base_name in enumerate(header):
@@ -382,7 +382,7 @@ def table_sums(repo: Path, page: str, heading: str | None = None) -> str:
                 sub = sum((v[0] for r in subs if k < len(r) and (v := _number(r[k]))), Decimal(0))
                 # 百分比各列四捨五入過:加總差在「每列最多差半個末位」以內是正常的
                 tol = Decimal(0) if not pct else len(nums) * Decimal(5).scaleb(
-                    min(v.as_tuple().exponent for v, _ in nums) - 1)
+                    min(int(v.as_tuple().exponent) for v, _ in nums) - 1)
                 if t[0] == total:
                     line += L(",合計列相符")
                 elif abs(t[0] - total) <= tol:
@@ -397,4 +397,64 @@ def table_sums(repo: Path, page: str, heading: str | None = None) -> str:
         out += _percent_checks(header, data, totals)
     if not out:
         return L("{path}:沒有表格", path=rel) + (L("(標題含「{heading}」的段落裡)", heading=heading) if heading else "")
+    return "\n".join(out)
+
+
+_SHARE_ITEM = re.compile(r"(?:(?P<name>.*)[:：])?(?P<value>[^:：=]+?)(?:=(?P<written>[^=]*))?")
+
+
+def share_check(items: list[str], total: str | None = None) -> str:
+    """段落裡的佔比驗算(share-check):頁面散文寫的「某項 1,234 元(佔 7.6%)」,table-sums 只看表格驗不到。
+    claude 把數字抄過來(`[名稱:]數字[=頁面寫的佔比]`),這裡算各項 ÷ 分母、跟頁面寫的佔比比對,另印各項加總。
+    分母沒給就用各項加總。不讀任何檔、不算算式,只做除法與加總。
+    2026-11-18、11-19 三筆攝入的「四項以外」段落、統計摘要的美元佔比都只能人工算、寫成未驗(使用者 2026-11-21 要補)。
+    差在半個末位以內算相符(頁面四捨五入過);一個末位以內另外標出來(可能為了湊 100% 調過一格),再多才報 ⚠️。"""
+    if not items:
+        raise PageToolError(L("至少要給一項(格式:[名稱:]數字[=頁面寫的佔比])"))
+    parsed: list[tuple[str, Decimal, Decimal | None]] = []
+    for it in items:
+        m = _SHARE_ITEM.fullmatch(it.strip())
+        v = _number(m["value"]) if m else None
+        w = _number(m["written"]) if m and m["written"] is not None else None
+        if m is None or v is None or v[1] or (m["written"] is not None and w is None):
+            raise PageToolError(L("「{item}」看不懂(格式:[名稱:]數字[=頁面寫的佔比],例如 手續費:1,234=7.6%)", item=it))
+        parsed.append(((m["name"] or "").strip(), v[0], w[0] if w else None))
+    s = sum((v for _, v, _ in parsed), Decimal(0))
+    if total is not None:
+        t = _number(total)
+        if t is None or t[1]:
+            raise PageToolError(L("分母「{total}」不是數字", total=total))
+        base = t[0]
+    else:
+        base = s
+    if not base:
+        raise PageToolError(L("分母是 0,算不了佔比"))
+    out = [L("分母 {total}", total=_fmt(base, False)) + ("" if total is not None else L("(各項加總;沒給 --total)"))]
+    bad = 0
+    for name, val, pct in parsed:
+        exact = val / base * 100
+        line = (L("  {name}:", name=name) if name else "  ") + L("{value} → {pct}", value=_fmt(val, False),
+                                                                pct=_fmt(exact.quantize(Decimal("0.01")), True))
+        if pct is not None:
+            unit = Decimal(1).scaleb(int(pct.as_tuple().exponent))   # 頁面寫的佔比的一個末位
+            diff = abs(pct - exact)
+            if diff * 2 <= unit:
+                line += L(",頁面寫 {written},相符", written=_fmt(pct, True))
+            elif diff <= unit:
+                line += L(",頁面寫 {written}、算出 {computed},差一個末位內(可能為了湊 100% 調過)",
+                          written=_fmt(pct, True), computed=_fmt(exact.quantize(unit), True))
+            else:
+                bad += 1
+                line += L(",⚠️ 頁面寫 {written}、算出 {computed}", written=_fmt(pct, True),
+                          computed=_fmt(exact.quantize(unit), True))
+        out.append(line)
+    written = [x for _, _, x in parsed if x is not None]
+    line = L("  各項加總 {sum},佔分母 {pct}", sum=_fmt(s, False), pct=_fmt((s / base * 100).quantize(Decimal("0.01")), True))
+    if len(written) == len(parsed):
+        line += L(";頁面寫的佔比合計 {sum}", sum=_fmt(sum(written, Decimal(0)), True))
+    if total is not None and s > base > 0:
+        line += L(";⚠️ 各項加總比分母大")
+    out.append(line)
+    if bad:
+        out.append(L("⚠️ {n} 項佔比對不上", n=bad))
     return "\n".join(out)

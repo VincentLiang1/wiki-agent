@@ -41,13 +41,13 @@ def try_lock(f, shared: bool = False) -> bool:
         import msvcrt
         try:
             f.seek(0)
-            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]   # 另一個平台才有
         except OSError:
             return False
         return True
     import fcntl
     try:
-        fcntl.flock(f, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
+        fcntl.flock(f, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)  # type: ignore[attr-defined]   # 另一個平台才有
     except BlockingIOError:
         return False
     return True
@@ -58,12 +58,12 @@ def unlock(f) -> None:
         import msvcrt
         try:
             f.seek(0)
-            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]   # 另一個平台才有
         except OSError:
             pass
         return
     import fcntl
-    fcntl.flock(f, fcntl.LOCK_UN)
+    fcntl.flock(f, fcntl.LOCK_UN)  # type: ignore[attr-defined]   # 另一個平台才有
 
 
 # -- 檔案 --------------------------------------------------------------------------
@@ -80,7 +80,7 @@ def fsync_path(path) -> None:
 def group_kwargs() -> dict:
     """開新的行程群組:逾時時才砍得掉孫行程(git 底下的 ssh,proc.py)。"""
     if WINDOWS:
-        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}  # type: ignore[attr-defined]   # 另一個平台才有
     return {"start_new_session": True}
 
 
@@ -102,7 +102,7 @@ def hide_child_consoles(windows: bool = WINDOWS) -> bool:
     if not windows:
         return False
     import ctypes
-    if ctypes.windll.kernel32.GetConsoleWindow():
+    if ctypes.windll.kernel32.GetConsoleWindow():  # type: ignore[attr-defined]   # 另一個平台才有
         return False
     init = subprocess.Popen.__init__
     if getattr(init, "_no_window", False):
@@ -112,8 +112,8 @@ def hide_child_consoles(windows: bool = WINDOWS) -> bool:
         kw["creationflags"] = no_window_flags(kw.get("creationflags", 0))
         init(self, *args, **kw)
 
-    _init._no_window = True
-    subprocess.Popen.__init__ = _init
+    _init._no_window = True  # type: ignore[attr-defined]
+    subprocess.Popen.__init__ = _init  # type: ignore[method-assign]
     return True
 
 
@@ -135,7 +135,7 @@ def kill_group(pid: int, graceful: bool = False) -> None:
         subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True)
         return
     try:
-        os.killpg(pid, signal.SIGTERM if graceful else signal.SIGKILL)
+        os.killpg(pid, signal.SIGTERM if graceful else signal.SIGKILL)  # type: ignore[attr-defined]   # 另一個平台才有
     except ProcessLookupError:
         pass
 
@@ -149,9 +149,9 @@ def uptime(windows: bool = WINDOWS) -> float:
     if windows:
         import ctypes
         t = ctypes.c_ulonglong()
-        ctypes.windll.kernel32.QueryUnbiasedInterruptTime(ctypes.byref(t))
+        ctypes.windll.kernel32.QueryUnbiasedInterruptTime(ctypes.byref(t))  # type: ignore[attr-defined]   # 另一個平台才有
         return t.value / 1e7
-    return time.clock_gettime(getattr(time, "CLOCK_UPTIME_RAW", time.CLOCK_MONOTONIC))
+    return time.clock_gettime(getattr(time, "CLOCK_UPTIME_RAW", time.CLOCK_MONOTONIC))  # type: ignore[attr-defined]   # 另一個平台才有
 
 
 # -- 行程 --------------------------------------------------------------------------
@@ -161,10 +161,10 @@ def pid_alive(pid: int, windows: bool = WINDOWS) -> bool:
     pid 也不報錯(2026-10-23 實測),永遠回「還在」,還會對那個主控台行程群組送 Ctrl+C。改查結束碼。"""
     if windows:
         import ctypes
-        k = ctypes.windll.kernel32
+        k = ctypes.windll.kernel32  # type: ignore[attr-defined]   # 另一個平台才有
         h = k.OpenProcess(0x1000, False, pid)   # PROCESS_QUERY_LIMITED_INFORMATION
         if not h:
-            return ctypes.GetLastError() == 5   # 存取被拒:行程在,只是不是我們的
+            return ctypes.GetLastError() == 5  # type: ignore[attr-defined]   # 存取被拒:行程在,只是不是我們的(Windows 才有)
         try:
             code = ctypes.c_ulong()
             return bool(k.GetExitCodeProcess(h, ctypes.byref(code))) and code.value == 259   # STILL_ACTIVE
@@ -185,7 +185,7 @@ def oem_decode(b: bytes) -> str:
     if not WINDOWS:
         return b.decode("utf-8", "replace")
     import ctypes
-    return b.decode(f"cp{ctypes.windll.kernel32.GetOEMCP()}", "replace")
+    return b.decode(f"cp{ctypes.windll.kernel32.GetOEMCP()}", "replace")  # type: ignore[attr-defined]   # 另一個平台才有
 
 
 # -- 雲端佔位檔 ---------------------------------------------------------------------

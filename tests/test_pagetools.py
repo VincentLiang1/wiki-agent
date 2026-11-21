@@ -1,4 +1,4 @@
-"""攝入時 claude 能用的只讀指令:page-history、commit-detail、check-pages、table-sums(pagetools.py)。
+"""攝入時 claude 能用的只讀指令:page-history、commit-detail、check-pages、table-sums、share-check(pagetools.py)。
 
 git log／show／diff 不開放(`--output=` 能清空任意檔),改由程式組參數;claude 只給頁面、雜湊、關鍵字。
 """
@@ -14,7 +14,7 @@ from conftest import git
 from wiki_feeder.cli import main
 from wiki_feeder.config import INGEST_TOOLS_CMD, RepoConfig
 from wiki_feeder.pagetools import (PageRoot, PageToolError, check_pages, commit_detail, new_problems, page_history,
-                                   page_path, scan_text, table_sums)
+                                   page_path, scan_text, share_check, table_sums)
 
 # 公事庫 CLAUDE.md〈CJK 粗體／斜體 flanking〉的壞例與「勿誤改」:判定要跟那張表一致
 BROKEN = ["前文**X（Y）**中文", "說**「quoted」**中文", "**Q：問題？**中文", "中文**[文字](path)**中文"]
@@ -281,6 +281,39 @@ def test_agreed_ratios_and_outside_denominators_are_not_flagged(repo):
                     "| 丙 | 350 | 28.0% |\n| 扣回 | -100 | — |\n", encoding="utf-8")
     out = table_sums(repo, "Wiki_Pages/分攤.md")
     assert "佔比欄 佔期貨:= 金額 ÷ 表上沒有的分母(各列反推約 1,247～1,253),3 列一致" in out
+
+
+def test_share_check_verifies_percentages_written_in_prose():
+    """段落裡的佔比 table-sums 驗不到(2026-11-18、11-19 三筆寫成未驗):抄數字過來,算錯的那項要報出來。"""
+    out = share_check(["手續費:1,234,567=7.6%", "利息:2,000,000=12.3%", "其他:500,000=3.5%"], "16,274,034").splitlines()
+    assert out[0] == "分母 16,274,034"
+    assert out[1] == "  手續費:1,234,567 → 7.59%,頁面寫 7.6%,相符"
+    assert out[3] == "  其他:500,000 → 3.07%,⚠️ 頁面寫 3.5%、算出 3.1%"
+    assert out[4] == "  各項加總 3,734,567,佔分母 22.95%;頁面寫的佔比合計 23.4%"
+    assert out[5] == "⚠️ 1 項佔比對不上"
+    # 四捨五入的邊界:剛好半個末位算相符;差一個末位內另外標出來(湊 100% 調過一格),不報 ⚠️
+    assert "相符" in share_check(["1=12.5%", "7"])
+    edge = share_check(["1=12.6%", "7=87.4%"])
+    assert "差一個末位內" in edge and "⚠️" not in edge
+    # 沒給分母就用各項加總;各項加總比分母大要報;沒名稱就只印數字
+    assert share_check(["100", "300=75.0%"]).splitlines()[0] == "分母 400(各項加總;沒給 --total)"
+    assert share_check(["100", "300=75.0%"]).splitlines()[1] == "  100 → 25.00%"
+    assert "⚠️ 各項加總比分母大" in share_check(["60", "60"], "100")
+    for bad in (["a:x=1"], ["1=abc"], ["50%"]):
+        with pytest.raises(PageToolError, match="看不懂"):
+            share_check(bad)
+    with pytest.raises(PageToolError, match="分母是 0"):
+        share_check(["0"])
+    with pytest.raises(PageToolError, match="不是數字"):
+        share_check(["1"], "x")
+
+
+def test_share_check_runs_without_a_config_file(capsys):
+    """純計算、不讀檔:朋友那台沒設定檔、或設定檔壞了,攝入照樣能驗算。"""
+    assert main(["share-check", "--total", "200", "甲:50=25%"], cfg=None) == 0
+    assert "相符" in capsys.readouterr().out
+    assert main(["share-check", "x"], cfg=None) == 1
+    assert "失敗" in capsys.readouterr().out
 
 
 def test_tool_output_follows_the_interface_language(repo):

@@ -46,6 +46,7 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path, PureWindowsPath
+from typing import Any
 
 from . import gitsync, glossary, toolgaps
 from .collect import _alert, _forget_alerts, heartbeat, run_lock
@@ -131,6 +132,7 @@ _PROMPT ="""本次為 wiki-feeder 自動攝入:無人值守,沒有人可以回�
 6. **不能執行任意 python,也不能刪檔**。本庫規則裡要寫成 .py 執行的檢查、要查 git 歷史的地方,改用下面這幾個指令(照抄開頭,只換 < > 裡的內容,不要串接其他指令;git log／show／diff 不開放):
    - 頁面檢查:`{tools} check-pages <頁面路徑> [<頁面路徑>…]`——控制字元、CJK 粗體失效(就是本庫規則說的渲染器判定),Wiki_Pages/ 底下的頁另查{page_checks}{stage_check}
    - 表格加總:`{tools} table-sums <頁面路徑> [--heading <關鍵字>]`(只看標題或表前那一行含關鍵字的表)——印出每張表各數字欄的加總,有合計列就比對;佔比欄(%)逐列驗算是哪一欄 ÷ 哪個分母、哪幾列對不上。本庫規則要你「用腳本重算、assert 加總」「重算佔比」的統計表,自己算好寫進頁面後用它驗算,commit message 寫驗算結果——驗算過就算驗了,不寫進 unverified
+   - 段落裡的佔比(散文寫的「某項 1,234 元、佔 7.6%」,table-sums 驗不到):`{tools} share-check [--total <分母>] <名稱>:<數字>=<頁面寫的佔比> …`(一項一個參數,有空格就加引號;名稱、`=<佔比>` 可省;不給 --total 就以各項加總當分母)——印出各項算出的佔比、與頁面寫的比對、各項加總。本庫規則要你重算佔比而佔比寫在段落裡的,抄數字過來用它驗算,一樣寫進 commit message、不寫進 unverified
    - 單頁的 commit 歷史:`{tools} page-history <頁面路徑>`;commit message 含某個關鍵字的:`{tools} page-history --grep <關鍵字>`(都是一個 commit 一行)
    - 某個 commit 的完整訊息與動到哪些檔:`{tools} commit-detail <commit 雜湊>`;commit 完要確認自己 commit 了什麼用 `{tools} commit-detail HEAD`
 {handout_line}{readme_line}   - 放圖片(本庫〈圖片管理〉):`{tools} add-image <原件或轉寫快取裡的圖> "Wiki_Pages/<群組>/images/<頁名>/<檔名>.jpg"`——.png／.webp／.gif 轉成 .jpg、.jpg／.jpeg 原樣放進去,不覆蓋既有的圖(換檔名)。只收原件樹與轉寫快取裡的圖;含個資的圖照本庫規則不放
@@ -190,7 +192,9 @@ PROMPT_LANG = {
 PAGE_TOOLS = ("page-history", "commit-detail", "check-pages", "table-sums")
 # 寫檔的(filetools.py):只寫公事庫的 handouts/、頁面的 images/ 與 Wiki_Pages/ 的群組 README、index.md
 FILE_TOOLS = ("make-handout", "add-image", "group-readme")
-INGEST_TOOLS = ("office-dump", *PAGE_TOOLS, *FILE_TOOLS)
+# 不讀檔、不用設定檔的純計算(段落裡的佔比驗算)
+CALC_TOOLS = ("share-check",)
+INGEST_TOOLS = ("office-dump", *PAGE_TOOLS, *CALC_TOOLS, *FILE_TOOLS)
 
 
 class IngestError(Exception):
@@ -603,8 +607,9 @@ def merge_recent(base: str, upstream: str, mine: str) -> str | None:
     """index.md 三方合併,只在衝突全落在「最近異動」、或其餘撞在同一處的地方兩邊都只插入新行時接手
     (_merge_rest);最近異動 = 這一筆推上去的幾筆在上、遠端的清單接在後面(去重),筆數照兩邊較多的那邊。
     合不了 → None。"""
-    parts = [_split_recent(t) for t in (base, upstream, mine)]
-    if any(p is None for p in parts):
+    split = [_split_recent(t) for t in (base, upstream, mine)]
+    parts = [p for p in split if p is not None]
+    if len(parts) != len(split):
         return None
     (_, b_list, _), (_, u_list, _), (_, m_list, _) = parts
     merged_rest = _merge_rest(*(head + _RECENT_MARK + tail for head, _, tail in parts))
@@ -1024,8 +1029,8 @@ def _one(cfg: Config, ledger: Ledger, sha: str, path: Path, kind: str, report: I
 
     stem = path.stem
     row = ledger.ingest_row(sha)
-    if row and row["status"] == "moving":
-        orig = Path(ledger.lookup(sha))
+    if row and row["status"] == "moving" and (moving_to := ledger.lookup(sha)):
+        orig = Path(moving_to)
         stem = orig.stem
         path = _finish_move(cfg, ledger, sha, orig, Path(row["raw_path"]))
     side = _sidecar(path, cfg, sha)
@@ -1160,7 +1165,7 @@ def resume(cfg: Config) -> str:
 def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: list[str],
             tools_cmd: tuple[str, ...], stage: Path | None, forbidden: tuple[str, ...] = (),
             lang: str = SOURCE, pending: str = LEGACY_PENDING, discard: str = LEGACY_DISCARD,
-            personal: tuple[str, list[str]] | None = None, forced_personal: bool = False) -> str:
+            personal: tuple[str, list[str] | None] | None = None, forced_personal: bool = False) -> str:
     """stage 是個人庫副本(沒有回填的單庫設定是 None,提示不提個人庫);程式代管 git 的庫叫 claude 不要 commit;
     庫裡沒有 tools/make_handout.py 就不提重產講義。lang 是介面語言:繁中以外在最後附「回報與 commit message
     用哪種語言」(PROMPT_LANG);提示本身維持繁中(安全規則有測試與突變釘住)。
@@ -1210,8 +1215,8 @@ def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: l
     attached = sorted(p for p in md.with_name(md.stem + ".assets").rglob("*")
                       if p.is_file() and p.suffix.lower() in DUMPERS) if md else []
     if attached:
-        user += (f"- 原件附帶的 Office 檔(doc2md 從原件取出、放在轉寫快取裡)。轉寫會繁化人名、看不到儲存格顏色與公式;"
-                 f"要核對原文字形、顏色標註、公式時執行(照抄,不要改寫、不要串接其他指令):\n"
+        user += ("- 原件附帶的 Office 檔(doc2md 從原件取出、放在轉寫快取裡)。轉寫會繁化人名、看不到儲存格顏色與公式;"
+                 "要核對原文字形、顏色標註、公式時執行(照抄,不要改寫、不要串接其他指令):\n"
                  + "".join(f"  {dump} {shlex.quote(str(p))}\n" for p in attached))
     if tools_cmd:
         # 只寫本筆的完整路徑,claude 以為只能傾印這一份(2026-10-27、10-29 要跟上一版逐台比對都放棄了)
@@ -1245,7 +1250,8 @@ def _prompt(target: RepoConfig, raw: Path, side: dict, user_text: str, groups: l
                           text_line=text_line, meta=meta_txt, user_sidecar=user, tools=tools,
                           commit_rule=commit_rule, backfill_rule=backfill_rule, handout_line=handout_line, readme_line=readme_line, page_checks=page_checks,
                           stage_check=stage_check, pending=pending, discard=discard,
-                          scope_rule=(_SCOPE_RULE.format(groups="、".join(personal[1]), raw=personal[0]) if scoped else ""),
+                          scope_rule=(_SCOPE_RULE.format(groups="、".join(personal[1] or []), raw=personal[0])
+                                      if scoped and personal else ""),
                           glossary_rule=_GLOSSARY_RULE if target.managed else "") + PROMPT_LANG.get(lang, "")
 
 
@@ -1309,7 +1315,7 @@ def _usage_text(out: dict) -> str:
         v = d.get(k) if isinstance(d, dict) else None
         return v if isinstance(v, (int, float)) else None
 
-    u = out.get("usage") if isinstance(out.get("usage"), dict) else {}
+    u: Any = out.get("usage") if isinstance(out.get("usage"), dict) else {}
     parts = []
     tok = [(L("輸入"), num(u, "input_tokens")), (L("寫快取"), num(u, "cache_creation_input_tokens")),
            (L("讀快取"), num(u, "cache_read_input_tokens")), (L("輸出"), num(u, "output_tokens"))]
@@ -1327,7 +1333,7 @@ def _usage_text(out: dict) -> str:
     spawned = num(out.get("subagent_stats"), "spawned")
     if spawned:
         parts.append(L("子代理 {n} 個", n=spawned))
-    models = out.get("modelUsage") if isinstance(out.get("modelUsage"), dict) else {}
+    models: Any = out.get("modelUsage") if isinstance(out.get("modelUsage"), dict) else {}
     costs = [f"{m} US${c:.2f}" for m, d in models.items() if (c := num(d, "costUSD")) is not None]
     if costs:
         parts.append(L("各模型 {costs}", costs=L("、").join(costs)))
@@ -1355,7 +1361,7 @@ def _log_denials(cfg: Config, name: str, out: dict) -> None:
     tried = []
     for d in denied:
         d = d if isinstance(d, dict) else {}
-        inp = d.get("tool_input") if isinstance(d.get("tool_input"), dict) else {}
+        inp: Any = d.get("tool_input") if isinstance(d.get("tool_input"), dict) else {}
         what = inp.get("command") or inp.get("file_path") or inp.get("path") or json.dumps(inp, ensure_ascii=False)
         tried.append(f"{d.get('tool_name', '?')}: {str(what)[:200]}")
     log.info(L("攝入 %s:有 %d 次工具呼叫被權限擋下:%s"), name, len(tried), " | ".join(tried[:20]))
@@ -1540,6 +1546,7 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
         mark_verified(cfg, rc)   # 驗證通過:到這裡為止的 commit 補推時才可以推
 
     if scope == SCOPE_PERSONAL:
+        assert personal is not None and stage is not None   # 沒有個人庫的設定不會判成 personal(_schema 不給這個選項)
         # 先寫回個人庫、成功了才搬原件:沒寫成就是哪裡都沒攝入,不可記成完成——算這筆失敗、原件留在 _待處理/ 重試
         heartbeat(cfg.ingest_lock_path)
         commits, notes = backfill(cfg, sha, stage, stage_snap, result, before)
@@ -1591,7 +1598,7 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
     o = Outcome(raw.name, "done", str(now), commits, result.get("pages", []), result.get("questions", []),
                 _unverified(cfg, raw.name, result), notes, summary=result.get("summary", ""),
                 lines=f"+{added}／−{deleted}" if commits else "", scope=scope if scope == SCOPE_PERSONAL else "")
-    ledger.ingest_set(sha, "done", repo=(personal if scope == SCOPE_PERSONAL else target).key, raw_path=str(now),
+    ledger.ingest_set(sha, "done", repo=(personal if scope == SCOPE_PERSONAL and personal else target).key, raw_path=str(now),
                       result=json.dumps(o.__dict__, ensure_ascii=False))
     return o
 
@@ -1849,7 +1856,7 @@ def finish_stopped(cfg: Config, name: str) -> str:
             raise IngestError(L("{name} 不是這次 STOP 的那一筆(ingest.stop 記的是 {other}):要人處理", name=name,
                                 other=info.get('檔案')))
         try:
-            saved = json.loads(ledger.ingest_row(sha)["result"] or "")
+            saved = json.loads(ledger.ingest_row(sha)["result"] or "")  # type: ignore[index]   # 沒有這筆 → TypeError,下面接
             result, before = saved["claude"], saved["before"]
         except (TypeError, ValueError, KeyError):
             raise IngestError(L("{name} 沒有這次攝入存下的回報(在 claude 回報之前就中斷,或是這個版本之前 STOP 的):"

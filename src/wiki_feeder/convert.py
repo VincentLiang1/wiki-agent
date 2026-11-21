@@ -300,7 +300,7 @@ def _html_text(html: str) -> str:
 def _epub_order(z: zipfile.ZipFile, names: list[str]) -> list[str]:
     """照 OPF 的 spine 排章節;讀不到 OPF 就照檔名。"""
     try:
-        opf_name = re.search(r'full-path="([^"]+)"', z.read("META-INF/container.xml").decode("utf-8", "replace")).group(1)
+        opf_name = re.search(r'full-path="([^"]+)"', z.read("META-INF/container.xml").decode("utf-8", "replace")).group(1)  # type: ignore[union-attr]   # 找不到 → AttributeError,下面接
         opf = z.read(opf_name).decode("utf-8", "replace")
     except (KeyError, AttributeError, zipfile.BadZipFile):
         return sorted(names)

@@ -324,7 +324,7 @@ def test_claude_reads_claude_md_only_when_the_program_cannot(tmp_path, monkeypat
 
     def fake(args, cwd, input, **k):
         seen.append(args)
-        return subprocess.CompletedProcess(args, 0, json.dumps({"result": f'好的 {{"raw": "../Docs/Inputs"}}'}), "")
+        return subprocess.CompletedProcess(args, 0, json.dumps({"result": '好的 {"raw": "../Docs/Inputs"}'}), "")
     assert ws.claude_find_raw(Path("/x/claude"), w, run=fake) == r.resolve()
     (args,) = seen
     assert args[args.index("--tools") + 1] == "Read,Glob,Grep" and "--permission-mode" not in args

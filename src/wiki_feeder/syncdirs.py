@@ -124,9 +124,10 @@ def _known_folders() -> dict[str, str]:
     for name, guid in ids.items():
         g = (ctypes.c_byte * 16).from_buffer_copy(uuid.UUID(guid).bytes_le)
         p = wintypes.LPWSTR()
-        if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(g), 0, None, ctypes.byref(p)) == 0:
-            out[name] = p.value
-            ctypes.windll.ole32.CoTaskMemFree(p)
+        if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(g), 0, None, ctypes.byref(p)) == 0:  # type: ignore[attr-defined]   # 另一個平台才有
+            if p.value:
+                out[name] = p.value
+            ctypes.windll.ole32.CoTaskMemFree(p)  # type: ignore[attr-defined]   # 另一個平台才有
     return out
 
 
@@ -136,7 +137,7 @@ def _drive_labels() -> dict[str, str]:
     import ctypes
     import string
 
-    k = ctypes.windll.kernel32
+    k = ctypes.windll.kernel32  # type: ignore[attr-defined]   # 另一個平台才有
     k.SetErrorMode(0x0001)                     # SEM_FAILCRITICALERRORS
     mask, out = k.GetLogicalDrives(), {}
     for i, letter in enumerate(string.ascii_uppercase):

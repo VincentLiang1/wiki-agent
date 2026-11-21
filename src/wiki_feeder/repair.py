@@ -28,7 +28,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from .collect import last_net_down, mark_net_down, run_lock
 from .config import Config
@@ -45,6 +45,7 @@ from .watchdog import (BIRD, Problem, _descendants, bird_running, brctl_status, 
                        processes, running, write_probe)
 
 log = logging.getLogger(__name__)
+UNSET: Any = None   # Deps 沒給的相依:型別當成有、執行時是 None(測試只換用得到的那幾個;mypy 用)
 
 UV = "/opt/homebrew/bin/uv"
 DAY = 86400
@@ -134,24 +135,24 @@ PROMPT = """你是 wiki-feeder 的自動修理。看門狗發現常駐程式出�
 @dataclass
 class Deps:
     """測試換成假的:不碰真的網路、launchd、發佈。"""
-    online: Callable[[], bool] = None
-    deploy: Callable[[Config], tuple[bool, str]] = None
-    resume: Callable[[Config], str] = None
-    mail: Callable[[Config, str, str], None] = None
-    agents_check: Callable[[], list[str]] = None
-    sample: Callable[[], tuple] = None
-    icloud_synced: Callable[[Path, float], tuple] = None
-    restart_bird: Callable[[], str] = None
-    fp_evaluate: Callable[[Path], str] = None   # 請 fileproviderd 重看一個檔;None = 不試這招(測試、非 Mac)
-    open_finder: Callable[[Path], str] = None   # 在背景開 Finder 的 iCloud 雲碟;None = 不試這招
-    vp_kick: Callable[[str], str] = None        # 立刻重跑一次聲紋橋樑(launchctl kickstart -k)
-    vp_download: Callable[[Path], str] = None   # 要求 iCloud 把佔位檔載下來(brctl download)
-    brctl_status: Callable[[], str | None] = None   # None = 不做定時重啟、重啟後也不叫醒 bird(測試、非 Mac)
-    bird_running: Callable[[], bool] = None
-    icloud_online: Callable[[], bool] = None        # 連得上 iCloud(www.icloud.com:443)
-    net_id: Callable[[], str | None] = None         # 現在接在哪個網路(watchdog.net_id);None = 不看換網路(測試、非 Mac)
-    ip_families: Callable[[], tuple[bool, bool]] = None   # (IPv4 通、IPv6 通);None = 不查(測試)
-    sync: Callable[[Config], tuple[bool, str]] = None       # 修理的 clone 裝好套件(uv sync);None = 不裝(測試)
+    online: Callable[[], bool] = UNSET
+    deploy: Callable[[Config], tuple[bool, str]] = UNSET
+    resume: Callable[[Config], str] = UNSET
+    mail: Callable[[Config, str, str], None] = UNSET
+    agents_check: Callable[[], list[str]] = UNSET
+    sample: Callable[[], tuple] = UNSET
+    icloud_synced: Callable[[Path, float], tuple] = UNSET
+    restart_bird: Callable[[], str] = UNSET
+    fp_evaluate: Callable[[Path], str] | None = None   # 請 fileproviderd 重看一個檔;None = 不試這招(測試、非 Mac)
+    open_finder: Callable[[Path], str] | None = None   # 在背景開 Finder 的 iCloud 雲碟;None = 不試這招
+    vp_kick: Callable[[str], str] = UNSET        # 立刻重跑一次聲紋橋樑(launchctl kickstart -k)
+    vp_download: Callable[[Path], str] = UNSET   # 要求 iCloud 把佔位檔載下來(brctl download)
+    brctl_status: Callable[[], str | None] | None = None   # None = 不做定時重啟、重啟後也不叫醒 bird(測試、非 Mac)
+    bird_running: Callable[[], bool] | None = None
+    icloud_online: Callable[[], bool] | None = None        # 連得上 iCloud(www.icloud.com:443)
+    net_id: Callable[[], str | None] | None = None         # 現在接在哪個網路(watchdog.net_id);None = 不看換網路(測試、非 Mac)
+    ip_families: Callable[[], tuple[bool, bool]] | None = None   # (IPv4 通、IPv6 通);None = 不查(測試)
+    sync: Callable[[Config], tuple[bool, str]] | None = None       # 修理的 clone 裝好套件(uv sync);None = 不裝(測試)
     now: Callable[[], float] = time.time
     sleep: Callable[[float], None] = time.sleep
     extra: dict = field(default_factory=dict)
@@ -244,7 +245,7 @@ def _restart_bird(procs: list[dict] | None = None) -> str:
 
 def _vp_kick(label: str) -> str:
     import subprocess
-    r = subprocess.run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{label}"],
+    r = subprocess.run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{label}"],  # type: ignore[attr-defined]   # 另一個平台才有
                        capture_output=True, text=True, timeout=60)
     if r.returncode != 0:
         raise RuntimeError(f"launchctl kickstart {label} 失敗:{(r.stderr or r.stdout).strip()[:300]}")
@@ -276,12 +277,12 @@ def _open_finder(path: Path) -> str:
 
 def default_deps() -> Deps:
     from .watchdog import agents_not_loaded
+    mac_only: dict[str, Any] = ({"brctl_status": brctl_status, "bird_running": bird_running, "net_id": net_id,
+                                 "fp_evaluate": _fp_evaluate, "open_finder": _open_finder}
+                                if sys.platform == "darwin" else {})
     return Deps(online=_online, deploy=_deploy, resume=_resume, mail=_mail, agents_check=agents_not_loaded,
                 icloud_synced=icloud_synced, restart_bird=_restart_bird, vp_kick=_vp_kick, vp_download=_vp_download,
-                icloud_online=_icloud_online, ip_families=_ip_families, sync=_sync,
-                **({"brctl_status": brctl_status, "bird_running": bird_running, "net_id": net_id,
-                    "fp_evaluate": _fp_evaluate, "open_finder": _open_finder}
-                   if sys.platform == "darwin" else {}))
+                icloud_online=_icloud_online, ip_families=_ip_families, sync=_sync, **mac_only)
 
 
 # 兩種位址都有的主機:同一台主機 IPv4 不通、IPv6 通,才是這條網路的 IPv4 壞了(只有 GitHub 不通是公司擋,不算)
@@ -405,7 +406,7 @@ def _kick_icloud(cfg: Config, deps: Deps, now: float, alert: Callable[[str, str,
     try:
         due, line = icloud_kick(cfg, now, deps.brctl_status(), inbox_placeholders(cfg.icloud_inbox),
                                 deps.net_id() if deps.net_id else None)
-        if due and not deps.icloud_online():
+        if due and deps.icloud_online and not deps.icloud_online():
             mark_net_down(cfg)   # 探針看這個:斷網期間沒傳上去不算卡住
             line += L(";連不上 iCloud,不重啟")
         elif due:
@@ -649,10 +650,10 @@ def stop_resumable(cfg: Config, reviewed: list[str]) -> str:
         # 只看這次 STOP 的那一筆:以前 STOP、人直接 resume 的那幾筆會一直是 stopped,看全部的話之後永遠不能自動解除
         if info.get("sha256"):
             row = led.ingest_row(info["sha256"])
-            pending = not row or row["status"] != "done"
+            unfinished = not row or row["status"] != "done"
         else:   # 這個版本之前寫的 ingest.stop 沒有 sha256:分不出是哪一筆,照舊看全部
-            pending = bool(led.stopped_ingests())
-        if pending:
+            unfinished = bool(led.stopped_ingests())
+        if unfinished:
             return "STOP 那筆還沒用 finish-stopped 補完"
     return ""
 
@@ -893,12 +894,12 @@ def _fix_icloud(cfg: Config, deps: Deps, now: float, problems: list[Problem]) ->
     base = {"type": "repair", "day": _day(now), "time": now, "keys": [p.key for p in problems]}
     for p in problems:
         _record(cfg, {**base, "key": p.key, "summary": "(重啟 bird 中)"})
-    root = cfg.icloud_probe_dir.parent
+    root = probe_path(cfg).parent.parent   # iCloud 雲碟(探針資料夾的上一層)
     steps = [("重啟 bird", lambda: _kick_bird(cfg, deps)[0])]   # 定時重啟從這裡重新計時
-    if deps.fp_evaluate:
-        steps.append(("請 fileproviderd 重看探針檔", lambda: deps.fp_evaluate(probe_path(cfg))))
-    if deps.open_finder:
-        steps.append(("用 Finder 打開 iCloud 雲碟", lambda: deps.open_finder(root)))
+    if (fp := deps.fp_evaluate):
+        steps.append(("請 fileproviderd 重看探針檔", lambda: fp(probe_path(cfg))))
+    if (finder := deps.open_finder):
+        steps.append(("用 Finder 打開 iCloud 雲碟", lambda: finder(root)))
     actions, ok, detail, used = [], False, "", ""
     try:
         for i, (name, step) in enumerate(steps):
@@ -957,11 +958,12 @@ def _fix_vp_bridge(cfg: Config, deps: Deps, now: float, problems: list[Problem])
     base = {"type": "repair", "day": _day(now), "time": now, "keys": [p.key for p in problems]}
     for p in problems:
         _record(cfg, {**base, "key": p.key, "summary": "(處理聲紋橋樑中)"})
-    actions, ok, left = [], False, {}
+    left: dict = {}
+    actions, ok = [], False
 
     def status() -> tuple[float | None, dict]:
         try:
-            st = json.loads(cfg.vp_bridge_status.read_text(encoding="utf-8"))
+            st = json.loads(cfg.vp_bridge_status.read_text(encoding="utf-8"))  # type: ignore[union-attr]   # 沒設定 → AttributeError,下面接
             t = st.get("time")
             return (t if isinstance(t, (int, float)) else None), (st.get("failing") or {})
         except (OSError, ValueError, AttributeError):
@@ -982,8 +984,8 @@ def _fix_vp_bridge(cfg: Config, deps: Deps, now: float, problems: list[Problem])
         stuck = vp_bridge_failing(cfg, now)
         icloud = [Path(f["path"]) for f in stuck.values()
                   if "/Mobile Documents/" in str(f.get("path", ""))]
-        for p in icloud:
-            actions.append(deps.vp_download(p))
+        for path in icloud:
+            actions.append(deps.vp_download(path))
         ok = attempt()
         if not ok and any("/Mobile Documents/" in str(f.get("path", "")) for f in left.values()):
             actions.append(_kick_bird(cfg, deps)[0])

@@ -40,7 +40,7 @@ def _setup_logging(cfg: Config) -> None:
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
     root = logging.getLogger()
     root.setLevel(logging.INFO)
-    handlers = [RotatingFileHandler(cfg.log_path, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUPS,
+    handlers: list[logging.Handler] = [RotatingFileHandler(cfg.log_path, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUPS,
                                     encoding="utf-8")]
     if sys.stderr.isatty():
         handlers.append(logging.StreamHandler(sys.stderr))
@@ -108,6 +108,7 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     sub.add_parser("run", help=L("一輪完整流程:collect → convert → ingest"))
     sub.add_parser("ledger", help=L("列出處理紀錄"))
     sub.add_parser("test-mail", help=L("寄一封測試信,確認 Email 摘要寄得出去、手機會跳通知"))
+    sub.add_parser("selfcheck", help=L("驗 claude 登入、寄信密碼、公事庫 git 遠端、doc2md 固定入口都可用(不寄信;launchd.py check 在常駐身分下叫它)"))
     rc = sub.add_parser("reconvert", help=L("已停止重試的轉寫檔重新排入(查明原因、修好之後)"))
     rc.add_argument("name", nargs="?", help=L("檔名({dir}/ 裡的名字),例如 錄音.m4a", dir=pend.name))
     rc.add_argument("--all", action="store_true", help=L("全部已停止重試的轉寫檔"))
@@ -159,8 +160,20 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     ts = sub.add_parser("table-sums", help=L("公事庫某頁每張表各數字欄的加總、與合計列比對(攝入重算統計表時驗算用)"))
     ts.add_argument("page")
     ts.add_argument("--heading", help=L("只看標題(或表前那一行)含這個關鍵字的表"))
+    sc = sub.add_parser("share-check", help=L("段落裡的佔比驗算:各項 ÷ 分母、與頁面寫的佔比比對(攝入時用,不讀檔)"))
+    sc.add_argument("items", nargs="+", metavar=L("[名稱:]數字[=佔比]"))
+    sc.add_argument("--total", help=L("分母(沒給就用各項加總)"))
     args = ap.parse_args(argv)
 
+    if args.cmd == "share-check":
+        # 純計算、不讀檔:不需要設定檔,跟 office-dump 一樣先處理
+        from .pagetools import PageToolError, share_check
+        try:
+            print(share_check(args.items, args.total))
+        except PageToolError as e:
+            print(L("失敗:{e}", e=e))
+            return 1
+        return 0
     if args.cmd == "office-dump":
         from .office import dump
         print(dump(Path(args.path)))
@@ -203,10 +216,10 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
         # check-pages 另收個人 WIKI:攝入回填寫的副本,與真的個人 WIKI(只讀)
         roots = [PageRoot(repo.name, repo, raw=target.raw_root, basic=target.managed)]
         if cfg.has_backfill:
-            rc = cfg.repo(cfg.backfill_repo)
-            wiki = rc.repo_dir
-            roots += [PageRoot(f"{wiki.name} 副本", cfg.wiki_stage_dir, True, rc.raw_root, head=wiki),
-                      PageRoot(wiki.name, wiki, True, rc.raw_root)]
+            brc = cfg.repo(cfg.backfill_repo)
+            wiki = brc.repo_dir
+            roots += [PageRoot(f"{wiki.name} 副本", cfg.wiki_stage_dir, True, brc.raw_root, head=wiki),
+                      PageRoot(wiki.name, wiki, True, brc.raw_root)]
         try:
             if args.cmd == "page-history":
                 print(page_history(repo, args.page, args.grep))
@@ -280,6 +293,12 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
             return 1
         print(L("已寄出:{sender} → {to}", sender=cfg.mail_from, to=cfg.mail_to))
         return 0
+
+    if args.cmd == "selfcheck":
+        from . import selfcheck
+        ok, lines = selfcheck.run(cfg)
+        print("\n".join(lines))
+        return 0 if ok else 1
 
     if args.cmd == "reingest":
         from .ingest import IngestError, reingest
@@ -412,11 +431,11 @@ def _work(args, cfg: Config) -> int:
             # iCloud 定時重啟要讀 brctl status(也靠它叫醒 bird)。App 版第一次讀時系統把它算在 wiki-agent 頭上、
             # 跳視窗等人按(2026-10-23 實測:沒人按就一直卡著)——要趁安裝時問完,半夜碰到就每輪卡 60 秒
             from .watchdog import brctl_status, last_sync
-            st = brctl_status(timeout=CHECK_BRCTL_WAIT)
+            bst = brctl_status(timeout=CHECK_BRCTL_WAIT)
             name = L("iCloud 同步狀態")
-            print(f"{name}\t{L('可讀')}" if last_sync(st) is not None
-                  else f"{name}\t{L('錯誤:')}" + (L("等了 {s} 秒沒有回應", s=CHECK_BRCTL_WAIT) if st is None
-                                                  else " ".join(st.split())[:200]))
+            print(f"{name}\t{L('可讀')}" if last_sync(bst) is not None
+                  else f"{name}\t{L('錯誤:')}" + (L("等了 {s} 秒沒有回應", s=CHECK_BRCTL_WAIT) if bst is None
+                                                  else " ".join(bst.split())[:200]))
         return 1 if bad else 0
 
     _setup_logging(cfg)

@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import subprocess
 import sys
 from dataclasses import replace
@@ -1226,6 +1225,21 @@ def test_mail_verifies_the_server_certificate(env, monkeypatch):
     assert ctx is not None and ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname
 
 
+def test_mail_password_from_keychain_is_used_without_the_spaces_google_shows(env, monkeypatch):
+    """其他寄信測試都把 smtp_password 整支換掉:這條讓真的 smtp_password 跑一次。Google 顯示的應用程式密碼
+    是「abcd efgh ijkl mnop」,照貼進鑰匙圈的話要先拿掉空白才登得進去。"""
+    from wiki_feeder import notify
+
+    _FakeSMTP.sent, _FakeSMTP.contexts = [], []
+    monkeypatch.setattr(notify.smtplib, "SMTP_SSL", _FakeSMTP)
+    monkeypatch.setattr(notify, "secret", lambda service, account: "app- password")
+    c = replace(env["cfg"], mail_from="me@example.com", mail_to="me@example.com")
+
+    notify.send(c, "主旨", "內容")      # _FakeSMTP.login 斷言收到的是 "app-password"
+
+    assert len(_FakeSMTP.sent) == 1
+
+
 def test_alert_mail_subject_says_it_needs_attention(env, monkeypatch):
     """卡住(停止重試、STOP、doc2md 跑不起來)時使用者要從主旨就看出要處理,不必點開每一封摘要。"""
     from wiki_feeder import notify
@@ -1382,10 +1396,10 @@ def test_git_history_and_page_checks_are_allowed_one_command_at_a_time(env, monk
     tools = [a for a in allowed if a.startswith("Bash(/x/python")]
     assert tools == [f"Bash(/x/python -P -m wiki_feeder {t}:*)"
                      for t in ("office-dump", "page-history", "commit-detail", "check-pages", "table-sums",
-                               "make-handout", "add-image", "group-readme")]
+                               "share-check", "make-handout", "add-image", "group-readme")]
     assert not any(a.startswith(("Bash(git log", "Bash(git show", "Bash(git diff")) for a in allowed)
     for t in ("check-pages <頁面路徑>", "page-history <頁面路徑>", "page-history --grep", "commit-detail <commit 雜湊>",
-              "table-sums <頁面路徑>", "commit-detail HEAD", "make-handout --src", "add-image <", "group-readme`"):
+              "table-sums <頁面路徑>", "share-check [--total <分母>]", "commit-detail HEAD", "make-handout --src", "add-image <", "group-readme`"):
         assert f"`/x/python -P -m wiki_feeder {t}" in prompt
     # commit 完的自我確認寫在 commit 那一條:只寫在第 6 條長段落時,一晚 5 筆先打 git show／log 被擋
     rule2 = prompt.split("\n2. ", 1)[1].split("\n", 1)[0]
@@ -2326,3 +2340,35 @@ def test_wiki_commit_failure_also_removes_new_readmes(env, monkeypatch):
     assert any("個人庫 commit 失敗" in n for n in o.notes), o.notes
     assert not (_wiki(env) / "Wiki_Pages" / "群組" / "README.md").exists()
     assert not git("status", "--porcelain", "--untracked-files=all", cwd=_wiki(env))
+
+
+def test_safe_subpath_never_lets_an_untrusted_path_out_of_the_group(tmp_path):
+    """原件位置是 claude 回報的(掃描件內容可能引導它),safe_subpath 是唯一的關卡(spec §5.7)。手寫的幾條測
+    只試得到想得到的寫法;這裡讓 Hypothesis 用分隔字元、點、底線、冒號、控制字元、空白、中文亂組幾千種,斷言:
+    接受的路徑一定落在群組裡、每一層都不是隱藏或系統資料夾、副檔名不變、不超過四層。"""
+    from hypothesis import given, settings
+    from hypothesis import strategies as st
+
+    from wiki_feeder.ingest import safe_subpath
+
+    group = tmp_path / "群組"
+    group.mkdir()
+    pieces = st.sampled_from(["/", "\\", ".", "..", "_", ":", "C:", " ", "\t", "\x00", "\n", " ",
+                              "a", "中文", ".pdf", ".PDF", ".m4a", "~", "$", "%2e", "．"])
+    sub = st.lists(pieces, max_size=12).map("".join) | st.text(max_size=40)
+
+    @settings(max_examples=3000, deadline=None, database=None)
+    @given(sub=sub, suffix=st.sampled_from([".pdf", ".m4a"]))
+    def check(sub, suffix):
+        parts = safe_subpath(sub, suffix)
+        if parts is None:
+            return
+        assert 1 <= len(parts) <= 4
+        for p in parts:
+            assert p and p == p.strip() and p not in (".", "..") and not p.startswith(("_", "."))
+            assert ":" not in p and not any(ord(c) < 32 for c in p) and "/" not in p and "\\" not in p
+        assert parts[-1].lower().endswith(suffix) and len(parts[-1]) > len(suffix)
+        target = group.joinpath(*parts).resolve()
+        assert target.is_relative_to(group.resolve()) and target != group.resolve()
+
+    check()

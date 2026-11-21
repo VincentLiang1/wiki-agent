@@ -132,7 +132,7 @@ def hans_doc(text: str, cc, name: str = "") -> str:
         if ln.startswith("[English](") and " | **繁體中文** | " in ln:
             hant = next(k for k, v in DOCS.items() if f"]({v})" in ln)
             en = ln.split("[English](", 1)[1].split(")", 1)[0]
-            lines[i] = f"@@HEAD@@"
+            lines[i] = "@@HEAD@@"
             head = f"[English]({en}) | [繁體中文]({hant}) | **简体中文**"
             break
     menu = "語言 / 语言 / Language:1 繁體中文  2 简体中文  3 English"     # 安裝問答第一題:三種寫法並列,不翻

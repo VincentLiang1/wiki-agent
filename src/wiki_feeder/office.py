@@ -90,7 +90,7 @@ def dump_docx(path: Path) -> list[str]:
         if p.text.strip():
             marks = {r.font.highlight_color for r in p.runs if r.font.highlight_color}
             extra = L("|螢光標記 {marks}", marks=sorted(str(m) for m in marks)) if marks else ""
-            out.append(f"  {i}[{p.style.name}]: {p.text}{extra}")
+            out.append(f"  {i}[{p.style.name if p.style else ''}]: {p.text}{extra}")
     for t, table in enumerate(d.tables, 1):
         out.append(L("## 表格 {n}", n=t))
         for r, row in enumerate(table.rows, 1):

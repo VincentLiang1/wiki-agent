@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import smtplib
 import ssl
-import subprocess
 from email.message import EmailMessage
 
 from .config import Config

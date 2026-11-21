@@ -52,7 +52,9 @@ def N_(text: str) -> str:
     return text
 
 
-def L(text: str, lang: str | None = None, **kw) -> str:
+def L(text: str, lang: str | None = None, /, **kw) -> str:
+    # 只收位置參數(`/`):原文的佔位符可以叫 {text}、{lang}。2026-11-16 mypy 抓到 office-dump 的
+    # L("註解 {text}", text=…) 撞名、遇到有註解的儲存格或有備忘稿的投影片就 TypeError(10 月加多語系時弄壞的)
     lang = lang or _lang
     s = text if lang == SOURCE else catalog(lang).get(text, text)
     return s.format(**kw) if kw else s
@@ -73,7 +75,7 @@ def detect(platform: str = sys.platform, env=os.environ, run=subprocess.run) -> 
                 return from_locale(m.group(1))
         elif platform == "win32":
             import ctypes
-            lid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            lid = ctypes.windll.kernel32.GetUserDefaultUILanguage()  # type: ignore[attr-defined]   # 另一個平台才有
             # 0x0404 台灣、0x0C04 香港、0x1404 澳門 = 繁中;0x0804 大陸、0x1004 新加坡 = 簡中;低 10 位元 0x04 = 中文
             if lid & 0x3FF == 0x04:
                 return "zh-Hans" if lid in (0x0804, 0x1004) else "zh-Hant"

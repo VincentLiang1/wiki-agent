@@ -33,9 +33,9 @@ import time
 import urllib.request
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from .collect import network_down
 from .config import Config
@@ -44,6 +44,7 @@ from .osplat import friend_claude_hint, friend_update_hint, pid_alive
 from .proc import run_net
 
 log = logging.getLogger(__name__)
+UNSET: Any = None   # Deps 沒給的相依:型別當成有、執行時是 None(測試只換用得到的那幾個;mypy 用)
 
 WINDOWS = sys.platform == "win32"
 PUBLIC_URLS = ("https://github.com/vincentliang1/wiki-agent.git", "https://github.com/vincentliang1/wiki-agent")
@@ -60,14 +61,14 @@ DETACHED = 0x00000008 | 0x00000200 | 0x08000000   # DETACHED_PROCESS | CREATE_NE
 class UpdateDeps:
     """測試換成假的:不碰網路、不開行程、不寄信。"""
     now: Callable[[], float] = time.time
-    run: Callable[..., subprocess.CompletedProcess] = None       # 本機的 git(不連網)
+    run: Callable[..., subprocess.CompletedProcess] = UNSET       # 本機的 git(不連網)
     run_net: Callable[..., subprocess.CompletedProcess] = run_net
-    get: Callable[[str], bytes] = None                            # HTTP GET(zip／App 裝的才用)
-    mail: Callable[[Config, str, str], None] = None
-    spawn: Callable[[list[str]], int] = None                      # 開換版程式,回傳 pid
+    get: Callable[[str], bytes] = UNSET                            # HTTP GET(zip／App 裝的才用)
+    mail: Callable[[Config, str, str], None] = UNSET
+    spawn: Callable[[list[str]], int] = UNSET                      # 開換版程式,回傳 pid
     alive: Callable[[int], bool] = pid_alive
-    enable: Callable[[str], None] = None                          # 換版程式死掉時把排程重新啟用／裝回去
-    core_manifest: Callable[[], dict] = None                      # Scribe2MD 核心的 manifest(scribecore.fetch_manifest)
+    enable: Callable[[str], None] = UNSET                          # 換版程式死掉時把排程重新啟用／裝回去
+    core_manifest: Callable[[], dict] = UNSET                      # Scribe2MD 核心的 manifest(scribecore.fetch_manifest)
     windows: bool = WINDOWS
     extra: dict = field(default_factory=dict)
 
@@ -294,7 +295,7 @@ def _pick_release(cfg: Config, now: float, deps: UpdateDeps, asset_name: str, is
 
 def zip_candidate(cfg: Config, root: Path, now: float, deps: UpdateDeps, failed=()) -> Candidate | None:
     sys.path.insert(0, str(root / "scripts"))
-    from winupdate import UpdateError, local_version, parse_version, read_zip   # noqa: E402 —— 朋友那邊的驗法
+    from winupdate import UpdateError, local_version, parse_version, read_zip  # type: ignore[import-not-found]  # noqa: E402 —— 朋友那邊的驗法;scripts/ 執行時才加進 sys.path
     current = local_version(root).get("tag", "")
     pick = _pick_release(cfg, now, deps, ASSET, lambda t: bool(current) and t == current, failed)
     if pick is None:

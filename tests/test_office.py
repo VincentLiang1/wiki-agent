@@ -50,6 +50,25 @@ def test_docx_and_pptx_text(tmp_path):
     assert "不支援" in dump(tmp_path / "c.odt")
 
 
+def test_cell_comment_and_speaker_notes_are_dumped(tmp_path):
+    """儲存格註解、投影片備忘稿:佔位符叫 {text},跟 L() 的第一個參數同名,2026-11-16 以前一遇到就 TypeError、
+    整份 office-dump 失敗(mypy 抓到的,原本的測試沒有一份帶註解或備忘稿)。"""
+    import pptx
+    from openpyxl.comments import Comment
+
+    wb = Workbook()
+    wb.active["A1"] = "已聯絡"
+    wb.active["A1"].comment = Comment("十月補寄", "v")
+    wb.save(tmp_path / "a.xlsx")
+    prs = pptx.Presentation()
+    s = prs.slides.add_slide(prs.slide_layouts[1])
+    s.notes_slide.notes_text_frame.text = "這頁講慢一點"
+    prs.save(tmp_path / "b.pptx")
+
+    assert "註解 '十月補寄'" in dump(tmp_path / "a.xlsx")
+    assert "備忘稿:這頁講慢一點" in dump(tmp_path / "b.pptx")
+
+
 def test_dump_command_cannot_be_shadowed_from_the_repo_cwd(tmp_path):
     """攝入時 claude 的 cwd 是 FWIKI、也能寫檔:`python -m wiki_feeder` 會先找 cwd,
     它寫一個 wiki_feeder.py 再跑白名單裡這行,就等於能執行任意程式(push、刪原件)。"""

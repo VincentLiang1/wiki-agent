@@ -39,6 +39,16 @@ def pytest_configure(config):
     os._exit(rc)
 
 
+@pytest.hookimpl(optionalhook=True)
+def pytest_xdist_auto_num_workers(config):
+    """pyproject 預設 `-n auto` 平行跑;只指名單一測試(每個參數都帶 ::)時不開 worker——開 8 個行程比測試本身還慢。
+    回 None 交給 xdist 照核心數決定(spec §8.6)。"""
+    targets = config.args          # pytest 解析過的測試目標(選項的值,例如 -p 後面那個,不會混進來)
+    if targets and all("::" in str(a) for a in targets):
+        return 0
+    return None
+
+
 @pytest.fixture(autouse=True)
 def _fake_home(tmp_path_factory, monkeypatch):
     home = tmp_path_factory.mktemp("home")

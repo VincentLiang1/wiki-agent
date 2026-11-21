@@ -1,5 +1,13 @@
 [
  {
+  "source": "39f5664",
+  "date": "2026-11-21",
+  "needs_human": false,
+  "zh-Hant": "- 修正:攝入核對 Word、Excel、PowerPoint 原件時,遇到有註解的儲存格或有備忘稿的投影片,之前整份讀不出來,現在照常讀\n- 攝入可以驗算寫在段落裡的佔比(例如「某項 1,234 元、佔 7.6%」);之前只驗得了表格,段落裡的只能人工算、列成「未驗」\n- 圖片處理元件 Pillow 升到 13.0.0:舊版有已知的安全漏洞,收件匣的圖片可能來自別人\n- 不必做任何事",
+  "zh-Hans": "- 修正:摄入核对 Word、Excel、PowerPoint 原件时,遇到有批注的单元格或有备注的幻灯片,之前整份读不出来,现在照常读取\n- 摄入可以验算写在段落里的占比(例如「某项 1,234 元、占 7.6%」);之前只验得了表格,段落里的只能人工计算、列成「未验」\n- 图片处理组件 Pillow 升到 13.0.0:旧版有已知的安全漏洞,收件箱的图片可能来自别人\n- 不必做任何事",
+  "en": "- Fix: when ingest checked a Word, Excel or PowerPoint original that had cell comments or slide notes, the whole file used to fail to read; it now reads normally\n- Ingest can now verify percentages written in paragraphs (such as \"item X: 1,234, 7.6%\"); before, only tables could be checked and percentages in prose were computed by hand and listed as \"unverified\"\n- The image library Pillow is upgraded to 13.0.0: older versions have known security vulnerabilities, and pictures in the inbox may come from other people\n- Nothing to do"
+ },
+ {
   "source": "a1cce83",
   "date": "2026-11-13",
   "needs_human": false,

@@ -191,6 +191,10 @@ def test_office_file_without_scribe2md_is_read_with_office_dump(single, monkeypa
     assert r.ok, r.alerts
     (prompt,) = seen
     assert "沒有裝 scribe2md" in prompt and "office-dump" in prompt and "memo.docx" in prompt
+    # 工具清單本來就列了 office-dump:要斷言的是「這一份要用它傾印來讀」那一句,跟傾印這份原件的那一行
+    # (2026-11-16 全跑突變時 M538 逃掉:拿掉這個分支,上面三個字串照樣都在)
+    assert "這份 Office 原件的內容要用下面的指令傾印出來讀" in prompt
+    assert any("office-dump" in ln and "memo.docx" in ln for ln in prompt.splitlines())
     assert "doc2md 的轉寫會繁化人名" not in prompt
 
 
@@ -368,7 +372,7 @@ def test_pointer_to_another_repo_stops_the_round_without_counting_as_failure(out
 
 def test_ingest_that_repoints_the_git_pointer_stops(outside, monkeypatch, tmp_path):
     """攝入的 claude 用 Write 把 .git 改指別的庫:之後的 git 全看那個庫,驗證不算數 → STOP、不代為 commit。"""
-    c, wiki = outside["cfg"], outside["wiki"]
+    c = outside["cfg"]
     other = tmp_path / "other"
     git("init", "-q", str(other), cwd=tmp_path)
     monkeypatch.setenv("FAKE_CLAUDE_POINT_GIT", str(other / ".git"))

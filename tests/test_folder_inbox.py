@@ -191,6 +191,13 @@ def test_copy_never_overwrites_existing_file(tmp_path):
     assert sorted(p.name for p in dest.iterdir()) == ["a.txt"]
 
 
+def test_new_name_avoids_a_leftover_sidecar_of_the_same_name(tmp_path):
+    """待處理裡只剩上一個同名檔的 `.feeder.json`(主檔已攝入搬走、sidecar 還在):新檔要改名,
+    不然程式補寫 sidecar 時蓋掉別人的來源紀錄,新檔又被當成那一份的配對。"""
+    (tmp_path / "a.m4a.feeder.json").write_text("{}", encoding="utf-8")
+    assert mover.pick_names(tmp_path, ["a.m4a"]) == ["a_2.m4a"]
+
+
 def test_unexpected_error_in_one_inbox_does_not_stop_others(cfg, monkeypatch):
     (cfg.icloud_inbox / "a.m4a").write_bytes(b"a")
     (cfg.onedrive_inbox / "b.md").write_bytes(b"b")

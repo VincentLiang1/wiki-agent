@@ -10,7 +10,7 @@ dependencies = [
     "markdown-it-py>=4.2.0",
     "numpy>=2.5.3",
     "openpyxl>=3.1.5",
-    "pillow>=12.3.0",
+    "pillow>=13.0.0",
     "python-docx>=1.2.0",
     "python-pptx>=1.0.2",
     "keyring>=25; sys_platform == 'win32'",   # Windows 的寄信密碼放認證管理員(osplat.secret)
@@ -25,5 +25,37 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "hypothesis>=6.170.15",
+    "mypy>=2.4.1",
     "pytest>=9.1.1",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.17.5",
 ]
+
+[tool.pytest.ini_options]
+# 預設平行跑(使用者 2026-11-15 選的;Windows 8 核 12 分 → 4 分,docs/spec/08 §8.6)。
+# 只指名單一測試(帶 ::)時 conftest 把 worker 數改成 0;mutate.py 一律 -n 0。
+addopts = "-n auto"
+
+[tool.ruff]
+# tests/test_static.py 跑(docs/spec/08 §8.7):只開會抓到真錯的 pyflakes(F)與語法層的 E,不管排版——
+# 不跑 ruff format,一次重排整個 repo 的 diff 會淹掉審查
+line-length = 140
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501", "E402", "E731", "E741"]
+
+[tool.mypy]
+files = ["src/wiki_feeder"]
+python_version = "3.12"
+warn_unused_ignores = false   # 平台專屬那幾行的 ignore 只在其中一個平台用得到
+
+[[tool.mypy.overrides]]
+module = ["keyring.*", "docx.*", "pptx.*", "openpyxl.*"]
+ignore_missing_imports = true
+
+[tool.ruff.lint.per-file-ignores]
+# pytest 的 fixture 照慣例從 conftest 匯入、又當參數名用:F811 是誤報
+"tests/*" = ["F811"]

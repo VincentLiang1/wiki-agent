@@ -49,7 +49,7 @@ class Report:
 
 
 def build_inboxes(cfg: Config) -> list:
-    inboxes = []
+    inboxes: list[FolderInbox | FuturesInbox] = []
     if cfg.icloud_inbox is not None:
         inboxes.append(FolderInbox("iCloud", cfg.icloud_inbox, trigger_download=cfg.trigger_icloud_download))
     if cfg.onedrive_inbox is not None:
