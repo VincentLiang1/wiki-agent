@@ -460,6 +460,8 @@ def test_gdrive_download_failure_is_logged(cfg, monkeypatch, caplog):
     src = c.gdrive_inbox / "只有佔位.md"
     src.write_text("", encoding="utf-8")
     monkeypatch.setattr(inboxes, "is_dataless", lambda p: p == src)
+    # Windows 上真的 read_to_download_cmd 回 None(Drive 沒有佔位檔)、根本不叫子行程;換成假指令兩邊都驗得到
+    monkeypatch.setattr(inboxes, "read_to_download_cmd", lambda p: ["read", p])
     monkeypatch.setattr(inboxes.subprocess, "run",
                         lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", "Resource deadlock avoided"))
     with caplog.at_level("WARNING"):
