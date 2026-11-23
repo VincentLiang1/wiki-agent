@@ -30,6 +30,7 @@ from typing import Any
 from .collect import build_inboxes, last_net_down, run_file, uptime
 from .config import Config
 from .i18n import L
+from .ingest import STOP_PERMPROBE
 from .ledger import Ledger
 from .osplat import WINDOWS, is_placeholder, oem_decode, pid_alive, try_lock, unlock
 
@@ -202,8 +203,10 @@ def detect(cfg: Config, now: float | None = None, agents_check=agents_not_loaded
         # 鍵有種類就用種類:大量刪減的原因裡列著被砍的頁面路徑,normalize 只去得掉原件檔名,砍到別頁就算成
         # 新問題,每次都開一個修理(它又不能解除這種),7 天內再發生就該直接找人
         kind = info.get("種類") if isinstance(info.get("種類"), str) else ""
-        found.append(Problem("stop", "stop:" + (kind or normalize(reason, name)), f"攝入停住({name})",
-                             f"ingest.stop 內容:\n{text}"))
+        # 換版實測失守停的(§6.6):寄 🛑 的是實測自己;自動修理不能解除、也不該去動權限,不開修理
+        if kind != STOP_PERMPROBE:
+            found.append(Problem("stop", "stop:" + (kind or normalize(reason, name)), f"攝入停住({name})",
+                                 f"ingest.stop 內容:\n{text}"))
 
     dep = deploying(cfg)
     for r in ([] if dep else running(cfg)):   # 發佈握著全部的鎖:這時不會有任何一輪在跑

@@ -30,9 +30,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from . import permprobe
 from .collect import last_net_down, mark_net_down, run_lock
 from .config import Config
-from .ingest import _API_DOWN, SETTING_SOURCES, SETTINGS_DENY, STOP_LEFTOVER, IngestError, unverified_commits
+from .ingest import (_API_DOWN, PERMPROBE_HOLD, SETTING_SOURCES, SETTINGS_DENY, STOP_LEFTOVER, IngestError,
+                     unverified_commits)
 from .ingest import git as repo_git
 from .i18n import L
 from .inboxes import DENIED_ALL, checked_sentence
@@ -153,6 +155,8 @@ class Deps:
     net_id: Callable[[], str | None] | None = None         # 現在接在哪個網路(watchdog.net_id);None = 不看換網路(測試、非 Mac)
     ip_families: Callable[[], tuple[bool, bool]] | None = None   # (IPv4 通、IPv6 通);None = 不查(測試)
     sync: Callable[[Config], tuple[bool, str]] | None = None       # 修理的 clone 裝好套件(uv sync);None = 不裝(測試)
+    claude_version: Callable[[Config], str] | None = None          # `claude --version`;None = 不做換版實測(測試)
+    permprobe: Callable[[Config], Any] | None = None               # 跑一次換版實測(permprobe.run,花錢);None = 不做
     now: Callable[[], float] = time.time
     sleep: Callable[[float], None] = time.sleep
     extra: dict = field(default_factory=dict)
@@ -282,11 +286,61 @@ def default_deps() -> Deps:
                                 if sys.platform == "darwin" else {})
     return Deps(online=_online, deploy=_deploy, resume=_resume, mail=_mail, agents_check=agents_not_loaded,
                 icloud_synced=icloud_synced, restart_bird=_restart_bird, vp_kick=_vp_kick, vp_download=_vp_download,
-                icloud_online=_icloud_online, ip_families=_ip_families, sync=_sync, **mac_only)
+                icloud_online=_icloud_online, ip_families=_ip_families, sync=_sync,
+                claude_version=permprobe.current_version, permprobe=permprobe.run, **mac_only)
 
 
 # 兩種位址都有的主機:同一台主機 IPv4 不通、IPv6 通,才是這條網路的 IPv4 壞了(只有 GitHub 不通是公司擋,不算)
 DUAL_STACK_HOSTS = ("www.icloud.com", "api.anthropic.com")
+
+
+PERMPROBE_NOTE = ("實測怎麼做、每一項的意思見 docs/dev/攝入權限實測.md 與 spec §6.6;"
+                  "手動重跑:發佈副本的 python -P -m wiki_feeder permprobe")
+PERMPROBE_RUNNING = "攝入照常在跑(只有「被擋」不停:那只會讓攝入失敗,不會寫到不該寫的地方)。"
+PERMPROBE_PAUSED = ("攝入已暫停(補推也停),等你看過再恢復:先查出是 Claude Code 這一版的行為變了、還是攝入的權限設定要改,"
+                    "處理好之後手動重跑實測確認,再執行 `wiki-feeder resume`。")
+PERMPROBE_WAITING = ("攝入本來就因為別的原因 STOP 中(那一份停止檔沒動);那個解除之後,看門狗下一輪會以權限失守再停一次,"
+                     "等你看過這封信的內容再 resume。")
+
+
+def _check_permprobe(cfg: Config, deps: Deps, now: float) -> str:
+    """Claude Code 換版後自動跑一次攝入權限實測(§6.6):通過只寫 log;失守或被擋寄 🛑;同一版判定不了 3 次也寄。
+    問版本不花錢,實測本身只在這一版還沒判定過、離上次試超過一小時、連得上網路時才跑。"""
+    if not cfg.permprobe or deps.claude_version is None or deps.permprobe is None:
+        return ""
+    version = deps.claude_version(cfg)
+    if not version:
+        return ""
+    act, report = permprobe.final(cfg, version)
+    if not act and permprobe.due(cfg, version, now) and deps.online():
+        try:
+            rep = deps.permprobe(cfg)
+        except Exception as e:  # noqa: BLE001 —— 實測自己出錯也照「判定不了」記:有一小時的間隔、3 次後寄信,不會每 3 分鐘重來
+            log.exception("換版實測出錯")
+            rep = permprobe.Report(permprobe.UNKNOWN, note=f"實測本身出錯:{type(e).__name__}: {e}")
+        act = permprobe.record(cfg, version, rep, now)
+        report = rep.text()
+        log.info("換版實測(%s):%s,花費 US$%.3f\n%s", version, act, rep.cost, report)
+    # 寄信放在記錄之後、每輪都看:信寄不出去(_escalate 不記成已寄)時,下一輪用存下的結果再寄,不重跑實測
+    if act == permprobe.FAIL:
+        # 失守先停攝入、再寄信(使用者 2026-11-23):信寄不出去也已經停住
+        state = permprobe.pause(cfg, version)
+        how = {permprobe.PAUSED: PERMPROBE_PAUSED, permprobe.PAUSE_WAITING: PERMPROBE_WAITING}.get(state, PERMPROBE_RUNNING)
+        _escalate_once(cfg, deps, now, f"permprobe:{version}", f"Claude Code 換版後攝入的權限變了({version})",
+                       f"Claude Code 換成 {version} 之後,攝入權限實測有項目跟預期不同(「失守」= 該擋的沒擋住,"
+                       f"「被擋」= 攝入要用的被擋下):\n\n{how}\n\n{report}\n\n{PERMPROBE_NOTE}")
+    elif act == permprobe.GIVEUP:
+        _escalate_once(cfg, deps, now, f"permprobe-unknown:{version}", f"Claude Code 換版後的權限實測判定不了({version})",
+                       f"Claude Code 換成 {version} 之後,攝入權限實測試了 {permprobe.MAX_TRIES} 次都判定不了"
+                       f"(它沒照指示試每一項、失敗的原因不是權限,或假庫的設定沒載入),這一版不再自動試:"
+                       f"\n\n{PERMPROBE_RUNNING}\n\n{report}\n\n{PERMPROBE_NOTE}")
+    return act
+
+
+def _escalate_once(cfg: Config, deps: Deps, now: float, key: str, subject: str, body: str) -> None:
+    """同一個鍵寄成功過一次就不再寄(_escalate 是一天一封;換版實測的結果不會自己變,天天寄是噪音)。"""
+    if not any(h.get("type") == "escalate" and h.get("key") == key for h in _history(cfg)):
+        _escalate(cfg, deps, now, key, subject, body)
 
 
 def _ip_families() -> tuple[bool, bool]:
@@ -625,6 +679,8 @@ def stop_resumable(cfg: Config, reviewed: list[str]) -> str:
         return "ingest.stop 讀不懂"
     if not isinstance(info, dict):
         return "ingest.stop 讀不懂"
+    if info.get(PERMPROBE_HOLD):
+        return f"Claude Code 換版後攝入權限失守,要人看過才恢復:{info[PERMPROBE_HOLD]}"
     if info.get("種類") != RESUMABLE:
         return f"這種 STOP 不自動解除:{info.get('原因', '')}"
     listed = [ln.split()[0] for lines in (info.get("本機未推送的 commit(未經驗證)") or {}).values() for ln in lines]
@@ -762,6 +818,10 @@ def _tick(cfg: Config, deps: Deps) -> str:
                 _check_ipv4(cfg, deps, deps.now())
             except Exception:  # noqa: BLE001 —— 查網路出錯不可擋住看門狗;只記 log
                 log.exception("查 IPv4／IPv6 出錯")
+            try:
+                _check_permprobe(cfg, deps, deps.now())
+            except Exception:  # noqa: BLE001 —— 實測出錯不可擋住看門狗;只記 log
+                log.exception("換版實測出錯")
 
 
 def _round(cfg: Config, deps: Deps, now: float) -> str:

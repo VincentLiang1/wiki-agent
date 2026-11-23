@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sys
+import time
 from dataclasses import replace
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -109,6 +110,7 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
     sub.add_parser("ledger", help=L("列出處理紀錄"))
     sub.add_parser("test-mail", help=L("寄一封測試信,確認 Email 摘要寄得出去、手機會跳通知"))
     sub.add_parser("selfcheck", help=L("驗 claude 登入、寄信密碼、公事庫 git 遠端、doc2md 固定入口都可用(不寄信;launchd.py check 在常駐身分下叫它)"))
+    sub.add_parser("permprobe", help=L("換版自動實測:在假資料夾裡用攝入的權限旗標叫 claude 做一串事,看該擋的有沒有擋(約 US$0.01;看門狗換版時自動跑)"))
     rc = sub.add_parser("reconvert", help=L("已停止重試的轉寫檔重新排入(查明原因、修好之後)"))
     rc.add_argument("name", nargs="?", help=L("檔名({dir}/ 裡的名字),例如 錄音.m4a", dir=pend.name))
     rc.add_argument("--all", action="store_true", help=L("全部已停止重試的轉寫檔"))
@@ -299,6 +301,18 @@ def main(argv: list[str] | None = None, cfg: Config | None = None) -> int:
         ok, lines = selfcheck.run(cfg)
         print("\n".join(lines))
         return 0 if ok else 1
+
+    if args.cmd == "permprobe":
+        from . import permprobe
+        version = permprobe.current_version(cfg)
+        rep = permprobe.run(cfg)
+        act = permprobe.record(cfg, version, rep, time.time()) if version else rep.status
+        print(L("Claude Code 版本:{v}", v=version or "?"))
+        print(rep.text())
+        print(L("結果:{act}(花費 US${cost:.3f})", act=act, cost=rep.cost))
+        if act == permprobe.FAIL and permprobe.pause(cfg, version) == permprobe.PAUSED:
+            print(L("有該擋的沒擋住:攝入已暫停,看過、處理好之後執行 `wiki-feeder resume`"))
+        return 0 if rep.status == permprobe.PASS else 1
 
     if args.cmd == "reingest":
         from .ingest import IngestError, reingest

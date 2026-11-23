@@ -227,6 +227,13 @@ GUARDED_DIRS = ("tools/", ".claude/", ".githooks/")
 # .mcp.json 讓 Claude Code 載入 MCP 伺服器,.gitmodules 改 git 從哪裡取子模組——攝入改了推上去,一次注入就變成
 # 之後每一次攝入的規則。比對不分大小寫:APFS 不分,claude.md 照樣被當成 CLAUDE.md 讀
 GUARDED_NAMES = ("claude.md", "claude.local.md", ".mcp.json", ".gitmodules")
+# Claude Code 換版後的權限實測有一項「失守」(該擋的沒擋住,§6.6):看門狗寫的,不是哪一筆攝入出的事。
+# 要人看過才恢復(使用者 2026-11-23);自動修理不碰(watchdog.detect 不把它當問題,stop_resumable 也不收)
+STOP_PERMPROBE = N_("Claude Code 換版後攝入權限失守")
+# 停止檔裡的這一欄:權限失守停住之後,正在跑的那輪攝入自己又 STOP(或下一輪開頭轉成 STOP)會整份重寫停止檔,
+# 種類變成那一筆的(可能是自動修理能補完、解除的那種)。這一欄跟著帶過去,stop_resumable 看到就不自動解除;
+# 只有人 resume 才清掉。不翻譯(跟「種類」等鍵一樣是資料)
+PERMPROBE_HOLD = "權限實測失守"
 # finish-stopped 收的種類。照 ingest.stop 的「種類」欄判斷、不在「原因」裡找字:原因含 claude 取的檔名,
 # 檔名裡夾一句「留有沒 commit 的修改」就能把別種 STOP 冒充成可以補完、自動解除的
 FINISHABLE = (STOP_LEFTOVER, STOP_SHRANK)
@@ -1123,20 +1130,33 @@ def _finish_move(cfg: Config, ledger: Ledger, sha: str, orig: Path, planned: Pat
     return planned
 
 
-def _stop(cfg: Config, ledger: Ledger, sha: str | None, name: str, error: str, kind: str = "") -> None:
-    """STOP:這筆記成 stopped(不再是候選),寫下停止檔——之後每一輪都不攝入、不補推,直到 resume。"""
+def stop_ingest(cfg: Config, name: str, error: str, kind: str) -> None:
+    """不是哪一筆攝入出的事、從外面停住攝入(看門狗的換版實測):照一般 STOP 寫停止檔,人 resume 才恢復。"""
+    _stop(cfg, None, None, name, error, kind, hold=error)
+
+
+def _stop(cfg: Config, ledger: Ledger | None, sha: str | None, name: str, error: str, kind: str = "",
+          hold: str = "") -> None:
+    """STOP:這筆記成 stopped(不再是候選),寫下停止檔——之後每一輪都不攝入、不補推,直到 resume。
+    原本的停止檔有 PERMPROBE_HOLD 就帶過去(見常數)。"""
+    try:
+        old = json.loads(cfg.ingest_stop_path.read_text(encoding="utf-8"))
+        hold = hold or (str(old.get(PERMPROBE_HOLD) or "") if isinstance(old, dict) else "")
+    except (OSError, ValueError):
+        pass
     unpushed = {}
     for rc in cfg.repos:
         out = git(rc.repo_dir, "log", "--format=%h %s", f"origin/{rc.branch}..HEAD", check=False)
         if out:
             unpushed[rc.repo_dir.name] = out.splitlines()
-    if sha:
+    if sha and ledger is not None:
         ledger.ingest_set(sha, "stopped", error=error)
     cfg.ingest_stop_path.parent.mkdir(parents=True, exist_ok=True)
     # sha256:自動修理照它找「這次」STOP 的那一筆(以前 STOP、人直接 resume 的那幾筆會一直留在 stopped)
     cfg.ingest_stop_path.write_text(json.dumps(
         {"時間": datetime.now().astimezone().isoformat(timespec="seconds"), "檔案": name, "原因": error, "種類": kind,
-         "本機未推送的 commit(未經驗證)": unpushed, "sha256": sha}, ensure_ascii=False, indent=2) + "\n",
+         "本機未推送的 commit(未經驗證)": unpushed, "sha256": sha, **({PERMPROBE_HOLD: hold} if hold else {})},
+        ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8")
     log.error(L("%s 攝入停止:%s"), name, error)
 
@@ -1259,8 +1279,12 @@ def _wiki_deny(cfg: Config) -> list[str]:
     """真的個人庫明列禁止寫入(墊底:它本來就不在工作目錄裡)。`//` 開頭是 Claude Code 的絕對路徑寫法。"""
     if not cfg.has_backfill:
         return []
-    wiki = cfg.repo(cfg.backfill_repo).repo_dir
-    return [f"{t}(/{wiki}/**)" for t in EDIT_TOOLS]
+    return deny_rules(cfg.repo(cfg.backfill_repo).repo_dir)
+
+
+def deny_rules(d: Path) -> list[str]:
+    """某個資料夾禁止 Write／Edit(_wiki_deny 與換版實測共用)。"""
+    return [f"{t}(/{d}/**)" for t in EDIT_TOOLS]
 
 
 def _rule_dir(d: Path | PureWindowsPath) -> str | None:
@@ -1286,7 +1310,25 @@ def _read_allow(cfg: Config, stage: Path | None) -> list[str]:
         # 網路路徑的規則寫法沒實測過:寫錯的話攝入什麼都讀不到、每筆失敗,寧可照舊不限定(§6.2)
         log.warning(L("攝入的讀檔沒有限定資料夾:有資料夾不在磁碟代號底下(網路路徑),規則寫法沒驗過"))
         return list(READ_TOOLS)
-    return [f"{t}(/{rule[d]}/**)" for d in sorted(dirs, key=str) for t in READ_TOOLS]
+    return read_rules(sorted(dirs, key=str))
+
+
+def permission_flags(stage: Path | None, read_allow: list[str], tools_allow: list[str], wiki_deny: list[str],
+                     managed: bool = False) -> list[str]:
+    """攝入的 claude 的權限旗標(`--permission-mode` 到 `--disallowedTools`)。換版自動實測(permprobe)用同一支
+    產生、只把資料夾換成假的:另抄一份的話,這裡改了權限、實測照舊測舊的那組,換版綠燈就不代表攝入安全(§6.6)。"""
+    allowed = [t for t in ALLOWED_TOOLS if not (managed and t in MANAGED_DENY)]
+    return ["--permission-mode", "acceptEdits",
+            "--tools", ",".join(sorted({t.split("(")[0] for t in allowed} | set(EDIT_TOOLS) | set(READ_TOOLS))),
+            *(["--add-dir", str(stage)] if stage is not None else []),
+            "--allowedTools", *allowed, *read_allow, *tools_allow,
+            "--disallowedTools", *DISALLOWED_TOOLS, *SETTINGS_DENY, *(MANAGED_DENY if managed else []),
+            *wiki_deny]
+
+
+def read_rules(dirs: list[Path]) -> list[str]:
+    """資料夾清單 → Read／Glob／Grep 的允許規則(_read_allow 與換版實測共用)。"""
+    return [f"{t}(/{_rule_dir(d)}/**)" for d in dirs for t in READ_TOOLS]
 
 
 def _tools_allow(cfg: Config) -> list[str]:
@@ -1414,14 +1456,9 @@ def _run_claude(cfg: Config, ledger: Ledger, sha: str, raw: Path, side: dict, us
     p_groups = groups_of(personal.raw_root, cfg.raw_skip_dirs) if personal is not None else None
     forced = personal is not None and _forced_personal(side)
     schema = _schema(groups, backfill=stage is not None, managed=target.managed, personal_groups=p_groups)
-    allowed = [t for t in ALLOWED_TOOLS if not (target.managed and t in MANAGED_DENY)]
     args = [*cfg.claude_cmd, "-p", *SETTING_SOURCES, "--output-format", "json", "--no-session-persistence",
-            "--max-budget-usd", str(cfg.ingest_budget_usd), "--permission-mode", "acceptEdits",
-            "--tools", ",".join(sorted({t.split("(")[0] for t in allowed} | set(EDIT_TOOLS) | set(READ_TOOLS))),
-            *(["--add-dir", str(stage)] if stage is not None else []),
-            "--allowedTools", *allowed, *_read_allow(cfg, stage), *_tools_allow(cfg),
-            "--disallowedTools", *DISALLOWED_TOOLS, *SETTINGS_DENY, *(MANAGED_DENY if target.managed else []),
-            *_wiki_deny(cfg),
+            "--max-budget-usd", str(cfg.ingest_budget_usd),
+            *permission_flags(stage, _read_allow(cfg, stage), _tools_allow(cfg), _wiki_deny(cfg), target.managed),
             "--json-schema", json.dumps(schema, ensure_ascii=False)]
     prev = ledger.ingest_row(sha)
     # 先記「攝入中」才叫 claude:這之後當掉,下一輪開頭看得到它而 STOP,不會補推沒驗證的 commit、再攝入一次。

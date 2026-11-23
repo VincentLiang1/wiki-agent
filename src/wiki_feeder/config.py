@@ -185,6 +185,9 @@ class Config:
     repair_max_per_day: int = 3
     repair_timeout: float = 3600
     repair_budget_usd: float = 10.0
+    # Claude Code 換版時看門狗自動跑攝入權限實測(permprobe,§6.6;使用者 2026-11-23)。會花錢(一次約 US$0.01),
+    # 只在使用者本人的設定(owner_mac.py)打開,朋友的預設關
+    permprobe: bool = False
     collect_hung_after: float = 1800    # 一個收件匣做超過這麼久算卡住(第一次 clone FUTURES 上限 1800 秒)
     # CPU／記憶體被佔著不放:連續幾次檢查(每 3 分鐘)都超過門檻才算,只查原因、寄信
     resource_cpu_pct: float = 70        # ps 的 %CPU(一顆核心 = 100);使用者 2026-10-05 定 70%

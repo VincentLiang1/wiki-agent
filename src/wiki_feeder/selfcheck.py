@@ -31,6 +31,8 @@ VERSION_FILE = "claude-version.txt"
 # 提示走 stdin:`--tools` 收好幾個值,提示放在它後面會被當成工具名吃掉(實測報「Input must be provided」)
 PROMPT = "Reply with OK."
 VERSION_CHANGED = N_("Claude Code 版本變了({old} → {new}):攝入權限實測要重跑(docs/dev/攝入權限實測.md)")
+# 使用者本人那台看門狗會自動跑(permprobe,§6.6):不必再叫人重跑
+VERSION_CHANGED_AUTO = N_("Claude Code 版本變了({old} → {new}):看門狗會自動重跑攝入權限實測,有差異才寄信")
 
 
 def check_claude(cfg: Config) -> tuple[bool, str]:
@@ -125,7 +127,7 @@ def run(cfg: Config) -> tuple[bool, list[str]]:
     if new:
         lines.append(L("Claude Code 版本:{v}", v=new))
         if old and new != old:
-            lines.append(L(VERSION_CHANGED, old=old, new=new))
+            lines.append(L(VERSION_CHANGED_AUTO if cfg.permprobe else VERSION_CHANGED, old=old, new=new))
     return ok, lines
 
 
