@@ -135,9 +135,13 @@ class FolderInbox:
         if cmd is None:
             return
         try:
-            subprocess.run(cmd, capture_output=True, timeout=30)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         except (OSError, subprocess.SubprocessError) as e:
             log.warning(L("%s:要求下載 %s 失敗:%s"), self.name, path, e)
+            return
+        if r.returncode:   # 以前不看結束碼:launchd 底下 Drive 每輪都下載失敗,log 只有「這輪先不取」(2026-11-23)
+            log.warning(L("%s:要求下載 %s 失敗:%s"), self.name, path,
+                        (r.stderr or r.stdout or "").strip()[-300:] or r.returncode)
 
     def release(self, c: Candidate) -> None:
         c.path.unlink()

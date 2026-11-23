@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import secrets
 import shutil
+import stat
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -154,10 +156,16 @@ def _run(args: list[str], cwd: Path) -> None:
     subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True)
 
 
+def _writable_then_retry(func: Callable[[str], object], path: str, _exc: BaseException) -> None:
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
 def setup(root: Path) -> Dirs:
     """重建假資料夾。只刪 root 這一個探針自己的資料夾。"""
     if root.exists():
-        shutil.rmtree(root)
+        # Windows 上 git 的 object 檔是唯讀的:不先拿掉唯讀,第二次重建就 WinError 5(2026-11-23 Windows 收尾查到)
+        shutil.rmtree(root, onexc=_writable_then_retry)
     d = Dirs(root, root / "work", root / "stage", root / "raw", root / "realwiki", root / "other", root / "remote.git",
              {k: f"{k}-{secrets.token_hex(6)}" for k in ("pass", "raw", "other", "log", "realwiki")})
     for p in (d.work, d.stage, d.raw, d.realwiki, d.other):

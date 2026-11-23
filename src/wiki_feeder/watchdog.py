@@ -125,8 +125,12 @@ def idle_of(r: dict, now: float) -> float:
 
 
 def deploying(cfg: Config) -> bool:
-    """deploy 正握著獨佔鎖(會先 bootout 兩個 agent):這時 agent 沒載入是正常的。"""
-    import fcntl
+    """deploy 正握著獨佔鎖(會先 bootout 兩個 agent):這時 agent 沒載入是正常的。
+    Windows 沒有 fcntl、也沒有這種 deploy(朋友版換版另有鎖,§7.9):一律 False。"""
+    try:
+        import fcntl
+    except ImportError:
+        return False
     p = cfg.deploy_lock_path
     if not p.exists():
         return False

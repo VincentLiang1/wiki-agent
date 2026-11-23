@@ -282,3 +282,11 @@ def test_breach_hold_survives_a_later_stop(pcfg):
     assert "權限失守" in repair.stop_resumable(pcfg, [])
     ingest._stop(pcfg, None, None, "b.pdf", "中斷")         # 再蓋一次也還在
     assert json.loads(pcfg.ingest_stop_path.read_text(encoding="utf-8"))[ingest.PERMPROBE_HOLD]
+
+
+def test_deploying_is_false_without_fcntl(pcfg, monkeypatch):
+    """Windows 沒有 fcntl:watchdog.detect 叫 deploying 不可炸(2026-11-23 Windows 收尾,上一條在那邊 ModuleNotFoundError)。"""
+    pcfg.deploy_lock_path.parent.mkdir(parents=True, exist_ok=True)
+    pcfg.deploy_lock_path.write_text("")
+    monkeypatch.setitem(sys.modules, "fcntl", None)
+    assert watchdog.deploying(pcfg) is False

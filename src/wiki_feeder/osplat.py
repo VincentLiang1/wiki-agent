@@ -205,12 +205,23 @@ def download_cmd(path: str, windows: bool = WINDOWS) -> list[str]:
     return ["brctl", "download", path]
 
 
+# 讀佔位檔觸發下載前,先把這個行程的「可以讓佔位檔下載」打開(setiopolicy_np 的
+# IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES=3、IOPOL_SCOPE_PROCESS=0、IOPOL_MATERIALIZE_DATALESS_FILES_ON=2)。
+# launchd 底下的行程預設不准:讀佔位檔回 EDEADLK「Resource deadlock avoided」(head 印「Error reading」),
+# 從終端機跑同一行卻讀得到——2026-11-23 Android 送的會議 md 在 Drive 收件匣當了 6 分鐘佔位檔,
+# 每輪「要求下載」都靜靜失敗,Claude 手動 head 一下才收走(用 launchctl submit 重現與驗證過)
+_MATERIALIZE = ("import ctypes,sys\n"
+                "if ctypes.CDLL(None).setiopolicy_np(3,0,2): sys.exit('setiopolicy_np failed')\n"
+                "open(sys.argv[1],'rb').read(1)")
+
+
 def read_to_download_cmd(path: str, windows: bool = WINDOWS) -> list[str] | None:
     """Google 雲端硬碟這類沒有「要求下載」指令的:讀第一個位元組,檔案提供者就會把整個檔抓下來。
+    用自己這顆 python(launchd 底下有完整磁碟取用權限的就是它),先開准許下載再讀(見 _MATERIALIZE)。
     Windows 的 Drive 是虛擬磁碟、沒有佔位檔屬性,用不到(回 None)。"""
     if windows:
         return None
-    return ["head", "-c", "1", path]
+    return [sys.executable, "-I", "-c", _MATERIALIZE, path]
 
 
 # -- 寄信密碼 ----------------------------------------------------------------------

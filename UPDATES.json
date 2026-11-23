@@ -1,5 +1,13 @@
 [
  {
+  "source": "9794317",
+  "date": "2026-11-23",
+  "needs_human": false,
+  "zh-Hant": "- 修正(Mac):用 Google 雲端硬碟收件時,檔案剛同步過來、內容還在雲端的那種,之前排程自己下載不下來,會一直卡在收件匣(設成「可離線使用」的不受影響);現在會自動下載後收走\n- 內部調整:作者自己那台的看門狗會在 Claude Code 換版時自動檢查攝入的權限有沒有變,權限失守就先暫停攝入;你的電腦預設不跑這項檢查(會花你的 API 費用)\n- 不必做任何事",
+  "zh-Hans": "- 修正(Mac):用 Google 云端硬盘收件时,文件刚同步过来、内容还在云端的那种,之前排程自己下载不下来,会一直卡在收件箱(设成「可离线使用」的不受影响);现在会自动下载后收走\n- 内部调整:作者自己那台的看门狗会在 Claude Code 换版时自动检查摄入的权限有没有变,权限失守就先暂停摄入;你的电脑默认不跑这项检查(会花你的 API 费用)\n- 不必做任何事",
+  "en": "- Fix (Mac): with a Google Drive inbox, files that had just synced but whose contents were still in the cloud could not be downloaded by the scheduled task and stayed stuck in the inbox (folders set to \"Available offline\" were not affected); they are now downloaded automatically and collected\n- Internal change: the author's own machine's watchdog now checks ingest permissions automatically whenever Claude Code updates, and pauses ingest if a permission is breached; your computer does not run this check by default (it would cost you API usage)\n- Nothing to do"
+ },
+ {
   "source": "3d5f2d3",
   "date": "2026-11-23",
   "needs_human": false,

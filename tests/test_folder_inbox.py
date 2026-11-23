@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from dataclasses import replace
@@ -444,12 +445,39 @@ def test_gdrive_placeholder_is_read_to_download(cfg, monkeypatch):
     monkeypatch.setattr(inboxes, "is_dataless", lambda p: p == src)
     monkeypatch.setattr(inboxes, "read_to_download_cmd", lambda p: ["read", p])
     ran = []
-    monkeypatch.setattr(inboxes.subprocess, "run", lambda cmd, **kw: ran.append(cmd))
+    monkeypatch.setattr(inboxes.subprocess, "run",
+                        lambda cmd, **kw: ran.append(cmd) or subprocess.CompletedProcess(cmd, 0, "", ""))
 
     r = collect(c)
 
     assert src.exists() and r.moved == []
     assert ran == [["read", str(src)]]
+
+
+def test_gdrive_download_failure_is_logged(cfg, monkeypatch, caplog):
+    """要求下載失敗要寫 log:以前不看結束碼,launchd 底下每輪都失敗、log 只有「這輪先不取」(2026-11-23)。"""
+    c = _with_gdrive(cfg)
+    src = c.gdrive_inbox / "只有佔位.md"
+    src.write_text("", encoding="utf-8")
+    monkeypatch.setattr(inboxes, "is_dataless", lambda p: p == src)
+    monkeypatch.setattr(inboxes.subprocess, "run",
+                        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", "Resource deadlock avoided"))
+    with caplog.at_level("WARNING"):
+        collect(c)
+    assert any("要求下載" in m and "Resource deadlock avoided" in m for m in caplog.messages)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows 的 Drive 沒有佔位檔、不讀")
+def test_read_to_download_cmd_turns_on_materializing_and_reads(tmp_path):
+    """launchd 底下的行程預設不准讓佔位檔下載(讀了回 EDEADLK,2026-11-23 用 launchctl submit 重現):
+    指令要先開 IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES 再讀;對一般檔照樣跑得過(結束碼 0)。"""
+    from wiki_feeder.osplat import read_to_download_cmd
+    f = tmp_path / "會議.md"
+    f.write_text("x", encoding="utf-8")
+    cmd = read_to_download_cmd(str(f), windows=False)
+    assert cmd is not None and "setiopolicy_np(3,0,2)" in " ".join(cmd)
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
 
 
 def test_missing_gdrive_inbox_alerts(cfg):
